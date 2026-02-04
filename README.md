@@ -1,4 +1,10 @@
-#Tutorial
+Mower II Python Project. 
 
-This is a tutorial where you will learn how to create Git
-repositories from your projects and share them on GitHub.
+- Mobiler Absteckwagen, mit dem Punkte auf dem Boden markiert werden. 
+- Markierung über Edding Stifte (nicht mehr Laser wie in Mower 1)
+
+- Komponenten: 
+- UDP Datenstream / Lasertracker (Position)
+- KVH DSP 3100 (Drehrate)
+- GYEMS Motor für Reflektorausrichtung
+- XYZ Roboter als Markiersystem
