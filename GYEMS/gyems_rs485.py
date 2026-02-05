@@ -180,11 +180,6 @@ class GyemsRmdRs485:
         assert self.ser is not None
         frame = self._build_frame(cmd, data)
 
-        # clear junk to avoid mixing responses
-        try:
-            self.ser.reset_input_buffer()
-        except Exception:
-            pass
 
         self.ser.write(frame)
         self.ser.flush()
@@ -205,15 +200,30 @@ class GyemsRmdRs485:
             fw_version = data[41] / 10.0
         return GyemsModelInfo(driver=driver, motor=motor, hw_version=hw_version, fw_version=fw_version, raw_data=data)
 
-    def read_status(self) -> GyemsStatus:
-        cmd, mid, data = self._txrx(0x9C)
-        if len(data) < 7:
-            raise GyemsProtocolError(f"Status payload too short: {len(data)} bytes")
-        temp = struct.unpack("b", data[0:1])[0]
-        iq = struct.unpack("<h", data[1:3])[0]
-        spd = struct.unpack("<h", data[3:5])[0]
-        enc = struct.unpack("<H", data[5:7])[0]
-        return GyemsStatus(temperature_C=temp, torque_current=iq, speed_raw=spd, encoder_pos=enc)
+    def read_status(self, retries: int = 2) -> GyemsStatus:
+        last_exc = None
+        for attempt in range(retries + 1):
+            try:
+                cmd, mid, data = self._txrx(0x9C)
+                if len(data) < 7:
+                    raise GyemsProtocolError(f"Status payload too short: {len(data)} bytes")
+                temp = struct.unpack("b", data[0:1])[0]
+                iq = struct.unpack("<h", data[1:3])[0]
+                spd = struct.unpack("<h", data[3:5])[0]
+                enc = struct.unpack("<H", data[5:7])[0]
+                return GyemsStatus(temperature_C=temp, torque_current=iq, speed_raw=spd, encoder_pos=enc)
+
+            except TimeoutError as e:
+                last_exc = e
+                # nur bei Fehler: resync/flush
+                try:
+                    if self.ser:
+                        self.ser.reset_input_buffer()
+                except Exception:
+                    pass
+                time.sleep(0.02)  # kurzer Abstand vor Retry
+
+        raise last_exc  # type: ignore
 
     def read_error_flags(self) -> Dict[str, Any]:
         """
