@@ -280,3 +280,24 @@ class GyemsRmdRs485:
         frame = self._build_frame(0xA2, payload)
         self.ser.write(frame)
         self.ser.flush()
+
+    def drain_rx(self, settle_s: float = 0.01, rounds: int = 2) -> int:
+        """
+        Liest alle aktuell anstehenden Bytes aus dem RX-Buffer und verwirft sie.
+        Nützlich, wenn TX-only Commands trotzdem Antworten erzeugen, die wir nicht auswerten.
+        Returns: Anzahl verworfener Bytes.
+        """
+        if not self.is_connected():
+            return 0
+        assert self.ser is not None
+
+        drained = 0
+        for _ in range(rounds):
+            time.sleep(settle_s)  # kurz warten, damit evtl. Antwortbytes eintreffen
+            n = getattr(self.ser, "in_waiting", 0)
+            if n and n > 0:
+                _ = self.ser.read(n)
+                drained += n
+            else:
+                break
+        return drained
