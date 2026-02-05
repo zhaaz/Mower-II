@@ -4,12 +4,25 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="UDP Readme ergänzt">
-      <change afterPath="$PROJECT_DIR$/GYEMS/connection_test.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/KVH DSP 3100/dsp3100.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/KVH DSP 3100/dsp_3100_simple_gui.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/KVH DSP 3100/dsp_readme.md" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="KVH Basisprogramme enthalten. &#10;Erste Neuversuche mit GYEMS">
+      <change afterPath="$PROJECT_DIR$/ARN/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v0.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v1.1.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v1.2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v1.3_dauertest.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v1.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ARN/arn_v2_dauertest.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GYEMS/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GYEMS/gyems_gui_tk.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GYEMS/gyems_reliability_test.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GYEMS/gyems_rs485.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/KVH_DSP_3100/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/KVH_DSP_3100/dsp3100_test.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/Mower_II.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Mower_II.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/KVH DSP 3100/dsp3100.py" beforeDir="false" afterPath="$PROJECT_DIR$/KVH_DSP_3100/dsp3100.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/KVH DSP 3100/dsp_3100_simple_gui.py" beforeDir="false" afterPath="$PROJECT_DIR$/KVH_DSP_3100/dsp_3100_simple_gui.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/KVH DSP 3100/dsp_readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/KVH_DSP_3100/dsp_readme.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,17 +59,33 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.Doctests in dsp3100_test.executor": "Run",
+    "Python.arn_controller.executor": "Run",
+    "Python.arn_minimal.executor": "Run",
+    "Python.arn_v0.executor": "Run",
+    "Python.arn_v1.2.executor": "Run",
+    "Python.arn_v1.3_dauertest.executor": "Run",
+    "Python.arn_v1.executor": "Run",
+    "Python.arn_v2.executor": "Run",
+    "Python.arn_v2_dauertest.executor": "Run",
     "Python.connection_test.executor": "Run",
     "Python.dsp3100.executor": "Run",
+    "Python.dsp3100_test.executor": "Run",
     "Python.dsp_3100_simple_gui.executor": "Run",
     "Python.example_udp_receiver.executor": "Run",
     "Python.example_udp_sender.executor": "Run",
+    "Python.gyems_gui_tk.executor": "Run",
+    "Python.gyems_reliability_test.executor": "Run",
+    "Python.import_test.executor": "Run",
+    "Python.run_arn_controller_console.executor": "Run",
+    "Python.simple_test.executor": "Run",
     "Python.tracker_udp_interface.executor": "Run",
     "Python.tracker_udp_receiver.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "main",
+    "last_opened_file_path": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/GYEMS",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -66,6 +95,11 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\GYEMS" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -82,7 +116,7 @@
       <option name="presentableId" value="Default" />
       <updated>1770108641015</updated>
       <workItem from="1770108642060" duration="13095000" />
-      <workItem from="1770212948749" duration="1802000" />
+      <workItem from="1770212948749" duration="12848000" />
     </task>
     <task id="LOCAL-00001" summary="Test Commit 1">
       <option name="closed" value="true" />
@@ -124,7 +158,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770192254144</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="KVH Basisprogramme enthalten. &#10;Erste Neuversuche mit GYEMS">
+      <option name="closed" value="true" />
+      <created>1770217050787</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1770217050787</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -146,15 +188,31 @@
     <MESSAGE value="Add a new project to Git" />
     <MESSAGE value="UDP Basisprogramme" />
     <MESSAGE value="UDP Readme ergänzt" />
-    <option name="LAST_COMMIT_MESSAGE" value="UDP Readme ergänzt" />
+    <MESSAGE value="KVH Basisprogramme enthalten. &#10;Erste Neuversuche mit GYEMS" />
+    <option name="LAST_COMMIT_MESSAGE" value="KVH Basisprogramme enthalten. &#10;Erste Neuversuche mit GYEMS" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$dsp3100.coverage" NAME="dsp3100 Coverage Results" MODIFIED="1770195882800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
-    <SUITE FILE_PATH="coverage/Mower_II$dsp_3100_simple_gui.coverage" NAME="dsp_3100_simple_gui Coverage Results" MODIFIED="1770196060390" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
+    <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v1_3_dauertest.coverage" NAME="arn_v1.3_dauertest Coverage Results" MODIFIED="1770296216371" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$gyems_gui_tk.coverage" NAME="gyems_gui_tk Coverage Results" MODIFIED="1770296204443" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
+    <SUITE FILE_PATH="coverage/Mower_II$Doctests_in_dsp3100_test.coverage" NAME="Doctests in dsp3100_test Coverage Results" MODIFIED="1770283193305" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v0.coverage" NAME="arn_v0 Coverage Results" MODIFIED="1770285447411" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$simple_test.coverage" NAME="simple_test Coverage Results" MODIFIED="1770279573716" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v1_2.coverage" NAME="arn_v1.2 Coverage Results" MODIFIED="1770290318273" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v2_dauertest.coverage" NAME="arn_v2_dauertest Coverage Results" MODIFIED="1770295711653" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$import_test.coverage" NAME="import_test Coverage Results" MODIFIED="1770284966078" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$dsp_3100_simple_gui.coverage" NAME="dsp_3100_simple_gui Coverage Results" MODIFIED="1770296169773" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH_DSP_3100" />
+    <SUITE FILE_PATH="coverage/Mower_II$gyems_reliability_test.coverage" NAME="gyems_reliability_test Coverage Results" MODIFIED="1770283151626" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
+    <SUITE FILE_PATH="coverage/Mower_II$run_arn_controller_console.coverage" NAME="run_arn_controller_console Coverage Results" MODIFIED="1770284284635" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v1.coverage" NAME="arn_v1 Coverage Results" MODIFIED="1770285573517" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_receiver.coverage" NAME="example_udp_receiver Coverage Results" MODIFIED="1770127563725" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
+    <SUITE FILE_PATH="coverage/Mower_II$dsp3100_test.coverage" NAME="dsp3100_test Coverage Results" MODIFIED="1770283295659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_controller.coverage" NAME="arn_controller Coverage Results" MODIFIED="1770284102281" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_minimal.coverage" NAME="arn_minimal Coverage Results" MODIFIED="1770285219863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$arn_v2.coverage" NAME="arn_v2 Coverage Results" MODIFIED="1770290089142" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_receiver.coverage" NAME="tracker_udp_receiver Coverage Results" MODIFIED="1770128928767" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_interface.coverage" NAME="tracker_udp_interface Coverage Results" MODIFIED="1770128980522" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
-    <SUITE FILE_PATH="coverage/Mower_II$connection_test.coverage" NAME="connection_test Coverage Results" MODIFIED="1770214136994" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
+    <SUITE FILE_PATH="coverage/Mower_II$connection_test.coverage" NAME="connection_test Coverage Results" MODIFIED="1770216963848" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
   </component>
 </project>

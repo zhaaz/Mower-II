@@ -26,6 +26,8 @@ class DSP3100:
         self._drift_start = 0.0
         self._drift_duration = 0.0
 
+        self.rate_dps = 0.0
+
     def connect(self, port, baudrate=375000):
         try:
             self.ser = serial.Serial(
@@ -92,6 +94,11 @@ class DSP3100:
                     # Driftkompensation anwenden
                     drift_correction = self.drift / self.sampling_rate
                     corrected_change = angle_change - drift_correction
+
+                    rate_dps = corrected_change * self.sampling_rate
+
+                    with self.lock:
+                        self.rate_dps = rate_dps
 
                     with self.lock:
                         self.angle += corrected_change
