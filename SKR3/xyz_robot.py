@@ -187,6 +187,8 @@ class XYZRobot:
 
         raise RuntimeError("Keine Positionsdaten in der Antwort gefunden")
 
+    def move_circle(self, x=None, y=None, radius=None, feedrate=None):
+        TODO Hier: Kreis
 
     # --------------------------------------------------
     # Hilfsmethoden
@@ -268,9 +270,26 @@ class XYZRobot:
             "Z": target_z,
         }
 
-        # --------------------------------------------------
-        # Markierung
-        # --------------------------------------------------
+    def _check_circle_within_workspace(self, center_x: float, center_y: float, radius: float) -> None:
+        """
+        Prüft, ob ein vollständiger Kreis innerhalb des Arbeitsraums liegt.
+        Wirft bei Verletzung eine Exception.
+        """
+        if radius <= 0:
+            raise ValueError(f"Ungültiger Radius: {radius}. Radius muss > 0 sein.")
+
+        if center_x - radius < self.X_MIN:
+            raise ValueError("Kreis überschreitet X_MIN.")
+        if center_x + radius > self.X_MAX:
+            raise ValueError("Kreis überschreitet X_MAX.")
+        if center_y - radius < self.Y_MIN:
+            raise ValueError("Kreis überschreitet Y_MIN.")
+        if center_y + radius > self.Y_MAX:
+            raise ValueError("Kreis überschreitet Y_MAX.")
+
+    # --------------------------------------------------
+    # Markierung
+    # --------------------------------------------------
 
 
     def mark_line_absolute(self,
