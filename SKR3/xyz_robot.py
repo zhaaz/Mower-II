@@ -1,11 +1,10 @@
 # xyz_robot.py
-import re
 
 import serial
 import time
-from typing import Optional
+import math
 
-# from PyInstaller.building.splash_templates import position_window
+from typing import Optional
 
 
 class XYZRobot:
@@ -13,8 +12,11 @@ class XYZRobot:
     # Feedrate / Verfahrgeschwindigkeit Achsen mm/min
     # --------------------------------------------------
     DEFAULT_FEEDRATE_XY = 6000.0
-    DEFAULT_FEEDRATE_Z = 600.0
+    DEFAULT_FEEDRATE_Z = 900.0
     DEFAULT_FEEDRATE_MARKING = 2000.0
+
+    Z_MARK = 170.0
+    Z_TRAVEL = 180.0
 
     # --------------------------------------------------
     # Arbeitsraum [mm]
@@ -158,6 +160,24 @@ class XYZRobot:
         command = self._build_move_command(x=dx, y=dy, z=dz, feedrate=feedrate)
         return self.send_gcode(command, command_timeout=command_timeout)
 
+    def z_to_mark(self):
+        return self.move_absolute(z=self.Z_MARK, feedrate=self.DEFAULT_FEEDRATE_Z)
+
+    def z_to_travel(self):
+        return self.move_absolute(z=self.Z_TRAVEL, feedrate=self.DEFAULT_FEEDRATE_Z)
+
+    def move_xy_travel_relative(self, dx=None, dy=None):
+        return self.move_relative(dx=dx, dy=dy, feedrate=self.DEFAULT_FEEDRATE_XY)
+
+    def move_xy_travel_absolute(self, x=None, y=None):
+        return self.move_absolute(x=x, y=y, feedrate=self.DEFAULT_FEEDRATE_XY)
+
+    def move_xy_mark_relative(self, dx=None, dy=None):
+        return self.move_relative(dx=dx, dy=dy, feedrate=self.DEFAULT_FEEDRATE_MARKING)
+
+    def move_xy_mark_absolute(self, x=None, y=None, z=None):
+        return self.move_absolute(x=x, y=y, feedrate=self.DEFAULT_FEEDRATE_MARKING)
+
     def get_current_position(self) -> dict[str, float]:
         responses = self.send_gcode("M114", command_timeout=5.0)
 
@@ -248,3 +268,52 @@ class XYZRobot:
             "Z": target_z,
         }
 
+        # --------------------------------------------------
+        # Markierung
+        # --------------------------------------------------
+
+
+    def mark_line_absolute(self,
+        start_x: float,
+        start_y: float,
+        end_x: float,
+        end_y: float
+        ) -> None:
+
+        try:
+            self.z_to_travel()
+            self.move_xy_travel_absolute(x=start_x, y=start_y)
+            self.z_to_mark()
+            self.move_xy_mark_absolute(x=end_x, y=end_y)
+        finally:
+            self.z_to_travel()
+
+    def mark_plus(
+            self,
+            center_x: float,
+            center_y: float,
+            length: float
+    ) -> None:
+
+        # horizontale Linie
+        start_h_x = center_x - length/2
+        start_h_y = center_y
+        end_h_x = center_x + length/2
+        end_h_y = center_y
+
+        # vertikale Linie
+        start_v_x = center_x
+        start_v_y = center_y - length/2
+        end_v_x = center_x
+        end_v_y = center_y + length/2
+
+
+        try:
+            self.z_to_travel()
+            # Linie horizontal
+            self.mark_line_absolute(start_h_x, start_h_y, end_h_x, end_h_y)
+            # Linie vertikal
+            self.mark_line_absolute(start_v_x, start_v_y, end_v_x, end_v_y)
+
+        finally:
+            self.z_to_travel()

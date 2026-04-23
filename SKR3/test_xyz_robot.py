@@ -8,7 +8,8 @@ try:
     robot.connect()
     print("Verbunden:", robot.is_connected)
 
-    robot.move_relative(dx=-185, dy=-100, feedrate=5000)
+    #robot.homing_z()
+    robot.mark_plus(100,100, 40)
 
 
 
