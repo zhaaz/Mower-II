@@ -1,11 +1,33 @@
 # xyz_robot.py
+import re
 
 import serial
 import time
 from typing import Optional
 
+# from PyInstaller.building.splash_templates import position_window
+
 
 class XYZRobot:
+    # --------------------------------------------------
+    # Feedrate / Verfahrgeschwindigkeit Achsen mm/min
+    # --------------------------------------------------
+    DEFAULT_FEEDRATE_XY = 6000.0
+    DEFAULT_FEEDRATE_Z = 600.0
+    DEFAULT_FEEDRATE_MARKING = 2000.0
+
+    # --------------------------------------------------
+    # Arbeitsraum [mm]
+    # --------------------------------------------------
+    X_MIN = 0.0
+    X_MAX = 500.0
+
+    Y_MIN = 0.0
+    Y_MAX = 450.0
+
+    Z_MIN = 150.0
+    Z_MAX = 200.0
+
     def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
         self.port = port
         self.baudrate = baudrate
@@ -115,23 +137,35 @@ class XYZRobot:
         feedrate: float | None = None,
         command_timeout: float = 30
     ) -> list[str]:
-
+        self._validate_absolute_position(x=x, y=y, z=z)
         self.send_gcode("G90", command_timeout=5.0)
         command = self._build_move_command(x=x, y=y, z=z, feedrate=feedrate)
         return self.send_gcode(command, command_timeout=command_timeout)
 
     def move_relative(
         self,
-        x: float | None = None,
-        y: float | None = None,
-        z: float | None = None,
+        dx: float | None = None,
+        dy: float | None = None,
+        dz: float | None = None,
         feedrate: float | None = None,
         command_timeout: float = 30
     ) -> list[str]:
 
+        target = self._calculate_relative_target(dx, dy, dz)
+        self._validate_absolute_position(x=target["X"], y=target["Y"], z=target["Z"])
+
         self.send_gcode("G91", command_timeout=5.0)
-        command = self._build_move_command(x=x, y=y, z=z, feedrate=feedrate)
+        command = self._build_move_command(x=dx, y=dy, z=dz, feedrate=feedrate)
         return self.send_gcode(command, command_timeout=command_timeout)
+
+    def get_current_position(self) -> dict[str, float]:
+        responses = self.send_gcode("M114", command_timeout=5.0)
+
+        for line in responses:
+            if "X:" in line and "Y:" in line and "Z:" in line:
+                return self._parse_position_line(line)
+
+        raise RuntimeError("Keine Positionsdaten in der Antwort gefunden")
 
 
     # --------------------------------------------------
@@ -162,4 +196,55 @@ class XYZRobot:
             raise ValueError("Mindestens eine Achse oder Feedrate muss angegeben werden")
 
         return " ".join(parts)
+
+
+    def _parse_position_line(selfself, line: str) -> dict[str, float]:
+        pattern = r"([XYZ]):(-?\d+(?:\.\d+)?)"
+        matches = re.findall(pattern, line)
+
+        if not matches:
+            raise ValueError(f"Keine gültigen Positionsdaten gefunden: {line}")
+
+        position = {axis: float(value) for axis, value in matches[:3]}
+
+        for axis in ("X", "Y", "Z"):
+            if axis not in position:
+                raise ValueError(f"Achse {axis} fehlt in der Positionsantwort: {line}")
+
+        return position
+
+
+    def _validate_absolute_position(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        z: float | None = None,
+    ) -> None:
+        if x is not None and not (self.X_MIN <= x <= self.X_MAX):
+            raise ValueError(f"X={x} außerhalb des Arbeitsraums [{self.X_MIN}, {self.X_MAX}]")
+
+        if y is not None and not (self.Y_MIN <= y <= self.Y_MAX):
+            raise ValueError(f"Y={y} außerhalb des Arbeitsraums [{self.Y_MIN}, {self.Y_MAX}]")
+
+        if z is not None and not (self.Z_MIN <= z <= self.Z_MAX):
+            raise ValueError(f"Z={z} außerhalb des Arbeitsraums [{self.Z_MIN}, {self.Z_MAX}]")
+
+
+    def _calculate_relative_target(
+            self,
+            dx: float | None,
+            dy: float | None,
+            dz: float | None,
+    ) -> dict[str, float]:
+        current = self.get_current_position()
+
+        target_x = current["X"] + (dx if dx is not None else 0)
+        target_y = current["Y"] + (dy if dy is not None else 0)
+        target_z = current["Z"] + (dz if dz is not None else 0)
+
+        return {
+            "X": target_x,
+            "Y": target_y,
+            "Z": target_z,
+        }
 
