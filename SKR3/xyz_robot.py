@@ -7,6 +7,7 @@ import re
 
 from typing import Optional
 from stroke_font import STROKE_FONT
+from marker_shapes import MARKER_SHAPES
 
 
 def mark_text(
@@ -224,8 +225,6 @@ class XYZRobot:
 
         raise RuntimeError("Keine Positionsdaten in der Antwort gefunden")
 
-    #def move_circle(self, x=None, y=None, radius=None, feedrate=None):
-    #    TODO Hier: Kreis
 
     # --------------------------------------------------
     # Hilfsmethoden
@@ -402,15 +401,9 @@ class XYZRobot:
             x: float,
             y: float,
             height: float,
-            width: float | None = None
+            width: float | None = None,
+            angle_deg: float = 0.0
     ) -> None:
-        """
-        Markiert ein einzelnes Zeichen als Stroke-Font.
-
-        x, y = linke untere Ecke des Zeichens
-        height = Zeichenhöhe in mm
-        width = Zeichenbreite in mm, falls None: 0.6 * height
-        """
 
         char = char.upper()
 
@@ -426,8 +419,16 @@ class XYZRobot:
             absolute_points = []
 
             for px, py in stroke:
-                absolute_x = x + px * width
-                absolute_y = y + py * height
+                absolute_x, absolute_y = self._transform_font_point(
+                    px=px,
+                    py=py,
+                    origin_x=x,
+                    origin_y=y,
+                    width=width,
+                    height=height,
+                    angle_deg=angle_deg
+                )
+
                 absolute_points.append((absolute_x, absolute_y))
 
             self.mark_polyline_absolute(absolute_points)
@@ -438,31 +439,249 @@ class XYZRobot:
             x: float,
             y: float,
             height: float,
-            char_spacing: float = 0.25
+            char_spacing: float = 0.25,
+            angle_deg: float = 0.0
     ) -> None:
-        """
-        Markiert eine Zeichenkette.
-
-        Beispiel:
-        mark_text("P.1053", x=100, y=100, height=20)
-        """
 
         width = height * 0.6
         step = width * (1.0 + char_spacing)
 
+        angle_rad = math.radians(angle_deg)
+
         cursor_x = x
+        cursor_y = y
+
+        step_x = step * math.cos(angle_rad)
+        step_y = step * math.sin(angle_rad)
 
         for char in text:
             if char == " ":
-                cursor_x += step
+                cursor_x += step_x
+                cursor_y += step_y
                 continue
 
             self.mark_char(
                 char=char,
                 x=cursor_x,
-                y=y,
+                y=cursor_y,
                 height=height,
-                width=width
+                width=width,
+                angle_deg=angle_deg
             )
 
-            cursor_x += step
+            cursor_x += step_x
+            cursor_y += step_y
+
+    def _transform_font_point(
+            self,
+            px: float,
+            py: float,
+            origin_x: float,
+            origin_y: float,
+            width: float,
+            height: float,
+            angle_deg: float = 0.0
+    ) -> tuple[float, float]:
+        """
+        Wandelt einen normierten Fontpunkt in Maschinenkoordinaten um.
+        Rotation erfolgt um den Ursprungspunkt x/y des Zeichens.
+        """
+
+        # skalieren
+        local_x = px * width
+        local_y = py * height
+
+        # rotieren
+        angle_rad = math.radians(angle_deg)
+
+        rotated_x = local_x * math.cos(angle_rad) - local_y * math.sin(angle_rad)
+        rotated_y = local_x * math.sin(angle_rad) + local_y * math.cos(angle_rad)
+
+        # verschieben
+        return origin_x + rotated_x, origin_y + rotated_y
+
+    def _transform_local_point(
+            self,
+            local_x: float,
+            local_y: float,
+            origin_x: float,
+            origin_y: float,
+            size: float,
+            angle_deg: float = 0.0
+    ) -> tuple[float, float]:
+        """
+        Transformiert lokale Markerkoordinaten in Maschinenkoordinaten.
+        Lokale Koordinaten sind typischerweise von -0.5 bis +0.5.
+        """
+
+        scaled_x = local_x * size
+        scaled_y = local_y * size
+
+        angle_rad = math.radians(angle_deg)
+
+        rotated_x = scaled_x * math.cos(angle_rad) - scaled_y * math.sin(angle_rad)
+        rotated_y = scaled_x * math.sin(angle_rad) + scaled_y * math.cos(angle_rad)
+
+        return origin_x + rotated_x, origin_y + rotated_y
+
+    def mark_shape(
+            self,
+            shape_name: str,
+            x: float,
+            y: float,
+            size: float,
+            angle_deg: float = 0.0
+    ) -> None:
+        """
+        Markiert eine definierte Markerform aus MARKER_SHAPES.
+        """
+
+        if shape_name not in MARKER_SHAPES:
+            raise ValueError(f"Unbekannte Markerform: {shape_name}")
+
+        shape = MARKER_SHAPES[shape_name]
+
+        for stroke in shape:
+            absolute_points = []
+
+            for local_x, local_y in stroke:
+                px, py = self._transform_local_point(
+                    local_x=local_x,
+                    local_y=local_y,
+                    origin_x=x,
+                    origin_y=y,
+                    size=size,
+                    angle_deg=angle_deg
+                )
+                absolute_points.append((px, py))
+
+            self.mark_polyline_absolute(absolute_points)
+
+    def mark_point(
+            self,
+            x: float,
+            y: float,
+            size: float = 10.0,
+            shape: str = "plus",
+            angle_deg: float = 0.0
+    ) -> None:
+        """
+        Markiert einen Punkt mit einer definierbaren Markerform.
+
+        shape:
+        - "plus"
+        - "cross"
+        - "circle_point"
+        """
+
+        if shape == "circle_point":
+            radius = size / 2
+
+            self.move_circle_mark(
+                x=x,
+                y=y,
+                radius=radius
+            )
+
+            self.mark_shape(
+                shape_name="circle_point",
+                x=x,
+                y=y,
+                size=size,
+                angle_deg=angle_deg
+            )
+
+            return
+
+        self.mark_shape(
+            shape_name=shape,
+            x=x,
+            y=y,
+            size=size,
+            angle_deg=angle_deg
+        )
+
+    def mark_point_with_label(
+            self,
+            x: float,
+            y: float,
+            label: str,
+            marker_size: float = 10.0,
+            marker_shape: str = "plus",
+            text_height: float = 8.0,
+            text_offset: float = 6.0,
+            angle_deg: float = 0.0
+    ) -> None:
+
+        self.mark_point(
+            x=x,
+            y=y,
+            size=marker_size,
+            shape=marker_shape,
+            angle_deg=angle_deg
+        )
+
+        angle_rad = math.radians(angle_deg)
+
+        label_x = x + (marker_size / 2 + text_offset) * math.cos(angle_rad)
+        label_y = y + (marker_size / 2 + text_offset) * math.sin(angle_rad)
+
+        self.mark_text(
+            text=label,
+            x=label_x,
+            y=label_y,
+            height=text_height,
+            angle_deg=angle_deg
+        )
+
+    def move_circle_mark(
+            self,
+            x: float,
+            y: float,
+            radius: float,
+            clockwise: bool = False,
+            feedrate: float | None = None,
+            command_timeout: float = 30.0
+    ) -> None:
+        """
+        Fährt einen Kreis (G2/G3) mit Markierung (Z unten).
+
+        x, y     = Mittelpunkt
+        radius   = Radius in mm
+        clockwise = True -> G2, False -> G3
+        """
+
+        if radius <= 0:
+            raise ValueError("Radius muss > 0 sein")
+
+        self._check_circle_within_workspace(x, y, radius)
+
+        if feedrate is None:
+            feedrate = self.DEFAULT_FEEDRATE_MARKING
+
+        # Startpunkt: rechter Rand des Kreises
+        start_x = x + radius
+        start_y = y
+
+        try:
+            # zur Startposition fahren
+            self.z_to_travel()
+            self.move_xy_travel_absolute(start_x, start_y)
+
+            # Markieren aktivieren
+            self.z_to_mark()
+
+            # absolute Positionierung sicherstellen
+            self.send_gcode("G90")
+
+            # Kreisrichtung wählen
+            gcode = "G2" if clockwise else "G3"
+
+            # I/J = Vektor vom Startpunkt zum Mittelpunkt
+            # hier: Mittelpunkt liegt radius nach links → I = -radius, J = 0
+            command = f"{gcode} X{start_x} Y{start_y} I{-radius} J0 F{feedrate}"
+
+            self.send_gcode(command, command_timeout=command_timeout)
+
+        finally:
+            self.z_to_travel()

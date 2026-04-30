@@ -9,7 +9,15 @@ try:
     print("Verbunden:", robot.is_connected)
 
     #robot.homing()
-    robot.mark_text("P.1053", x=200.0, y=280.0, height=5.0)
+    robot.mark_point_with_label(
+        x=250.0,
+        y=200.0,
+        label="Z-764",
+        marker_size=10.0,
+        marker_shape="plus",
+        text_height=8.0,
+        angle_deg=45.0
+    )
 
 
 

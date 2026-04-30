@@ -4,9 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Kreis Markierung begonnen">
-      <change afterPath="$PROJECT_DIR$/SKR3/stroke_font.py" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Markieren von Zeichen. Stroke Font erste Funktionen">
+      <change afterPath="$PROJECT_DIR$/SKR3/marker_shapes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SKR3/stroke_font.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/stroke_font.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/xyz_robot.py" afterDir="false" />
     </list>
@@ -114,7 +115,7 @@
       <workItem from="1775033093346" duration="251000" />
       <workItem from="1775033351064" duration="3669000" />
       <workItem from="1776672696771" duration="34196000" />
-      <workItem from="1777544800708" duration="1893000" />
+      <workItem from="1777544800708" duration="4142000" />
     </task>
     <task id="LOCAL-00001" summary="Test Commit 1">
       <option name="closed" value="true" />
@@ -220,7 +221,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776952471193</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="Markieren von Zeichen. Stroke Font erste Funktionen">
+      <option name="closed" value="true" />
+      <created>1777547282970</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1777547282970</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -250,7 +259,8 @@
     <MESSAGE value="XYZ Klasse: Arbeitsbereich und sichere Move Commands" />
     <MESSAGE value="Einfache Plus Markierung umgesetzt" />
     <MESSAGE value="Kreis Markierung begonnen" />
-    <option name="LAST_COMMIT_MESSAGE" value="Kreis Markierung begonnen" />
+    <MESSAGE value="Markieren von Zeichen. Stroke Font erste Funktionen" />
+    <option name="LAST_COMMIT_MESSAGE" value="Markieren von Zeichen. Stroke Font erste Funktionen" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
@@ -276,7 +286,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$arn_minimal.coverage" NAME="arn_minimal Coverage Results" MODIFIED="1770285219863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v2.coverage" NAME="arn_v2 Coverage Results" MODIFIED="1770290089142" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_receiver.coverage" NAME="tracker_udp_receiver Coverage Results" MODIFIED="1770128928767" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
-    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1777547098290" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
+    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1777549058919" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_interface.coverage" NAME="tracker_udp_interface Coverage Results" MODIFIED="1770128980522" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$skr_simple_test.coverage" NAME="skr_simple_test Coverage Results" MODIFIED="1772527189602" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
   </component>
