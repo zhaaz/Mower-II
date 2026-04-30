@@ -3,9 +3,46 @@
 import serial
 import time
 import math
+import re
 
 from typing import Optional
+from stroke_font import STROKE_FONT
 
+
+def mark_text(
+    self,
+    text: str,
+    x: float,
+    y: float,
+    height: float,
+    char_spacing: float = 0.25
+) -> None:
+    """
+    Markiert eine Zeichenkette.
+
+    Beispiel:
+    mark_text("P.1053", x=100, y=100, height=20)
+    """
+
+    width = height * 0.6
+    step = width * (1.0 + char_spacing)
+
+    cursor_x = x
+
+    for char in text:
+        if char == " ":
+            cursor_x += step
+            continue
+
+        self.mark_char(
+            char=char,
+            x=cursor_x,
+            y=y,
+            height=height,
+            width=width
+        )
+
+        cursor_x += step
 
 class XYZRobot:
     # --------------------------------------------------
@@ -175,7 +212,7 @@ class XYZRobot:
     def move_xy_mark_relative(self, dx=None, dy=None):
         return self.move_relative(dx=dx, dy=dy, feedrate=self.DEFAULT_FEEDRATE_MARKING)
 
-    def move_xy_mark_absolute(self, x=None, y=None, z=None):
+    def move_xy_mark_absolute(self, x=None, y=None):
         return self.move_absolute(x=x, y=y, feedrate=self.DEFAULT_FEEDRATE_MARKING)
 
     def get_current_position(self) -> dict[str, float]:
@@ -187,8 +224,8 @@ class XYZRobot:
 
         raise RuntimeError("Keine Positionsdaten in der Antwort gefunden")
 
-    def move_circle(self, x=None, y=None, radius=None, feedrate=None):
-        TODO Hier: Kreis
+    #def move_circle(self, x=None, y=None, radius=None, feedrate=None):
+    #    TODO Hier: Kreis
 
     # --------------------------------------------------
     # Hilfsmethoden
@@ -220,7 +257,7 @@ class XYZRobot:
         return " ".join(parts)
 
 
-    def _parse_position_line(selfself, line: str) -> dict[str, float]:
+    def _parse_position_line(self, line: str) -> dict[str, float]:
         pattern = r"([XYZ]):(-?\d+(?:\.\d+)?)"
         matches = re.findall(pattern, line)
 
@@ -336,3 +373,96 @@ class XYZRobot:
 
         finally:
             self.z_to_travel()
+
+    def mark_polyline_absolute(self, points: list[tuple[float, float]]) -> None:
+        """
+        Markiert einen zusammenhängenden Linienzug.
+        points: [(x1,y1), (x2,y2), ...]
+        """
+
+        if len(points) < 2:
+            raise ValueError("Eine Polyline braucht mindestens zwei Punkte.")
+
+        start_x, start_y = points[0]
+
+        try:
+            self.z_to_travel()
+            self.move_xy_travel_absolute(x=start_x, y=start_y)
+            self.z_to_mark()
+
+            for x, y in points[1:]:
+                self.move_xy_mark_absolute(x=x, y=y)
+
+        finally:
+            self.z_to_travel()
+
+    def mark_char(
+            self,
+            char: str,
+            x: float,
+            y: float,
+            height: float,
+            width: float | None = None
+    ) -> None:
+        """
+        Markiert ein einzelnes Zeichen als Stroke-Font.
+
+        x, y = linke untere Ecke des Zeichens
+        height = Zeichenhöhe in mm
+        width = Zeichenbreite in mm, falls None: 0.6 * height
+        """
+
+        char = char.upper()
+
+        if width is None:
+            width = height * 0.6
+
+        if char not in STROKE_FONT:
+            raise ValueError(f"Zeichen nicht im Stroke-Font definiert: {char}")
+
+        strokes = STROKE_FONT[char]
+
+        for stroke in strokes:
+            absolute_points = []
+
+            for px, py in stroke:
+                absolute_x = x + px * width
+                absolute_y = y + py * height
+                absolute_points.append((absolute_x, absolute_y))
+
+            self.mark_polyline_absolute(absolute_points)
+
+    def mark_text(
+            self,
+            text: str,
+            x: float,
+            y: float,
+            height: float,
+            char_spacing: float = 0.25
+    ) -> None:
+        """
+        Markiert eine Zeichenkette.
+
+        Beispiel:
+        mark_text("P.1053", x=100, y=100, height=20)
+        """
+
+        width = height * 0.6
+        step = width * (1.0 + char_spacing)
+
+        cursor_x = x
+
+        for char in text:
+            if char == " ":
+                cursor_x += step
+                continue
+
+            self.mark_char(
+                char=char,
+                x=cursor_x,
+                y=y,
+                height=height,
+                width=width
+            )
+
+            cursor_x += step

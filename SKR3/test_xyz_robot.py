@@ -8,8 +8,8 @@ try:
     robot.connect()
     print("Verbunden:", robot.is_connected)
 
-    #robot.homing_z()
-    robot.mark_plus(100,100, 40)
+    #robot.homing()
+    robot.mark_text("P.1053", x=200.0, y=280.0, height=5.0)
 
 
 
