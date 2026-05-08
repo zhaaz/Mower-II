@@ -1,4 +1,5 @@
-# xyz_robot_gui.py
+# xyz_robot_panel.py
+
 import serial.tools.list_ports
 import customtkinter as ctk
 from tkinter import messagebox
@@ -6,15 +7,11 @@ from tkinter import messagebox
 from xyz_robot import XYZRobot
 
 
+class XYZRobotPanel(ctk.CTkFrame):
+    def __init__(self, master, robot: XYZRobot | None = None):
+        super().__init__(master)
 
-class XYZRobotGUI(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-
-        self.title("XYZ-Roboter")
-        self.geometry("1000x700")
-
-        self.robot: XYZRobot | None = None
+        self.robot: XYZRobot | None = robot
 
         self.port_var = ctk.StringVar(value="COM3")
         self.baudrate_var = ctk.StringVar(value="115200")
@@ -34,11 +31,25 @@ class XYZRobotGUI(ctk.CTk):
         self.mark_y_var = ctk.StringVar(value="100.0")
         self.label_var = ctk.StringVar(value="P101")
         self.marker_size_var = ctk.StringVar(value="10.0")
-
         self.marker_shape_var = ctk.StringVar(value="plus_circle")
+
         self.hardware_buttons: list[ctk.CTkButton] = []
 
         self._build_gui()
+
+
+    # --------------------------------------------------
+    # Hotkeys
+    # --------------------------------------------------
+
+    def _bind_hotkeys(self):
+        self.bind_all("<Left>", lambda event: self.hotkey_jog(dy=self._get_step()))
+        self.bind_all("<Right>", lambda event: self.hotkey_jog(dy=-self._get_step()))
+        self.bind_all("<Down>", lambda event: self.hotkey_jog(dx=-self._get_step()))
+        self.bind_all("<Up>", lambda event: self.hotkey_jog(dx=self._get_step()))
+
+        self.bind_all("<Prior>", lambda event: self.hotkey_jog(dz=self._get_step()))
+        self.bind_all("<Next>", lambda event: self.hotkey_jog(dz=-self._get_step()))
 
     # --------------------------------------------------
     # GUI Aufbau
@@ -63,6 +74,8 @@ class XYZRobotGUI(ctk.CTk):
         self._build_manual_frame()
         self._build_marking_frame()
         self._build_log_frame()
+
+        self._set_disconnected_ui()
 
     def _build_connection_frame(self):
         frame = ctk.CTkFrame(self.main_frame)
@@ -125,7 +138,13 @@ class XYZRobotGUI(ctk.CTk):
         ctk.CTkLabel(frame, text="Homed:").grid(row=0, column=1, padx=8, pady=8)
         ctk.CTkLabel(frame, textvariable=self.homed_var).grid(row=0, column=2, padx=8, pady=8)
 
-        ctk.CTkButton(frame, text="Position lesen", command=self.read_position).grid(row=0, column=3, padx=8, pady=8)
+        self.position_button = ctk.CTkButton(
+            frame,
+            text="Position lesen",
+            command=self.read_position
+        )
+        self.position_button.grid(row=0, column=3, padx=8, pady=8)
+        self._add_hardware_button(self.position_button)
 
         ctk.CTkLabel(frame, text="X").grid(row=1, column=0, padx=8, pady=8)
         ctk.CTkLabel(frame, textvariable=self.pos_x_var).grid(row=1, column=1, padx=8, pady=8)
@@ -140,11 +159,13 @@ class XYZRobotGUI(ctk.CTk):
         frame = ctk.CTkFrame(self.main_frame)
         frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkButton(
+        button = ctk.CTkButton(
             frame,
             text="Homing alle Achsen",
             command=self.home_all
-        ).grid(row=0, column=0, padx=8, pady=8)
+        )
+        button.grid(row=0, column=0, padx=8, pady=8)
+        self._add_hardware_button(button)
 
     def _build_manual_frame(self):
         frame = ctk.CTkFrame(self.main_frame)
@@ -159,20 +180,14 @@ class XYZRobotGUI(ctk.CTk):
         ctk.CTkLabel(frame, text="Feedrate Z").grid(row=2, column=0, padx=8, pady=8)
         ctk.CTkEntry(frame, textvariable=self.feedrate_z_var, width=100).grid(row=2, column=1, padx=8, pady=8)
 
-        ctk.CTkButton(frame, text="X-", command=lambda: self.jog(dx=-self._get_step())).grid(row=0, column=3, padx=8,
-                                                                                             pady=8)
-        ctk.CTkButton(frame, text="X+", command=lambda: self.jog(dx=self._get_step())).grid(row=0, column=4, padx=8,
-                                                                                            pady=8)
+        self._make_hardware_button(frame, "X-", lambda: self.jog(dx=-self._get_step()), 0, 3)
+        self._make_hardware_button(frame, "X+", lambda: self.jog(dx=self._get_step()), 0, 4)
 
-        ctk.CTkButton(frame, text="Y-", command=lambda: self.jog(dy=-self._get_step())).grid(row=1, column=3, padx=8,
-                                                                                             pady=8)
-        ctk.CTkButton(frame, text="Y+", command=lambda: self.jog(dy=self._get_step())).grid(row=1, column=4, padx=8,
-                                                                                            pady=8)
+        self._make_hardware_button(frame, "Y-", lambda: self.jog(dy=-self._get_step()), 1, 3)
+        self._make_hardware_button(frame, "Y+", lambda: self.jog(dy=self._get_step()), 1, 4)
 
-        ctk.CTkButton(frame, text="Z-", command=lambda: self.jog(dz=-self._get_step())).grid(row=2, column=3, padx=8,
-                                                                                             pady=8)
-        ctk.CTkButton(frame, text="Z+", command=lambda: self.jog(dz=self._get_step())).grid(row=2, column=4, padx=8,
-                                                                                            pady=8)
+        self._make_hardware_button(frame, "Z-", lambda: self.jog(dz=-self._get_step()), 2, 3)
+        self._make_hardware_button(frame, "Z+", lambda: self.jog(dz=self._get_step()), 2, 4)
 
     def _build_marking_frame(self):
         frame = ctk.CTkFrame(self.main_frame)
@@ -190,24 +205,21 @@ class XYZRobotGUI(ctk.CTk):
         ctk.CTkLabel(frame, text="Größe").grid(row=1, column=2, padx=8, pady=8)
         ctk.CTkEntry(frame, textvariable=self.marker_size_var, width=100).grid(row=1, column=3, padx=8, pady=8)
 
-        ctk.CTkButton(
-            frame,
-            text="Punkt markieren",
-            command=self.mark_point
-        ).grid(row=3, column=0, columnspan=4, padx=8, pady=12, sticky="ew")
-
         ctk.CTkLabel(frame, text="Markierung").grid(row=2, column=0, padx=8, pady=8)
 
         ctk.CTkOptionMenu(
             frame,
             variable=self.marker_shape_var,
-            values=[
-                "plus",
-                "cross",
-                "circle_point",
-                "plus_circle"
-            ]
+            values=["plus", "cross", "circle_point", "plus_circle"]
         ).grid(row=2, column=1, padx=8, pady=8, sticky="ew")
+
+        button = ctk.CTkButton(
+            frame,
+            text="Punkt markieren",
+            command=self.mark_point
+        )
+        button.grid(row=3, column=0, columnspan=4, padx=8, pady=12, sticky="ew")
+        self._add_hardware_button(button)
 
     def _build_log_frame(self):
         self.log_frame.grid_rowconfigure(1, weight=1)
@@ -224,6 +236,27 @@ class XYZRobotGUI(ctk.CTk):
     # --------------------------------------------------
     # Hilfsfunktionen
     # --------------------------------------------------
+
+    def _make_hardware_button(self, master, text: str, command, row: int, column: int):
+        button = ctk.CTkButton(master, text=text, command=command)
+        button.grid(row=row, column=column, padx=8, pady=8)
+        self._add_hardware_button(button)
+        return button
+
+    def _add_hardware_button(self, button: ctk.CTkButton) -> ctk.CTkButton:
+        self.hardware_buttons.append(button)
+        button.configure(state="disabled")
+        return button
+
+    def _set_hardware_buttons_state(self, state: str):
+        for button in self.hardware_buttons:
+            button.configure(state=state)
+
+    def hotkey_jog(self, dx=None, dy=None, dz=None):
+        if self.robot is None or not self.robot.is_connected:
+            return
+
+        self.jog(dx=dx, dy=dy, dz=dz)
 
     def log(self, text: str):
         self.log_text.insert("end", text + "\n")
@@ -246,6 +279,7 @@ class XYZRobotGUI(ctk.CTk):
     def _set_connected_ui(self):
         self.connection_indicator_var.set("● Connected")
         self.connection_label.configure(text_color="green")
+        self._set_hardware_buttons_state("normal")
 
     def _set_disconnected_ui(self):
         self.connection_indicator_var.set("● Not Connected")
@@ -254,6 +288,7 @@ class XYZRobotGUI(ctk.CTk):
         self.pos_x_var.set("-")
         self.pos_y_var.set("-")
         self.pos_z_var.set("-")
+        self._set_hardware_buttons_state("disabled")
 
     def _get_available_ports(self) -> list[str]:
         ports = serial.tools.list_ports.comports()
@@ -287,7 +322,6 @@ class XYZRobotGUI(ctk.CTk):
             self._set_connected_ui()
             self.log(f"Verbunden mit {port} @ {baudrate}")
 
-            # Test, ob die Steuerung wirklich antwortet
             self.read_position()
 
         except Exception as e:
@@ -354,12 +388,7 @@ class XYZRobotGUI(ctk.CTk):
             else:
                 feedrate = self._get_feedrate_xy()
 
-            robot.move_relative(
-                dx=dx,
-                dy=dy,
-                dz=dz,
-                feedrate=feedrate
-            )
+            robot.move_relative(dx=dx, dy=dy, dz=dz, feedrate=feedrate)
 
             self.read_position()
 
@@ -393,11 +422,3 @@ class XYZRobotGUI(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Markierfehler", str(e))
             self.log(f"Markierfehler: {e}")
-
-
-if __name__ == "__main__":
-    ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("blue")
-
-    app = XYZRobotGUI()
-    app.mainloop()
