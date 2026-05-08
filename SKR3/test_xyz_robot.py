@@ -9,16 +9,16 @@ try:
     robot.connect()
     print("Verbunden:", robot.is_connected)
 
-    # robot.homing()
+    robot.homing()
     # robot.move_absolute(250,200, feedrate=6000)
     robot.mark_point_with_label(
-        x=180.0,
-        y=160.0,
+        x=5.0,
+        y=5.0,
         label="PKT_12",
         marker_size=32.0,
         marker_shape="plus",
         text_height=15.0,
-        angle_deg=0.0
+        angle_deg=90.0
     )
 
 

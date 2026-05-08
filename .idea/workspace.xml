@@ -4,11 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Markierung + Punktnummer + Winkel drehbar">
-      <change afterPath="$PROJECT_DIR$/SKR3/xyz_robot_katalog.md" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Vorgestellter Zwischenstand (Besprechung vom 06.05.26)">
+      <change afterPath="$PROJECT_DIR$/SKR3/xyz_robot_gui.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/SKR3/marker_shapes.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/marker_shapes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/SKR3/stroke_font.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/stroke_font.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/xyz_robot.py" afterDir="false" />
     </list>
@@ -44,50 +42,51 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python tests.Doctests in dsp3100_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_controller.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_gui_tk.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_minimal.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v0.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v1.2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v1.3_dauertest.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v1.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.arn_v2_dauertest.executor&quot;: &quot;Run&quot;,
-    &quot;Python.connection_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.dsp3100.executor&quot;: &quot;Run&quot;,
-    &quot;Python.dsp3100_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.dsp_3100_simple_gui.executor&quot;: &quot;Run&quot;,
-    &quot;Python.example_udp_receiver.executor&quot;: &quot;Run&quot;,
-    &quot;Python.example_udp_sender.executor&quot;: &quot;Run&quot;,
-    &quot;Python.gyems_gui_tk.executor&quot;: &quot;Run&quot;,
-    &quot;Python.gyems_reliability_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.import_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.run_arn_controller_console.executor&quot;: &quot;Run&quot;,
-    &quot;Python.simple_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.skr_simple_test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_xyz_robot.executor&quot;: &quot;Run&quot;,
-    &quot;Python.tracker_udp_interface.executor&quot;: &quot;Run&quot;,
-    &quot;Python.tracker_udp_receiver.executor&quot;: &quot;Run&quot;,
-    &quot;Python.xyz_robot.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/GYEMS&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;inlay.hints&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.Doctests in dsp3100_test.executor": "Run",
+    "Python.arn_controller.executor": "Run",
+    "Python.arn_gui_tk.executor": "Run",
+    "Python.arn_minimal.executor": "Run",
+    "Python.arn_v0.executor": "Run",
+    "Python.arn_v1.2.executor": "Run",
+    "Python.arn_v1.3_dauertest.executor": "Run",
+    "Python.arn_v1.executor": "Run",
+    "Python.arn_v2.executor": "Run",
+    "Python.arn_v2_dauertest.executor": "Run",
+    "Python.connection_test.executor": "Run",
+    "Python.dsp3100.executor": "Run",
+    "Python.dsp3100_test.executor": "Run",
+    "Python.dsp_3100_simple_gui.executor": "Run",
+    "Python.example_udp_receiver.executor": "Run",
+    "Python.example_udp_sender.executor": "Run",
+    "Python.gyems_gui_tk.executor": "Run",
+    "Python.gyems_reliability_test.executor": "Run",
+    "Python.import_test.executor": "Run",
+    "Python.run_arn_controller_console.executor": "Run",
+    "Python.simple_test.executor": "Run",
+    "Python.skr_simple_test.executor": "Run",
+    "Python.test_xyz_robot.executor": "Run",
+    "Python.tracker_udp_interface.executor": "Run",
+    "Python.tracker_udp_receiver.executor": "Run",
+    "Python.xyz_robot.executor": "Run",
+    "Python.xyz_robot_gui.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/GYEMS",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "inlay.hints",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\GYEMS" />
@@ -119,7 +118,7 @@
       <workItem from="1776672696771" duration="34196000" />
       <workItem from="1777544800708" duration="15368000" />
       <workItem from="1778076081994" duration="739000" />
-      <workItem from="1778226478427" duration="1680000" />
+      <workItem from="1778226478427" duration="8140000" />
     </task>
     <task id="LOCAL-00001" summary="Test Commit 1">
       <option name="closed" value="true" />
@@ -241,7 +240,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777549585236</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="Vorgestellter Zwischenstand (Besprechung vom 06.05.26)">
+      <option name="closed" value="true" />
+      <created>1778228341502</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1778228341502</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -273,7 +280,8 @@
     <MESSAGE value="Kreis Markierung begonnen" />
     <MESSAGE value="Markieren von Zeichen. Stroke Font erste Funktionen" />
     <MESSAGE value="Markierung + Punktnummer + Winkel drehbar" />
-    <option name="LAST_COMMIT_MESSAGE" value="Markierung + Punktnummer + Winkel drehbar" />
+    <MESSAGE value="Vorgestellter Zwischenstand (Besprechung vom 06.05.26)" />
+    <option name="LAST_COMMIT_MESSAGE" value="Vorgestellter Zwischenstand (Besprechung vom 06.05.26)" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
@@ -289,6 +297,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$connection_test.coverage" NAME="connection_test Coverage Results" MODIFIED="1770216963848" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
     <SUITE FILE_PATH="coverage/Mower_II$dsp3100.coverage" NAME="dsp3100 Coverage Results" MODIFIED="1770195882800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v1_3_dauertest.coverage" NAME="arn_v1.3_dauertest Coverage Results" MODIFIED="1770296216371" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
+    <SUITE FILE_PATH="coverage/Mower_II$xyz_robot_gui.coverage" NAME="xyz_robot_gui Coverage Results" MODIFIED="1778238122510" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
     <SUITE FILE_PATH="coverage/Mower_II$gyems_gui_tk.coverage" NAME="gyems_gui_tk Coverage Results" MODIFIED="1775040761318" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
     <SUITE FILE_PATH="coverage/Mower_II$Doctests_in_dsp3100_test.coverage" NAME="Doctests in dsp3100_test Coverage Results" MODIFIED="1770283193305" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
     <SUITE FILE_PATH="coverage/Mower_II$simple_test.coverage" NAME="simple_test Coverage Results" MODIFIED="1775031921587" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
@@ -299,7 +308,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$arn_minimal.coverage" NAME="arn_minimal Coverage Results" MODIFIED="1770285219863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v2.coverage" NAME="arn_v2 Coverage Results" MODIFIED="1770290089142" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_receiver.coverage" NAME="tracker_udp_receiver Coverage Results" MODIFIED="1770128928767" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
-    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1778069254650" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
+    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1778229115725" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_interface.coverage" NAME="tracker_udp_interface Coverage Results" MODIFIED="1770128980522" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$skr_simple_test.coverage" NAME="skr_simple_test Coverage Results" MODIFIED="1772527189602" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
   </component>

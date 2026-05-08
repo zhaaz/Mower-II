@@ -39,6 +39,7 @@ class XYZRobot:
         self.baudrate = baudrate
         self.timeout = timeout
         self._serial: Optional[serial.Serial] = None
+        self._is_homed = False
 
 
     # --------------------------------------------------
@@ -56,12 +57,15 @@ class XYZRobot:
             timeout=self.timeout
         )
 
+        self._is_homed = False
+
     def disconnect(self) -> None:
         """Schließt die serielle Verbindung"""
         if self.is_connected:
             self._serial.close()
 
         self._serial = None
+        self._is_homed = False
 
     @property
     def is_connected(self) -> bool:
@@ -124,7 +128,9 @@ class XYZRobot:
     # --------------------------------------------------
 
     def homing(self, command_timeout: float = 60.0) -> list[str]:
-        return self.send_gcode("G28", command_timeout=command_timeout)
+        response = self.send_gcode("G28", command_timeout=command_timeout)
+        self._is_homed = True
+        return response
 
     def homing_x(self, command_timeout: float = 60.0) -> list[str]:
         return self.send_gcode("G28X", command_timeout=command_timeout)
@@ -143,6 +149,8 @@ class XYZRobot:
         feedrate: float | None = None,
         command_timeout: float = 30
     ) -> list[str]:
+
+        self._require_homed()
         self._validate_absolute_position(x=x, y=y, z=z)
         self.send_gcode("G90", command_timeout=5.0)
         command = self._build_move_command(x=x, y=y, z=z, feedrate=feedrate)
@@ -157,6 +165,7 @@ class XYZRobot:
         command_timeout: float = 30
     ) -> list[str]:
 
+        self._require_homed()
         target = self._calculate_relative_target(dx, dy, dz)
         self._validate_absolute_position(x=target["X"], y=target["Y"], z=target["Z"])
 
@@ -198,6 +207,10 @@ class XYZRobot:
     # --------------------------------------------------
     # Hilfsmethoden
     # --------------------------------------------------
+
+    def _require_homed(self) -> None:
+        if not self._is_homed:
+            raise RuntimeError("Fahrbefehl nicht erlaubt: Vorher muss ein Homing aller Achsen ausgeführt werden.")
 
     def _build_move_command(
             self,
@@ -292,6 +305,98 @@ class XYZRobot:
         if center_y + radius > self.Y_MAX:
             raise ValueError("Kreis überschreitet Y_MAX.")
 
+    def _validate_xy_point(self, x: float, y: float) -> None:
+        if not (self.X_MIN <= x <= self.X_MAX):
+            raise ValueError(f"X={x} außerhalb des Arbeitsraums [{self.X_MIN}, {self.X_MAX}]")
+
+        if not (self.Y_MIN <= y <= self.Y_MAX):
+            raise ValueError(f"Y={y} außerhalb des Arbeitsraums [{self.Y_MIN}, {self.Y_MAX}]")
+
+    def _validate_xy_points(self, points: list[tuple[float, float]]) -> None:
+        for x, y in points:
+            self._validate_xy_point(x, y)
+
+    def _get_text_points(
+            self,
+            text: str,
+            x: float,
+            y: float,
+            height: float,
+            char_spacing: float = 0.25,
+            angle_deg: float = 0.0
+    ) -> list[tuple[float, float]]:
+
+        width = height * 0.6
+        step = width * (1.0 + char_spacing)
+
+        angle_rad = math.radians(angle_deg)
+
+        cursor_x = x
+        cursor_y = y
+
+        step_x = step * math.cos(angle_rad)
+        step_y = step * math.sin(angle_rad)
+
+        points: list[tuple[float, float]] = []
+
+        for char in text:
+            if char == " ":
+                cursor_x += step_x
+                cursor_y += step_y
+                continue
+
+            char = char.upper()
+
+            if char not in STROKE_FONT:
+                raise ValueError(f"Zeichen nicht im Stroke-Font definiert: {char}")
+
+            for stroke in STROKE_FONT[char]:
+                for px, py in stroke:
+                    absolute_x, absolute_y = self._transform_font_point(
+                        px=px,
+                        py=py,
+                        origin_x=cursor_x,
+                        origin_y=cursor_y,
+                        width=width,
+                        height=height,
+                        angle_deg=angle_deg
+                    )
+                    points.append((absolute_x, absolute_y))
+
+            cursor_x += step_x
+            cursor_y += step_y
+
+        return points
+
+    def _get_shape_points(
+            self,
+            shape_name: str,
+            x: float,
+            y: float,
+            size: float,
+            angle_deg: float = 0.0
+    ) -> list[tuple[float, float]]:
+
+        if shape_name not in MARKER_SHAPES:
+            raise ValueError(f"Unbekannte Markerform: {shape_name}")
+
+        points: list[tuple[float, float]] = []
+
+        for stroke in MARKER_SHAPES[shape_name]:
+            for local_x, local_y in stroke:
+                px, py = self._transform_local_point(
+                    local_x=local_x,
+                    local_y=local_y,
+                    origin_x=x,
+                    origin_y=y,
+                    size=size,
+                    angle_deg=angle_deg
+                )
+                points.append((px, py))
+
+        return points
+
+
     # --------------------------------------------------
     # Markierung
     # --------------------------------------------------
@@ -360,6 +465,7 @@ class XYZRobot:
         if len(points) < 2:
             raise ValueError("Eine Polyline braucht mindestens zwei Punkte.")
 
+        self._validate_xy_points(points)
         start_x, start_y = points[0]
 
         try:
@@ -621,6 +727,44 @@ class XYZRobot:
             angle_deg: float = 0.0
     ) -> None:
 
+        angle_rad = math.radians(angle_deg)
+
+        label_x = x + (marker_size / 2 + text_offset) * math.cos(angle_rad)
+        label_y = y + (marker_size / 2 + text_offset) * math.sin(angle_rad)
+
+        points_to_check: list[tuple[float, float]] = []
+
+        if marker_shape == "circle_point":
+            radius = marker_size / 2
+            self._check_circle_within_workspace(x, y, radius)
+            points_to_check.extend(
+                self._get_shape_points("circle_point", x, y, marker_size, angle_deg)
+            )
+
+        elif marker_shape == "plus_circle":
+            radius = marker_size * 0.7 / 2
+            self._check_circle_within_workspace(x, y, radius)
+            points_to_check.extend(
+                self._get_shape_points("plus_circle", x, y, marker_size, angle_deg)
+            )
+
+        else:
+            points_to_check.extend(
+                self._get_shape_points(marker_shape, x, y, marker_size, angle_deg)
+            )
+
+        points_to_check.extend(
+            self._get_text_points(
+                text=label,
+                x=label_x,
+                y=label_y,
+                height=text_height,
+                angle_deg=angle_deg
+            )
+        )
+
+        self._validate_xy_points(points_to_check)
+
         self.mark_point(
             x=x,
             y=y,
@@ -628,11 +772,6 @@ class XYZRobot:
             shape=marker_shape,
             angle_deg=angle_deg
         )
-
-        angle_rad = math.radians(angle_deg)
-
-        label_x = x + (marker_size / 2 + text_offset) * math.cos(angle_rad)
-        label_y = y + (marker_size / 2 + text_offset) * math.sin(angle_rad)
 
         self.mark_text(
             text=label,
