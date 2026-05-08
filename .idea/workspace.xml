@@ -4,9 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Markieren von Zeichen. Stroke Font erste Funktionen">
-      <change afterPath="$PROJECT_DIR$/SKR3/marker_shapes.py" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Markierung + Punktnummer + Winkel drehbar">
+      <change afterPath="$PROJECT_DIR$/SKR3/xyz_robot_katalog.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SKR3/marker_shapes.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/marker_shapes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/stroke_font.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/stroke_font.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/test_xyz_robot.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/SKR3/xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/SKR3/xyz_robot.py" afterDir="false" />
@@ -76,6 +77,7 @@
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/GYEMS&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
@@ -115,7 +117,9 @@
       <workItem from="1775033093346" duration="251000" />
       <workItem from="1775033351064" duration="3669000" />
       <workItem from="1776672696771" duration="34196000" />
-      <workItem from="1777544800708" duration="4142000" />
+      <workItem from="1777544800708" duration="15368000" />
+      <workItem from="1778076081994" duration="739000" />
+      <workItem from="1778226478427" duration="1680000" />
     </task>
     <task id="LOCAL-00001" summary="Test Commit 1">
       <option name="closed" value="true" />
@@ -229,7 +233,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777547282970</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="Markierung + Punktnummer + Winkel drehbar">
+      <option name="closed" value="true" />
+      <created>1777549585236</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1777549585236</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -260,7 +272,8 @@
     <MESSAGE value="Einfache Plus Markierung umgesetzt" />
     <MESSAGE value="Kreis Markierung begonnen" />
     <MESSAGE value="Markieren von Zeichen. Stroke Font erste Funktionen" />
-    <option name="LAST_COMMIT_MESSAGE" value="Markieren von Zeichen. Stroke Font erste Funktionen" />
+    <MESSAGE value="Markierung + Punktnummer + Winkel drehbar" />
+    <option name="LAST_COMMIT_MESSAGE" value="Markierung + Punktnummer + Winkel drehbar" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
@@ -272,7 +285,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$arn_v1.coverage" NAME="arn_v1 Coverage Results" MODIFIED="1770285573517" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_receiver.coverage" NAME="example_udp_receiver Coverage Results" MODIFIED="1770127563725" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_gui_tk.coverage" NAME="arn_gui_tk Coverage Results" MODIFIED="1771491054828" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
-    <SUITE FILE_PATH="coverage/Mower_II$xyz_robot.coverage" NAME="xyz_robot Coverage Results" MODIFIED="1776947418531" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
+    <SUITE FILE_PATH="coverage/Mower_II$xyz_robot.coverage" NAME="xyz_robot Coverage Results" MODIFIED="1777554471398" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
     <SUITE FILE_PATH="coverage/Mower_II$connection_test.coverage" NAME="connection_test Coverage Results" MODIFIED="1770216963848" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
     <SUITE FILE_PATH="coverage/Mower_II$dsp3100.coverage" NAME="dsp3100 Coverage Results" MODIFIED="1770195882800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v1_3_dauertest.coverage" NAME="arn_v1.3_dauertest Coverage Results" MODIFIED="1770296216371" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
@@ -286,7 +299,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$arn_minimal.coverage" NAME="arn_minimal Coverage Results" MODIFIED="1770285219863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v2.coverage" NAME="arn_v2 Coverage Results" MODIFIED="1770290089142" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_receiver.coverage" NAME="tracker_udp_receiver Coverage Results" MODIFIED="1770128928767" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
-    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1777549058919" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
+    <SUITE FILE_PATH="coverage/Mower_II$test_xyz_robot.coverage" NAME="test_xyz_robot Coverage Results" MODIFIED="1778069254650" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
     <SUITE FILE_PATH="coverage/Mower_II$tracker_udp_interface.coverage" NAME="tracker_udp_interface Coverage Results" MODIFIED="1770128980522" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
     <SUITE FILE_PATH="coverage/Mower_II$skr_simple_test.coverage" NAME="skr_simple_test Coverage Results" MODIFIED="1772527189602" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
   </component>

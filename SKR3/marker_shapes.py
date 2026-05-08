@@ -18,4 +18,9 @@ MARKER_SHAPES: dict[str, MarkerShape] = {
         # kleiner Mittelpunkt als kurzer Strich
         [(-0.05, 0.0), (0.05, 0.0)],
     ],
+
+    "plus_circle": [
+        [(-0.5, 0.0), (0.5, 0.0)],
+        [(0.0, -0.5), (0.0, 0.5)],
+    ],
 }

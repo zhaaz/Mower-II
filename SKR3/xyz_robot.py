@@ -10,41 +10,6 @@ from stroke_font import STROKE_FONT
 from marker_shapes import MARKER_SHAPES
 
 
-def mark_text(
-    self,
-    text: str,
-    x: float,
-    y: float,
-    height: float,
-    char_spacing: float = 0.25
-) -> None:
-    """
-    Markiert eine Zeichenkette.
-
-    Beispiel:
-    mark_text("P.1053", x=100, y=100, height=20)
-    """
-
-    width = height * 0.6
-    step = width * (1.0 + char_spacing)
-
-    cursor_x = x
-
-    for char in text:
-        if char == " ":
-            cursor_x += step
-            continue
-
-        self.mark_char(
-            char=char,
-            x=cursor_x,
-            y=y,
-            height=height,
-            width=width
-        )
-
-        cursor_x += step
-
 class XYZRobot:
     # --------------------------------------------------
     # Feedrate / Verfahrgeschwindigkeit Achsen mm/min
@@ -53,8 +18,9 @@ class XYZRobot:
     DEFAULT_FEEDRATE_Z = 900.0
     DEFAULT_FEEDRATE_MARKING = 2000.0
 
-    Z_MARK = 170.0
-    Z_TRAVEL = 180.0
+    Z_MARK = 169.0
+    Z_CLEAR = 172.0
+    Z_TRAVEL = 178.0
 
     # --------------------------------------------------
     # Arbeitsraum [mm]
@@ -135,7 +101,7 @@ class XYZRobot:
         while True:
             elapsed = time.monotonic() - start_time
             if elapsed >= command_timeout:
-                raise TimeoutError(f"Timeout nach {command_timeout:1f}s bei Befehl: {command}")
+                raise TimeoutError(f"Timeout nach {command_timeout:.1f}s bei Befehl: {command}")
 
             raw = self._serial.readline()
             text = raw.decode("ascii", errors="replace").strip()
@@ -203,6 +169,9 @@ class XYZRobot:
 
     def z_to_travel(self):
         return self.move_absolute(z=self.Z_TRAVEL, feedrate=self.DEFAULT_FEEDRATE_Z)
+
+    def z_to_clear(self):
+        return self.move_absolute(z=self.Z_CLEAR, feedrate=self.DEFAULT_FEEDRATE_Z)
 
     def move_xy_travel_relative(self, dx=None, dy=None):
         return self.move_relative(dx=dx, dy=dy, feedrate=self.DEFAULT_FEEDRATE_XY)
@@ -373,10 +342,19 @@ class XYZRobot:
         finally:
             self.z_to_travel()
 
-    def mark_polyline_absolute(self, points: list[tuple[float, float]]) -> None:
+    def mark_polyline_absolute(
+            self,
+            points: list[tuple[float, float]],
+            clear_after: bool = False
+    ) -> None:
         """
         Markiert einen zusammenhängenden Linienzug.
-        points: [(x1,y1), (x2,y2), ...]
+
+        clear_after=False:
+            Am Ende wird nur auf Z_CLEAR gefahren.
+
+        clear_after=True:
+            Am Ende wird auf Z_TRAVEL gefahren.
         """
 
         if len(points) < 2:
@@ -385,7 +363,7 @@ class XYZRobot:
         start_x, start_y = points[0]
 
         try:
-            self.z_to_travel()
+            self.z_to_clear()
             self.move_xy_travel_absolute(x=start_x, y=start_y)
             self.z_to_mark()
 
@@ -393,7 +371,10 @@ class XYZRobot:
                 self.move_xy_mark_absolute(x=x, y=y)
 
         finally:
-            self.z_to_travel()
+            if clear_after:
+                self.z_to_travel()
+            else:
+                self.z_to_clear()
 
     def mark_char(
             self,
@@ -454,33 +435,39 @@ class XYZRobot:
         step_x = step * math.cos(angle_rad)
         step_y = step * math.sin(angle_rad)
 
-        for char in text:
-            if char == " ":
+        try:
+
+            for char in text:
+                if char == " ":
+                    cursor_x += step_x
+                    cursor_y += step_y
+                    continue
+
+                self.mark_char(
+                    char=char,
+                    x=cursor_x,
+                    y=cursor_y,
+                    height=height,
+                    width=width,
+                    angle_deg=angle_deg
+                )
+
                 cursor_x += step_x
                 cursor_y += step_y
-                continue
 
-            self.mark_char(
-                char=char,
-                x=cursor_x,
-                y=cursor_y,
-                height=height,
-                width=width,
-                angle_deg=angle_deg
-            )
+        finally:
+            self.z_to_travel()
 
-            cursor_x += step_x
-            cursor_y += step_y
 
     def _transform_font_point(
-            self,
-            px: float,
-            py: float,
-            origin_x: float,
-            origin_y: float,
-            width: float,
-            height: float,
-            angle_deg: float = 0.0
+        self,
+        px: float,
+        py: float,
+        origin_x: float,
+        origin_y: float,
+        width: float,
+        height: float,
+        angle_deg: float = 0.0
     ) -> tuple[float, float]:
         """
         Wandelt einen normierten Fontpunkt in Maschinenkoordinaten um.
@@ -572,7 +559,11 @@ class XYZRobot:
         - "plus"
         - "cross"
         - "circle_point"
+        - "plus_circle"
         """
+
+        self.z_to_travel()
+        self.move_xy_travel_absolute(x=x, y=y)
 
         if shape == "circle_point":
             radius = size / 2
@@ -589,6 +580,23 @@ class XYZRobot:
                 y=y,
                 size=size,
                 angle_deg=angle_deg
+            )
+
+            return
+
+        if shape == "plus_circle":
+            self.mark_shape(
+                shape_name="plus_circle",
+                x=x,
+                y=y,
+                size=size,
+                angle_deg=angle_deg
+            )
+
+            self.move_circle_mark(
+                x=x,
+                y=y,
+                radius=size * 0.7 / 2
             )
 
             return
