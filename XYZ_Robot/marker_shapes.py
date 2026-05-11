@@ -4,6 +4,8 @@ MarkerStroke = list[tuple[float, float]]
 MarkerShape = list[MarkerStroke]
 
 MARKER_SHAPES: dict[str, MarkerShape] = {
+    "none": [],
+
     "plus": [
         [(-0.5, 0.0), (0.5, 0.0)],
         [(0.0, -0.5), (0.0, 0.5)],

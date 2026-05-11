@@ -3,7 +3,16 @@ import serial.tools.list_ports
 import customtkinter as ctk
 from tkinter import messagebox
 
+# xyz_robot_app.py
+
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from xyz_robot import XYZRobot
+
+
 
 
 
