@@ -4,31 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Architektur angepasst. worker, worker panel für saubere kommunikation">
-      <change afterPath="$PROJECT_DIR$/Lasertracker/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Lasertracker/lasertracker_app.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Lasertracker/lasertracker_panel.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Lasertracker/lasertracker_receiver.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Lasertracker/lasertracker_state.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transformation/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transformation/helmert_3d.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transformation/trafo_gui_test_app.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transformation/trafo_manager.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transformation/trafo_workflow.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/XYZ_Robot/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/workflows/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/workflows/trafo_dummy.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/workflows/trafo_multitest_helmert_3d.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/workflows/trafo_test_helmert_3d.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/workflows/trafo_validation_helmert_3d.py" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Trafos: Noch mit workflow Ordner. Auf dem Weg sauber aufbearbeitet zu werden.">
+      <change afterPath="$PROJECT_DIR$/Transformation/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Transformation/trafo_workflow_multitest.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/architecture.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UDP/example_udp_receiver.py" beforeDir="false" afterPath="$PROJECT_DIR$/Lasertracker/old/example_udp_receiver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UDP/example_udp_sender.py" beforeDir="false" afterPath="$PROJECT_DIR$/Lasertracker/old/example_udp_sender.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UDP/tracker_udp_interface.py" beforeDir="false" afterPath="$PROJECT_DIR$/Lasertracker/old/tracker_udp_interface.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UDP/tracker_udp_receiver.py" beforeDir="false" afterPath="$PROJECT_DIR$/Lasertracker/old/tracker_udp_receiver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UDP/udp_readme.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/XYZ_Robot/xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/XYZ_Robot/xyz_robot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XYZ_Robot/xyz_robot_worker.py" beforeDir="false" afterPath="$PROJECT_DIR$/XYZ_Robot/xyz_robot_worker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Transformation/trafo_workflow.py" beforeDir="false" afterPath="$PROJECT_DIR$/Transformation/trafo_workflow.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -97,6 +78,7 @@
     "Python.trafo_multitest_helmert_3d.executor": "Run",
     "Python.trafo_test_helmert_3d.executor": "Run",
     "Python.trafo_validation_helmert_3d.executor": "Run",
+    "Python.trafo_workflow_multitest.executor": "Run",
     "Python.xyz_robot.executor": "Run",
     "Python.xyz_robot_app.executor": "Run",
     "Python.xyz_robot_app_worker.executor": "Run",
@@ -154,7 +136,7 @@
       <workItem from="1776672696771" duration="34196000" />
       <workItem from="1777544800708" duration="15368000" />
       <workItem from="1778076081994" duration="739000" />
-      <workItem from="1778226478427" duration="38667000" />
+      <workItem from="1778226478427" duration="43236000" />
     </task>
     <task id="LOCAL-00001" summary="Test Commit 1">
       <option name="closed" value="true" />
@@ -308,7 +290,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778487611135</updated>
     </task>
-    <option name="localTasksCounter" value="20" />
+    <task id="LOCAL-00020" summary="Trafos: Noch mit workflow Ordner. Auf dem Weg sauber aufbearbeitet zu werden.">
+      <option name="closed" value="true" />
+      <created>1778575741175</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1778575741175</updated>
+    </task>
+    <option name="localTasksCounter" value="21" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -344,7 +334,8 @@
     <MESSAGE value="Basic XYZ Robot GUI" />
     <MESSAGE value="README ergänzt. panel, gui und einfache app zur xyz roboter steuerung" />
     <MESSAGE value="Architektur angepasst. worker, worker panel für saubere kommunikation" />
-    <option name="LAST_COMMIT_MESSAGE" value="Architektur angepasst. worker, worker panel für saubere kommunikation" />
+    <MESSAGE value="Trafos: Noch mit workflow Ordner. Auf dem Weg sauber aufbearbeitet zu werden." />
+    <option name="LAST_COMMIT_MESSAGE" value="Trafos: Noch mit workflow Ordner. Auf dem Weg sauber aufbearbeitet zu werden." />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
@@ -368,7 +359,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$gyems_gui_tk.coverage" NAME="gyems_gui_tk Coverage Results" MODIFIED="1775040761318" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
     <SUITE FILE_PATH="coverage/Mower_II$Doctests_in_dsp3100_test.coverage" NAME="Doctests in dsp3100_test Coverage Results" MODIFIED="1770283193305" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
     <SUITE FILE_PATH="coverage/Mower_II$simple_test.coverage" NAME="simple_test Coverage Results" MODIFIED="1775031921587" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
-    <SUITE FILE_PATH="coverage/Mower_II$trafo_gui_test_app.coverage" NAME="trafo_gui_test_app Coverage Results" MODIFIED="1778575302467" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Transformation" />
+    <SUITE FILE_PATH="coverage/Mower_II$trafo_gui_test_app.coverage" NAME="trafo_gui_test_app Coverage Results" MODIFIED="1778583243805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Transformation" />
     <SUITE FILE_PATH="coverage/Mower_II$xyz_robot_app_worker.coverage" NAME="xyz_robot_app_worker Coverage Results" MODIFIED="1778570415969" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/XYZ_Robot" />
     <SUITE FILE_PATH="coverage/Mower_II$import_test.coverage" NAME="import_test Coverage Results" MODIFIED="1770284966078" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$xyz_robot_app.coverage" NAME="xyz_robot_app Coverage Results" MODIFIED="1778239650429" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/SKR3" />
@@ -376,6 +367,7 @@
     <SUITE FILE_PATH="coverage/Mower_II$gyems_reliability_test.coverage" NAME="gyems_reliability_test Coverage Results" MODIFIED="1770283151626" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/GYEMS" />
     <SUITE FILE_PATH="coverage/Mower_II$demo_app.coverage" NAME="demo_app Coverage Results" MODIFIED="1778242491484" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Demo" />
     <SUITE FILE_PATH="coverage/Mower_II$dsp3100_test.coverage" NAME="dsp3100_test Coverage Results" MODIFIED="1770283295659" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/KVH DSP 3100" />
+    <SUITE FILE_PATH="coverage/Mower_II$trafo_workflow_multitest.coverage" NAME="trafo_workflow_multitest Coverage Results" MODIFIED="1778575799926" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Transformation" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_controller.coverage" NAME="arn_controller Coverage Results" MODIFIED="1770284102281" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_minimal.coverage" NAME="arn_minimal Coverage Results" MODIFIED="1770285219863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />
     <SUITE FILE_PATH="coverage/Mower_II$arn_v2.coverage" NAME="arn_v2 Coverage Results" MODIFIED="1770290089142" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ARN" />

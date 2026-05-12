@@ -132,6 +132,24 @@ class TrafoWorkflow:
 
                     self._status(f"{point_name}: kein stabiler Trackerpunkt.")
                     self._log(f"WARNUNG {point_name}: {exc}")
+
+                    remaining_possible_points = (
+                        len(target_points) - len(failed_measurements)
+                    )
+
+                    if remaining_possible_points < self.config.minimum_required_measurements:
+                        self._status(
+                            "Transformation nicht mehr möglich: "
+                            "zu viele fehlgeschlagene Punkte."
+                        )
+
+                        self._log(
+                            f"Abbruch: Bereits {len(failed_measurements)} "
+                            f"fehlgeschlagene Punkte."
+                        )
+
+                        break
+
                     self._log("Fahre mit nächstem Punkt fort.")
 
                     continue
