@@ -1,7 +1,7 @@
 """
 tracker_udp_receiver.py
 
-Erster Versuch für UDP Trackerdaten Empfang.
+Erster Versuch für Lasertracker Trackerdaten Empfang.
 Liest Daten aus WatchWindow.
 Port 10000
 
@@ -25,7 +25,7 @@ sock.bind(("0.0.0.0", PORT))
 # Damit wir "seit X Sekunden keine Daten" erkennen können:
 sock.settimeout(0.5)
 
-print(f"Lausche auf UDP Port {PORT} ...")
+print(f"Lausche auf Lasertracker Port {PORT} ...")
 
 
 def decode_udp_payload(data: bytes) -> str:
@@ -105,7 +105,7 @@ while True:
     if last_rx_time is not None:
         gap = now - last_rx_time
         if gap >= NO_DATA_TIMEOUT_S and not no_data_reported:
-            print(f"\nWARNUNG: Seit {gap:.1f} s keine UDP-Daten empfangen.")
+            print(f"\nWARNUNG: Seit {gap:.1f} s keine Lasertracker-Daten empfangen.")
             no_data_reported = True
 
     try:

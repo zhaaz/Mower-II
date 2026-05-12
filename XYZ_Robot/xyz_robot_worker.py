@@ -4,9 +4,9 @@ import queue
 import threading
 from typing import Any, Callable
 
-from xyz_robot import XYZRobot
-from xyz_robot_state import XYZRobotState
-from component_event import ComponentEvent, EventLevel
+from XYZ_Robot.xyz_robot import XYZRobot
+from XYZ_Robot.xyz_robot_state import XYZRobotState
+from XYZ_Robot.component_event import ComponentEvent, EventLevel
 
 
 class XYZRobotWorker:
@@ -96,6 +96,12 @@ class XYZRobotWorker:
 
         elif command == "jog":
             self._jog(**kwargs)
+
+        elif command == "move_absolute":
+            self._move_absolute(**kwargs)
+
+        elif command == "move_absolute_verified":
+            self._move_absolute_verified(**kwargs)
 
         elif command == "mark_point":
             self._mark_point(**kwargs)
@@ -191,6 +197,100 @@ class XYZRobotWorker:
 
         self.state.status_text = "Connected"
         self._read_position()
+
+    def _move_absolute(
+            self,
+            x: float | None = None,
+            y: float | None = None,
+            z: float | None = None,
+            feedrate: float | None = None,
+    ) -> None:
+        robot = self._require_robot()
+
+        self.state.status_text = "Moving"
+        self._notify_state_changed()
+
+        robot.move_absolute(
+            x=x,
+            y=y,
+            z=z,
+            feedrate=feedrate
+        )
+
+        self.state.status_text = "Connected"
+
+        self._read_position()
+
+    def _move_absolute_verified(
+            self,
+            x: float | None = None,
+            y: float | None = None,
+            z: float | None = None,
+            feedrate: float | None = None,
+            tolerance_mm: float = 0.05,
+    ) -> None:
+        robot = self._require_robot()
+
+        self.state.status_text = "Moving"
+        self._notify_state_changed()
+
+        # Bewegung ausführen
+        robot.move_absolute(
+            x=x,
+            y=y,
+            z=z,
+            feedrate=feedrate
+        )
+
+        # Istposition lesen
+        position = robot.get_current_position()
+
+        self.state.set_position(position)
+
+        # Prüfen
+        if x is not None:
+            dx = position["X"] - x
+
+            if abs(dx) > tolerance_mm:
+                raise RuntimeError(
+                    f"X außerhalb Toleranz: "
+                    f"Soll={x:.3f}, "
+                    f"Ist={position['X']:.3f}, "
+                    f"dX={dx:.3f}"
+                )
+
+        if y is not None:
+            dy = position["Y"] - y
+
+            if abs(dy) > tolerance_mm:
+                raise RuntimeError(
+                    f"Y außerhalb Toleranz: "
+                    f"Soll={y:.3f}, "
+                    f"Ist={position['Y']:.3f}, "
+                    f"dY={dy:.3f}"
+                )
+
+        if z is not None:
+            dz = position["Z"] - z
+
+            if abs(dz) > tolerance_mm:
+                raise RuntimeError(
+                    f"Z außerhalb Toleranz: "
+                    f"Soll={z:.3f}, "
+                    f"Ist={position['Z']:.3f}, "
+                    f"dZ={dz:.3f}"
+                )
+
+        self.state.status_text = "Connected"
+
+        self._emit_info(
+            f"Position verifiziert: "
+            f"X={position['X']:.3f}, "
+            f"Y={position['Y']:.3f}, "
+            f"Z={position['Z']:.3f}"
+        )
+
+        self._notify_state_changed()
 
     def _mark_point(
             self,

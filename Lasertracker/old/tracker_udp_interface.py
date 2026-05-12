@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 
 class TrackerUdpReceiver:
     """
-    UDP-Receiver für Spatial Analyzer Watch Window Text.
+    Lasertracker-Receiver für Spatial Analyzer Watch Window Text.
     - Läuft in einem Hintergrundthread
     - Parst X/Y/Z + Einheit
     - Hält stets den neuesten Messwert als "snapshot"
@@ -183,7 +183,7 @@ class TrackerUdpReceiver:
 class TrackerGui(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Tracker UDP Monitor (Spatial Analyzer)")
+        self.title("Tracker Lasertracker Monitor (Spatial Analyzer)")
         self.geometry("860x420")
 
         self.rx = TrackerUdpReceiver(port=10000, timeout_s=5.0)
@@ -229,7 +229,7 @@ class TrackerGui(tk.Tk):
         status = ttk.LabelFrame(main, text="Status")
         status.pack(fill="x", pady=(0, 10))
 
-        self._row(status, 0, "UDP Link:", self.var_link)
+        self._row(status, 0, "Lasertracker Link:", self.var_link)
         self._row(status, 1, "Measurement valid:", self.var_valid)
         self._row(status, 2, "Stale (s):", self.var_stale)
         self._row(status, 3, "Timestamp:", self.var_ts)

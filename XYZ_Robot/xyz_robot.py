@@ -6,9 +6,8 @@ import math
 import re
 
 from typing import Optional
-from stroke_font import STROKE_FONT
-from marker_shapes import MARKER_SHAPES
-
+from XYZ_Robot.stroke_font import STROKE_FONT
+from XYZ_Robot.marker_shapes import MARKER_SHAPES
 
 class XYZRobot:
     # --------------------------------------------------
