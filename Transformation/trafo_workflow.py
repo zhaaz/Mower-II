@@ -12,6 +12,13 @@ from typing import Callable, Optional, Any
 
 from Transformation.helmert_3d import estimate_helmert_3d
 
+import numpy as np
+
+from Transformation.geometry import (
+    Plane3D,
+    fit_plane_from_points,
+    offset_vector_robot_to_tracker,
+)
 
 @dataclass
 class TrafoWorkflowConfig:
@@ -40,6 +47,8 @@ class TrafoWorkflowConfig:
     max_allowed_rms_mm: float = 0.10
     max_allowed_max_residual_mm: float = 0.15
 
+    marker_to_reflector_robot: tuple[float, float, float] = (40.0, 0.0, 300.0)
+
 
 @dataclass
 class TrafoWorkflowResult:
@@ -56,6 +65,11 @@ class TrafoWorkflowResult:
 
     duration_s: float = 0.0
     error: str = ""
+
+    marker_to_reflector_robot: tuple[float, float, float] = (40.0, 0.0, 300.0)
+    marker_to_reflector_lt: Optional[Any] = None
+    reflector_plane_lt: Optional[Plane3D] = None
+    marker_plane_lt: Optional[Plane3D] = None
 
 
 class TrafoCancelledError(Exception):
@@ -185,6 +199,11 @@ class TrafoWorkflow:
             duration_s = time.time() - start_time
             success = assessment["status"].startswith("OK_")
 
+            plane_data = self._calculate_plane_data(
+                trafo=assessment["trafo"],
+                used_measurements=assessment["used_measurements"],
+            )
+
             result = TrafoWorkflowResult(
                 success=success,
                 status=assessment["status"],
@@ -196,6 +215,10 @@ class TrafoWorkflow:
                 excluded_measurement=assessment["excluded_measurement"],
                 candidate_results=assessment["candidate_results"],
                 duration_s=duration_s,
+                marker_to_reflector_robot=self.config.marker_to_reflector_robot,
+                marker_to_reflector_lt=plane_data["marker_to_reflector_lt"],
+                reflector_plane_lt=plane_data["reflector_plane_lt"],
+                marker_plane_lt=plane_data["marker_plane_lt"],
             )
 
             if success:
@@ -553,3 +576,35 @@ class TrafoWorkflow:
     def _log(self, text: str):
         if self.on_log:
             self.on_log(text)
+
+    def _calculate_plane_data(
+            self,
+            trafo,
+            used_measurements: list[dict],
+    ) -> dict:
+        reflector_points_lt = [
+            [
+                m["tracker_x"],
+                m["tracker_y"],
+                m["tracker_z"],
+            ]
+            for m in used_measurements
+        ]
+
+        reflector_plane_lt = fit_plane_from_points(reflector_points_lt)
+
+        marker_to_reflector_lt = offset_vector_robot_to_tracker(
+            trafo=trafo,
+            offset_robot=self.config.marker_to_reflector_robot,
+        )
+
+        # Markierebene liegt vom Reflektor aus gesehen um -Offset verschoben.
+        marker_plane_lt = reflector_plane_lt.shifted_along_vector(
+            -marker_to_reflector_lt
+        )
+
+        return {
+            "reflector_plane_lt": reflector_plane_lt,
+            "marker_plane_lt": marker_plane_lt,
+            "marker_to_reflector_lt": marker_to_reflector_lt,
+        }

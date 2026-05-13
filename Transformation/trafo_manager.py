@@ -66,3 +66,27 @@ class TrafoManager:
 
     def clear_active(self):
         self._active = ActiveTrafoState()
+
+    @property
+    def reflector_plane_lt(self):
+        if self._active.source_result is None:
+            return None
+        return self._active.source_result.reflector_plane_lt
+
+    @property
+    def marker_plane_lt(self):
+        if self._active.source_result is None:
+            return None
+        return self._active.source_result.marker_plane_lt
+
+    @property
+    def marker_to_reflector_robot(self):
+        if self._active.source_result is None:
+            return None
+        return self._active.source_result.marker_to_reflector_robot
+
+    @property
+    def marker_to_reflector_lt(self):
+        if self._active.source_result is None:
+            return None
+        return self._active.source_result.marker_to_reflector_lt
