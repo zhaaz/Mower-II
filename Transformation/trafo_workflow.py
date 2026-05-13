@@ -47,7 +47,11 @@ class TrafoWorkflowConfig:
     max_allowed_rms_mm: float = 0.10
     max_allowed_max_residual_mm: float = 0.15
 
-    marker_to_reflector_robot: tuple[float, float, float] = (40.0, 0.0, 300.0)
+    marker_to_reflector_robot: tuple[float, float, float] = (
+        -31.703266,
+        -3.776229,
+        295.472290,
+    )
 
 
 @dataclass
@@ -66,7 +70,11 @@ class TrafoWorkflowResult:
     duration_s: float = 0.0
     error: str = ""
 
-    marker_to_reflector_robot: tuple[float, float, float] = (40.0, 0.0, 300.0)
+    marker_to_reflector_robot: tuple[float, float, float] = (
+        -31.703266,
+        -3.776229,
+        295.472290,
+    )
     marker_to_reflector_lt: Optional[Any] = None
     reflector_plane_lt: Optional[Plane3D] = None
     marker_plane_lt: Optional[Plane3D] = None
