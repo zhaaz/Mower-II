@@ -1,0 +1,32 @@
+{
+    "xyz": {
+        "port": "COM5",
+        "baudrate": 115200,
+        "x_min": 0.0,
+        "x_max": 500.0,
+        "y_min": 0.0,
+        "y_max": 400.0,
+        "z_min": 150.0,
+        "z_max": 200.0,
+        "default_feedrate": 3000.0,
+        "fast_feedrate": 6000.0,
+        "tolerance_mm": 0.05
+    },
+    "tracker": {
+        "udp_port": 10000,
+        "capture_timeout_s": 30.0,
+        "ccr_radius_mm": 19.05
+    },
+    "marker": {
+        "shape": "plus",
+        "size_mm": 40.0,
+        "angle_deg": 0.0
+    },
+    "transformation": {
+        "marker_to_reflector_robot": [
+            -35.1369970118144,
+            -1.9534549855845955,
+            300.10525912081835
+        ]
+    }
+}

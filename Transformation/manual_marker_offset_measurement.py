@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from config.mower_config import CONFIG
 from Lasertracker.lasertracker_receiver import LasertrackerReceiver
 from Transformation.marker_offset_calibration import (
     compute_marker_to_reflector_offset,
@@ -19,23 +20,28 @@ from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
 
 
 # --------------------------------------------------
-# Einstellungen
+# Einstellungen aus zentraler Config
 # --------------------------------------------------
 
-XYZ_PORT = "COM5"
-XYZ_BAUDRATE = 115200
+XYZ_PORT = CONFIG.xyz.port
+XYZ_BAUDRATE = CONFIG.xyz.baudrate
 
-TRACKER_PORT = 10000
-CAPTURE_TIMEOUT_S = 30.0
+TRACKER_PORT = CONFIG.tracker.udp_port
+CAPTURE_TIMEOUT_S = CONFIG.tracker.capture_timeout_s
 
-FEEDRATE = 3000.0
-TOLERANCE_MM = 0.05
+FEEDRATE = CONFIG.xyz.default_feedrate
+TOLERANCE_MM = CONFIG.xyz.tolerance_mm
 
-MARKER_SHAPE = "plus"
-MARKER_SIZE = 20.0
-ANGLE_DEG = 0.0
+MARKER_SHAPE = CONFIG.marker.shape
+MARKER_SIZE = CONFIG.marker.size_mm
+ANGLE_DEG = CONFIG.marker.angle_deg
 
-CCR_RADIUS_MM = 19.05
+CCR_RADIUS_MM = CONFIG.tracker.ccr_radius_mm
+
+
+# --------------------------------------------------
+# Lokale Test-/Kalibrierpunkte
+# --------------------------------------------------
 
 ROBOT_POINTS = [
     ("P1", 160.0, 130.0, 180.0),
@@ -92,7 +98,7 @@ def capture_tracker_point(
     return point
 
 
-def save_result(samples, result) -> None:
+def save_result(result) -> None:
     out_dir = Path("marker_offset_calibration_results")
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -162,6 +168,15 @@ def main() -> None:
     marker_lt_points: dict[str, np.ndarray] = {}
 
     try:
+        print("Aktive Konfiguration:")
+        print(f"  XYZ_PORT={XYZ_PORT}")
+        print(f"  TRACKER_PORT={TRACKER_PORT}")
+        print(f"  FEEDRATE={FEEDRATE}")
+        print(f"  TOLERANCE_MM={TOLERANCE_MM}")
+        print(f"  MARKER={MARKER_SHAPE}, size={MARKER_SIZE}")
+        print(f"  CCR_RADIUS_MM={CCR_RADIUS_MM}")
+        print()
+
         print("Starte XYZRobotWorker ...")
         worker.start()
 
@@ -283,7 +298,7 @@ def main() -> None:
         print("=" * 80)
         print(format_offset_result(result))
 
-        save_result(samples, result)
+        save_result(result)
 
     finally:
         print()
@@ -294,3 +309,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

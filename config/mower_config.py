@@ -44,7 +44,7 @@ class TrackerConfig:
 class MarkerConfig:
     shape: str = "plus"
 
-    size_mm: float = 20.0
+    size_mm: float = 80.0
 
     angle_deg: float = 0.0
 
@@ -52,9 +52,9 @@ class MarkerConfig:
 @dataclass
 class TransformationConfig:
     marker_to_reflector_robot: tuple[float, float, float] = (
-        -31.703266,
-        -3.776229,
-        295.472290,
+        -34.258937,
+        -2.728703,
+        300.037719,
     )
 
 
