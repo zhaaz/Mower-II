@@ -12,7 +12,6 @@ try:
     robot.homing()
     # robot.move_absolute(250,200, feedrate=6000)
 
-    robot.homing()
 
 
 
