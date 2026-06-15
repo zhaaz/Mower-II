@@ -17,9 +17,9 @@ class XYZRobot:
     DEFAULT_FEEDRATE_Z = 900.0
     DEFAULT_FEEDRATE_MARKING = 2000.0
 
-    Z_MARK = 169.0
-    Z_CLEAR = 172.0
-    Z_TRAVEL = 178.0
+    Z_MARK = 194.0   # war 169
+    Z_CLEAR = 195.5  # war 172
+    Z_TRAVEL = 198.0 # war 178
 
     # --------------------------------------------------
     # Arbeitsraum [mm]

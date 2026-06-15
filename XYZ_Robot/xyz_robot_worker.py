@@ -106,6 +106,9 @@ class XYZRobotWorker:
         elif command == "mark_point":
             self._mark_point(**kwargs)
 
+        elif command == "mark_line_absolute":
+            self._mark_line_absolute(**kwargs)
+
         else:
             raise ValueError(f"Unbekannter Befehl: {command}")
 
@@ -319,6 +322,36 @@ class XYZRobotWorker:
 
         self.state.status_text = "Connected"
         self._emit_info(f"Punkt {label} markiert")
+
+        self._read_position()
+
+    def _mark_line_absolute(
+            self,
+            start_x: float,
+            start_y: float,
+            end_x: float,
+            end_y: float,
+    ) -> None:
+        robot = self._require_robot()
+
+        self.state.status_text = "Marking"
+        self._notify_state_changed()
+
+        self._emit_info(
+            f"Markiere Linie: "
+            f"X1={start_x:.3f}, Y1={start_y:.3f} -> "
+            f"X2={end_x:.3f}, Y2={end_y:.3f}"
+        )
+
+        robot.mark_line_absolute(
+            start_x=start_x,
+            start_y=start_y,
+            end_x=end_x,
+            end_y=end_y,
+        )
+
+        self.state.status_text = "Connected"
+        self._emit_info("Linie markiert")
 
         self._read_position()
 
