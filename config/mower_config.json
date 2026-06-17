@@ -28,5 +28,10 @@
             -1.9534549855845955,
             300.10525912081835
         ]
+    },
+    "paths": {
+        "tracker_station_file": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/data/tracker_station.txt",
+        "log_dir": "logs",
+        "measurement_plans_dir": "measurement_plans"
     }
 }

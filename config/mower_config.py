@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from typing import Any
 
 
 # --------------------------------------------------
@@ -59,11 +60,26 @@ class TransformationConfig:
 
 
 @dataclass
+class PathsConfig:
+    """
+    Zentrale Projektpfade.
+
+    Relative Pfade werden vom Projektroot aus interpretiert.
+    Absolute Pfade bleiben absolute Pfade.
+    """
+
+    tracker_station_file: str = "data/tracker_station.txt"
+    log_dir: str = "logs"
+    measurement_plans_dir: str = "measurement_plans"
+
+
+@dataclass
 class MowerConfig:
     xyz: XYZConfig
     tracker: TrackerConfig
     marker: MarkerConfig
     transformation: TransformationConfig
+    paths: PathsConfig
 
 
 # --------------------------------------------------
@@ -75,6 +91,7 @@ DEFAULT_CONFIG = MowerConfig(
     tracker=TrackerConfig(),
     marker=MarkerConfig(),
     transformation=TransformationConfig(),
+    paths=PathsConfig(),
 )
 
 
@@ -83,6 +100,32 @@ DEFAULT_CONFIG = MowerConfig(
 # --------------------------------------------------
 
 CONFIG_PATH = Path(__file__).with_name("mower_config.json")
+
+
+# --------------------------------------------------
+# Hilfsfunktionen
+# --------------------------------------------------
+
+def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """
+    Liefert einen Config-Abschnitt oder ein leeres Dict.
+
+    Dadurch bleiben alte JSON-Dateien ohne neue Abschnitte kompatibel.
+    """
+    value = data.get(name, {})
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _as_tuple3(value: Any) -> tuple[float, float, float]:
+    """
+    Wandelt JSON-Listen oder Tupel in ein 3er-Float-Tupel um.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return DEFAULT_CONFIG.transformation.marker_to_reflector_robot
+
+    return (float(value[0]), float(value[1]), float(value[2]))
 
 
 # --------------------------------------------------
@@ -96,11 +139,30 @@ def load_config() -> MowerConfig:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
+    xyz_data = _section(data, "xyz")
+    tracker_data = _section(data, "tracker")
+    marker_data = _section(data, "marker")
+    transformation_data = _section(data, "transformation")
+    paths_data = _section(data, "paths")
+
+    transformation = TransformationConfig(
+        **{
+            **transformation_data,
+            "marker_to_reflector_robot": _as_tuple3(
+                transformation_data.get(
+                    "marker_to_reflector_robot",
+                    DEFAULT_CONFIG.transformation.marker_to_reflector_robot,
+                )
+            ),
+        }
+    )
+
     return MowerConfig(
-        xyz=XYZConfig(**data["xyz"]),
-        tracker=TrackerConfig(**data["tracker"]),
-        marker=MarkerConfig(**data["marker"]),
-        transformation=TransformationConfig(**data["transformation"]),
+        xyz=XYZConfig(**xyz_data),
+        tracker=TrackerConfig(**tracker_data),
+        marker=MarkerConfig(**marker_data),
+        transformation=transformation,
+        paths=PathsConfig(**paths_data),
     )
 
 
