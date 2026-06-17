@@ -4,20 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Basis Interface. Und Elemente ausgelagert.">
-      <change afterPath="$PROJECT_DIR$/App/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/assets/IFG_Unibw.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/dialogs/trafo_dialog.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/map_view.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/mower_main_app.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/services/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/services/hatch_logo_generator.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/services/project_io.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/stakeout_point.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/App/xyz_robot_demo_app.py" afterDir="false" />
+    <list default="true" id="015e3c4f-3734-42e1-ba47-ccf4e2310264" name="Changes" comment="Demo App und Hatch Generator entfernt">
+      <change afterPath="$PROJECT_DIR$/App/dialogs/xyz_connect_dialog_classic.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/App/dialogs/xyz_manual_move_dialog_classic.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/App/mower_operator_app.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/App/ui/classic_style.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XYZ_Robot/xyz_robot.py" beforeDir="false" afterPath="$PROJECT_DIR$/XYZ_Robot/xyz_robot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XYZ_Robot/xyz_robot_worker.py" beforeDir="false" afterPath="$PROJECT_DIR$/XYZ_Robot/xyz_robot_worker.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,7 +26,7 @@
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
-        <entry key="$PROJECT_DIR$" value="main" />
+        <entry key="$PROJECT_DIR$" value="main_grau" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -88,6 +80,9 @@
     "Python.marker_offset_calibration.executor": "Run",
     "Python.marker_offset_calibration_app.executor": "Run",
     "Python.mower_main_app.executor": "Run",
+    "Python.mower_operator_app.executor": "Run",
+    "Python.mower_operator_app_v14.executor": "Run",
+    "Python.mower_operator_app_v15.executor": "Run",
     "Python.run_arn_controller_console.executor": "Run",
     "Python.simple_test.executor": "Run",
     "Python.skr_simple_test.executor": "Run",
@@ -101,6 +96,7 @@
     "Python.trafo_test_helmert_3d.executor": "Run",
     "Python.trafo_validation_helmert_3d.executor": "Run",
     "Python.trafo_workflow_multitest.executor": "Run",
+    "Python.xyz_connect_dialog_classic.executor": "Run",
     "Python.xyz_robot.executor": "Run",
     "Python.xyz_robot_app.executor": "Run",
     "Python.xyz_robot_app_worker.executor": "Run",
@@ -110,9 +106,9 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main__grau",
+    "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/App/assets",
+    "last_opened_file_path": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/App/ui",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -124,6 +120,9 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\App\ui" />
+      <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\App\dialogs" />
+      <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\App" />
       <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\App\assets" />
       <recent name="D:\01_Projekte\2025 Absteckwagen II\03 Software\Python\Mower_II\GYEMS" />
     </key>
@@ -363,7 +362,23 @@
       <option name="project" value="LOCAL" />
       <updated>1779438387577</updated>
     </task>
-    <option name="localTasksCounter" value="26" />
+    <task id="LOCAL-00026" summary="Demo App und Hatch Generator entfernt">
+      <option name="closed" value="true" />
+      <created>1781514449941</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1781514449941</updated>
+    </task>
+    <task id="LOCAL-00027" summary="Demo App und Hatch Generator entfernt">
+      <option name="closed" value="true" />
+      <created>1781514505575</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1781514505575</updated>
+    </task>
+    <option name="localTasksCounter" value="28" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -405,7 +420,8 @@
     <MESSAGE value="Kalibrierung Vektor Reflektor Markierung" />
     <MESSAGE value="GUI für Kalibrierung" />
     <MESSAGE value="Basis Interface. Und Elemente ausgelagert." />
-    <option name="LAST_COMMIT_MESSAGE" value="Basis Interface. Und Elemente ausgelagert." />
+    <MESSAGE value="Demo App und Hatch Generator entfernt" />
+    <option name="LAST_COMMIT_MESSAGE" value="Demo App und Hatch Generator entfernt" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Mower_II$example_udp_sender.coverage" NAME="example_udp_sender Coverage Results" MODIFIED="1770127558576" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/UDP" />
