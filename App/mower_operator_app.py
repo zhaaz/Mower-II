@@ -1,5 +1,5 @@
 # App/mower_operator_app.py
-# Version 13: Operator-Oberflaeche mit kompaktem Statusbereich ohne Status-Haupttitel
+# Version 18: Projektroot aus Dateipfad der App ermitteln
 
 from __future__ import annotations
 
@@ -16,9 +16,29 @@ from tkinter import Menu, filedialog, messagebox, simpledialog, ttk
 
 import customtkinter as ctk
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+def find_project_root() -> Path:
+    """
+    Ermittelt den Projektroot aus dem Speicherort dieser Datei.
+
+    Erwartete Lage:
+        Mower_II/App/mower_operator_app.py
+
+    Damit ist der Pfad unabhaengig vom aktuellen Arbeitsverzeichnis
+    der PyCharm-Run-Configuration.
+    """
+    app_file = Path(__file__).resolve()
+
+    for parent in app_file.parents:
+        if (parent / "config" / "mower_config.py").exists():
+            return parent
+
+    # Fallback fuer den normalen Fall: App/mower_operator_app.py
+    return app_file.parents[1]
+
+
+PROJECT_ROOT = find_project_root()
 if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     from config.mower_config import CONFIG
@@ -88,6 +108,29 @@ except Exception:
     CoordinateMapper = None
     RobotWorkspace = None
 
+
+def project_path(relative_path: str | Path) -> Path:
+    """
+    Wandelt einen relativen Projektpfad aus der Config in einen absoluten Pfad um.
+    Absolute Pfade bleiben unveraendert.
+    """
+    path = Path(relative_path)
+
+    if path.is_absolute():
+        return path
+
+    return PROJECT_ROOT / path
+
+
+def get_tracker_station_file() -> Path:
+    """
+    Liefert den konfigurierten Pfad zur Trackerstationsdatei.
+    Fallback: data/tracker_station.txt
+    """
+    if CONFIG is not None and hasattr(CONFIG, "paths"):
+        return project_path(CONFIG.paths.tracker_station_file)
+
+    return PROJECT_ROOT / "data" / "tracker_station.txt"
 
 
 class OperatorMapView(MapView):
@@ -423,7 +466,8 @@ class MowerOperatorApp(ctk.CTk):
         tracker_menu.add_command(label="UDP-Empfang starten", command=self.start_tracker)
         tracker_menu.add_command(label="UDP-Empfang stoppen", command=self.stop_tracker)
         tracker_menu.add_separator()
-        tracker_menu.add_command(label="Trackerposition aus Datei laden...", command=self.load_tracker_position_dialog)
+        tracker_menu.add_command(label="Station laden", command=self.load_tracker_station_default)
+        tracker_menu.add_command(label="Station aus Datei wählen...", command=self.load_tracker_position_dialog)
         menu_bar.add_cascade(label="Tracker", menu=tracker_menu)
 
         motor_menu = Menu(menu_bar, tearoff=False)
@@ -1266,10 +1310,15 @@ class MowerOperatorApp(ctk.CTk):
 
         self.after(0, apply_error)
 
+    def load_tracker_station_default(self) -> None:
+        self._load_tracker_station_from_path(get_tracker_station_file())
+
     def load_tracker_position_dialog(self) -> None:
         self.set_current_action("Trackerstation wird geladen...")
         file_path = filedialog.askopenfilename(
-            title="Trackerposition aus Datei laden",
+            title="Trackerstation aus Datei laden",
+            initialdir=str(get_tracker_station_file().parent),
+            initialfile=get_tracker_station_file().name,
             filetypes=[
                 ("Textdateien", "*.txt *.csv"),
                 ("Alle Dateien", "*.*"),
@@ -1279,40 +1328,58 @@ class MowerOperatorApp(ctk.CTk):
             self.set_current_action("Bereit.")
             return
 
+        self._load_tracker_station_from_path(Path(file_path))
+
+    def _load_tracker_station_from_path(self, path: Path) -> None:
+        self.set_current_action("Trackerstation wird geladen...")
+
         try:
-            x, y, z = self._read_tracker_xyz_from_file(Path(file_path))
+            x, y, z = self._read_tracker_xyz_from_file(path)
         except Exception as exc:
-            self.log(f"Trackerposition konnte nicht geladen werden: {exc}")
-            messagebox.showerror("Trackerposition", str(exc), parent=self)
+            self.log(f"Trackerstation konnte nicht geladen werden: {exc}")
+            messagebox.showerror("Trackerstation", str(exc), parent=self)
             self.set_current_action("Trackerstation konnte nicht geladen werden.")
             return
 
         self.tracker_station_xyz = (x, y, z)
         self.map_view.set_tracker_position((x, y))
-        self.log(f"Trackerstation geladen: X={x:.3f}, Y={y:.3f}, Z={z:.3f} aus {file_path}")
+        self.log(f"Trackerstation geladen: X={x:.3f}, Y={y:.3f}, Z={z:.3f} aus {path}")
         self.set_current_action("Trackerstation geladen.")
         self.update_status()
 
     @staticmethod
     def _read_tracker_xyz_from_file(path: Path) -> tuple[float, float, float]:
+        if not path.exists():
+            raise FileNotFoundError(f"Datei nicht gefunden: {path}")
+
         text = path.read_text(encoding="utf-8")
+
         for line_number, line in enumerate(text.splitlines(), start=1):
             raw = line.strip()
             if not raw or raw.startswith("#"):
                 continue
+
+            # Erwartetes Standardformat aus dem SA Measurement Plan:
+            #   0.000000,0.000000,0.000000
+            # Robustheit: auch Leerzeichen, Semikolon und Tabulatoren zulassen.
             parts = raw.replace(",", " ").replace(";", " ").replace("\t", " ").split()
+
             numeric_values: list[float] = []
             for part in parts:
                 try:
                     numeric_values.append(float(part))
                 except ValueError:
                     continue
+
             if len(numeric_values) >= 3:
                 return numeric_values[0], numeric_values[1], numeric_values[2]
-            if len(numeric_values) >= 2:
-                return numeric_values[0], numeric_values[1], 0.0
-            raise ValueError(f"Zeile {line_number}: keine X/Y/Z-Koordinaten gefunden.")
-        raise ValueError("Datei enthaelt keine Trackerposition.")
+
+            raise ValueError(
+                f"Zeile {line_number}: keine gültigen X/Y/Z-Koordinaten gefunden. "
+                "Erwartet wird z. B. 0.000000,0.000000,0.000000"
+            )
+
+        raise ValueError(f"Datei enthält keine Trackerstation: {path}")
 
     def show_tracker_status(self) -> None:
         if self.tracker_state is None:
