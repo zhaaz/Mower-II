@@ -93,9 +93,9 @@ except Exception:
     LasertrackerReceiver = None
 
 try:
-    from App.dialogs.trafo_dialog import show_trafo_dialog
+    from App.dialogs.trafo_dialog_classic import show_trafo_dialog_classic
 except Exception:
-    show_trafo_dialog = None
+    show_trafo_dialog_classic = None
 
 try:
     from Transformation.trafo_manager import TrafoManager
@@ -733,7 +733,7 @@ class MowerOperatorApp(ctk.CTk):
             wrap="word",
             width=300,
             height=180,
-            fg_color="#fbfbfb",
+            fg_color="#ffffff",
             text_color=self.COLOR_TEXT,
             border_width=1,
             border_color=self.COLOR_BORDER,
@@ -1460,33 +1460,87 @@ class MowerOperatorApp(ctk.CTk):
     # --------------------------------------------------
 
     def start_transformation(self) -> None:
-        self.set_current_action("Transformation wird durchgefuehrt...")
+        self.set_current_action("Transformation wird vorbereitet...")
 
-        if show_trafo_dialog is not None and self.trafo_manager is not None:
-            # Die echte Integration haengt von den im Hauptprogramm vorhandenen
-            # Worker-/Receiver-Objekten ab. Falls diese noch nicht gesetzt sind,
-            # bleibt diese Version im ersten Durchgang beim Status-Placeholder.
-            try:
-                if self.xyz_worker is not None and self.tracker_receiver is not None:
-                    show_trafo_dialog(
-                        parent=self,
-                        xyz_worker=self.xyz_worker,
-                        tracker_receiver=self.tracker_receiver,
-                        trafo_manager=self.trafo_manager,
-                        on_finished=self.on_trafo_finished,
-                        log=self.log,
-                    )
-                    return
-            except TypeError:
-                # Falls die Dialogsignatur im Projekt leicht anders ist.
-                pass
-            except Exception as exc:
-                self.log(f"Trafo-Dialog konnte nicht gestartet werden: {exc}")
+        if show_trafo_dialog_classic is None:
+            self.log("Klassischer Trafo-Dialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Transformation",
+                "Klassischer Trafo-Dialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Trafo-Dialog nicht verfügbar.")
+            return
 
-        self.trafo_valid = True
-        self.log("Transformation gestartet. Hinweis: In dieser Erstversion als Status auf gueltig gesetzt.")
-        self.set_current_action("Transformation erfolgreich.")
-        self.update_status()
+        if self.trafo_manager is None:
+            self.log("Transformation nicht möglich: TrafoManager ist nicht verfügbar.")
+            messagebox.showerror(
+                "Transformation",
+                "TrafoManager ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: TrafoManager nicht verfügbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Transformation nicht möglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Transformation",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Transformation nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
+            messagebox.showwarning(
+                "Transformation",
+                "Bitte zuerst XYZ-Homing durchführen.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: Homing fehlt.")
+            return
+
+        if not self.tracker_ready or self.tracker_receiver is None:
+            self.log("Transformation nicht möglich: Tracker UDP-Empfang läuft nicht.")
+            messagebox.showwarning(
+                "Transformation",
+                "Tracker UDP-Empfang läuft nicht.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: Tracker nicht bereit.")
+            return
+
+        if not self.tracker_data_current:
+            self.log("Transformation nicht möglich: keine aktuellen Trackerdaten vorhanden.")
+            messagebox.showwarning(
+                "Transformation",
+                "Es sind keine aktuellen Trackerdaten vorhanden.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: keine aktuellen Trackerdaten.")
+            return
+
+        try:
+            self.log("Transformationsdialog wird geöffnet.")
+            self.set_current_action("Transformation läuft...")
+
+            show_trafo_dialog_classic(
+                parent=self,
+                xyz_worker=self.xyz_worker,
+                tracker_receiver=self.tracker_receiver,
+                xyz_state_getter=lambda: self.xyz_state,
+                trafo_manager=self.trafo_manager,
+                on_finished=self.on_trafo_finished,
+                log=self.log,
+            )
+
+        except Exception as exc:
+            self.log(f"Trafo-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Transformation", str(exc), parent=self)
+            self.set_current_action("Transformation konnte nicht gestartet werden.")
+            self.update_status()
 
     def on_trafo_finished(self) -> None:
         if self.trafo_manager is not None:
