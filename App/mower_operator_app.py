@@ -1,958 +1,1981 @@
-# App/dialogs/marker_offset_calibration_dialog.py
+# App/mower_operator_app.py
+# Version 18: Projektroot aus Dateipfad der App ermitteln
 
 from __future__ import annotations
 
-import csv
-import queue
-import threading
+import json
+import os
+import sys
 import time
-import tkinter as tk
-from dataclasses import dataclass
+import webbrowser
 from datetime import datetime
 from pathlib import Path
-from tkinter import messagebox, ttk
-from tkinter.scrolledtext import ScrolledText
-from typing import Any, Callable, Literal
+from typing import Any
+import tkinter as tk
+from tkinter import Menu, filedialog, messagebox, simpledialog, ttk
 
-import numpy as np
+import customtkinter as ctk
 
-from config.mower_config import CONFIG, update_marker_to_reflector_robot
-from Transformation.marker_offset_calibration import (
-    MarkerOffsetCalibrationResult,
-    compute_marker_to_reflector_offset,
-    format_offset_result,
-    make_calibration_sample,
-)
+def find_project_root() -> Path:
+    """
+    Ermittelt den Projektroot aus dem Speicherort dieser Datei.
 
+    Erwartete Lage:
+        Mower_II/App/mower_operator_app.py
 
-StateGetter = Callable[[], Any]
-LogFunction = Callable[[str], None]
-FinishedCallback = Callable[[], None]
+    Damit ist der Pfad unabhaengig vom aktuellen Arbeitsverzeichnis
+    der PyCharm-Run-Configuration.
+    """
+    app_file = Path(__file__).resolve()
 
-DialogResult = Literal["ok", "measure", "cancel"]
+    for parent in app_file.parents:
+        if (parent / "config" / "mower_config.py").exists():
+            return parent
 
-
-FONT_NORMAL = ("Segoe UI", 10)
-FONT_BOLD = ("Segoe UI", 10, "bold")
-FONT_SECTION = ("Segoe UI", 11, "bold")
-FONT_MONO = ("Consolas", 10)
+    # Fallback fuer den normalen Fall: App/mower_operator_app.py
+    return app_file.parents[1]
 
 
-ROBOT_POINTS: list[tuple[str, float, float, float]] = [
-    ("P1", 160.0, 130.0, 180.0),
-    ("P2", 330.0, 145.0, 180.0),
-    ("P3", 350.0, 265.0, 180.0),
-    ("P4", 185.0, 285.0, 180.0),
-    ("P5", 255.0, 205.0, 180.0),
-]
+PROJECT_ROOT = find_project_root()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Parkposition nach dem Markieren und vor der manuellen CCR-/Nest-Messung.
-# Es wird kein neues Homing ausgefuehrt; der Roboter faehrt im bereits
-# referenzierten Koordinatensystem auf diese sichere Position.
-PARK_X_MM = 10.0
-PARK_Y_MM = 10.0
+try:
+    from config.mower_config import CONFIG
+except Exception:
+    CONFIG = None
 
+from App.map_view import MapView
+from App.stakeout_point import StakeoutPoint, create_demo_points, load_points_from_txt
 
-@dataclass
-class DialogRequest:
-    title: str
-    message: str
-    mode: Literal["info", "measure"]
-    event: threading.Event
-    result: DialogResult | None = None
-
-
-def show_marker_offset_calibration_dialog(
-        *,
-        parent: tk.Misc,
-        xyz_worker: Any,
-        tracker_receiver: Any,
-        xyz_state_getter: StateGetter,
-        on_finished: FinishedCallback | None = None,
-        log: LogFunction | None = None,
-) -> None:
-    """Dialog zur Marker-/Reflektoroffset-Kalibrierung."""
-
-    dialog = MarkerOffsetCalibrationDialog(
-        parent=parent,
-        xyz_worker=xyz_worker,
-        tracker_receiver=tracker_receiver,
-        xyz_state_getter=xyz_state_getter,
-        on_finished=on_finished,
-        external_log=log,
+try:
+    from App.ui.classic_style import (
+        apply_classic_style,
+        FONT_FAMILY,
+        FONT_NORMAL,
+        FONT_BOLD,
+        FONT_SECTION,
+        FONT_TITLE,
+        FONT_MONO,
     )
-    dialog.show()
+except Exception:
+    apply_classic_style = None
+    FONT_FAMILY = "Segoe UI"
+    FONT_NORMAL = ("Segoe UI", 9)
+    FONT_BOLD = ("Segoe UI", 9, "bold")
+    FONT_SECTION = ("Segoe UI", 10, "bold")
+    FONT_TITLE = ("Segoe UI", 12, "bold")
+    FONT_MONO = ("Consolas", 9)
+
+try:
+    from App.dialogs.xyz_connect_dialog import show_xyz_connect_dialog
+except Exception:
+    show_xyz_connect_dialog = None
+
+try:
+    from App.dialogs.xyz_manual_move_dialog import show_xyz_manual_move_dialog
+except Exception:
+    show_xyz_manual_move_dialog = None
+
+try:
+    from App.services.project_io import write_project_file
+except Exception:
+    write_project_file = None
+
+try:
+    from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
+except Exception:
+    XYZRobotWorker = None
+
+try:
+    from Lasertracker.lasertracker_receiver import LasertrackerReceiver
+except Exception:
+    LasertrackerReceiver = None
+
+try:
+    from App.dialogs.trafo_dialog import show_trafo_dialog
+except Exception:
+    show_trafo_dialog = None
+
+try:
+    from App.dialogs.marker_offset_calibration_dialog import show_marker_offset_calibration_dialog
+except Exception:
+    show_marker_offset_calibration_dialog = None
+
+try:
+    from App.dialogs.marker_height_calibration_dialog import show_marker_height_calibration_dialog
+except Exception:
+    show_marker_height_calibration_dialog = None
+
+try:
+    from Transformation.trafo_manager import TrafoManager
+except Exception:
+    TrafoManager = None
+
+try:
+    from Transformation.coordinate_mapper import CoordinateMapper, RobotWorkspace
+except Exception:
+    CoordinateMapper = None
+    RobotWorkspace = None
 
 
-class MarkerOffsetCalibrationDialog:
-    def __init__(
-            self,
-            *,
-            parent: tk.Misc,
-            xyz_worker: Any,
-            tracker_receiver: Any,
-            xyz_state_getter: StateGetter,
-            on_finished: FinishedCallback | None = None,
-            external_log: LogFunction | None = None,
-    ) -> None:
-        self.parent = parent
-        self.xyz_worker = xyz_worker
-        self.tracker_receiver = tracker_receiver
-        self.xyz_state_getter = xyz_state_getter
-        self.on_finished = on_finished
-        self.external_log = external_log
+def project_path(relative_path: str | Path) -> Path:
+    """
+    Wandelt einen relativen Projektpfad aus der Config in einen absoluten Pfad um.
+    Absolute Pfade bleiben unveraendert.
+    """
+    path = Path(relative_path)
 
-        self.gui_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
-        self.abort_event = threading.Event()
-        self.measure_button_event = threading.Event()
-        self.workflow_thread: threading.Thread | None = None
-        self.workflow_running = False
-        self.closed = False
+    if path.is_absolute():
+        return path
 
-        self.reflector_lt_points: dict[str, np.ndarray] = {}
-        self.marker_lt_points: dict[str, np.ndarray] = {}
-        self.last_result: MarkerOffsetCalibrationResult | None = None
-        self.previous_offset_robot = tuple(float(v) for v in CONFIG.transformation.marker_to_reflector_robot)
+    return PROJECT_ROOT / path
 
-        self.window = tk.Toplevel(parent)
-        self.window.title("Marker-/Reflektoroffset kalibrieren")
-        self.window.minsize(860, 560)
-        self.window.transient(parent)
-        self.window.grab_set()
 
-        _center_window(parent, self.window, 980, 700)
+def get_tracker_station_file() -> Path:
+    """
+    Liefert den konfigurierten Pfad zur Trackerstationsdatei.
+    Fallback: data/tracker_station.txt
+    """
+    if CONFIG is not None and hasattr(CONFIG, "paths"):
+        return project_path(CONFIG.paths.tracker_station_file)
 
-        self._configure_styles()
+    return PROJECT_ROOT / "data" / "tracker_station.txt"
+
+
+class OperatorMapView(MapView):
+    """Helle Kartenansicht fuer die klassische Operator-Oberflaeche."""
+
+    COLOR_CANVAS = "#eeeeee"
+    COLOR_GRID = "#d6d6d6"
+    COLOR_AXIS = "#b8b8b8"
+    COLOR_TEXT = "#222222"
+    COLOR_BUTTON = "#f7f7f7"
+    COLOR_BUTTON_BORDER = "#9e9e9e"
+    COLOR_WORKSPACE_FILL = "#dceff5"
+    COLOR_WORKSPACE_OUTLINE = "#0086a8"
+
+    def _draw_background_grid(self) -> None:
+        import math
+
+        canvas_w = max(self.canvas.winfo_width(), 1)
+        canvas_h = max(self.canvas.winfo_height(), 1)
+
+        self.canvas.create_rectangle(0, 0, canvas_w, canvas_h, fill=self.COLOR_CANVAS, outline="")
+
+        grid_mm = self._nice_length(max(50.0, 80.0 / max(self.scale_px_per_mm, 0.001)))
+
+        left_world, top_world = self.screen_to_world(0, 0)
+        right_world, bottom_world = self.screen_to_world(canvas_w, canvas_h)
+
+        min_x = min(left_world, right_world)
+        max_x = max(left_world, right_world)
+        min_y = min(bottom_world, top_world)
+        max_y = max(bottom_world, top_world)
+
+        start_x = math.floor(min_x / grid_mm) * grid_mm
+        end_x = math.ceil(max_x / grid_mm) * grid_mm
+        start_y = math.floor(min_y / grid_mm) * grid_mm
+        end_y = math.ceil(max_y / grid_mm) * grid_mm
+
+        x = start_x
+        while x <= end_x:
+            sx1, sy1 = self.world_to_screen(x, min_y)
+            sx2, sy2 = self.world_to_screen(x, max_y)
+            fill = self.COLOR_AXIS if abs(x) < 1e-9 else self.COLOR_GRID
+            width = 2 if abs(x) < 1e-9 else 1
+            self.canvas.create_line(sx1, sy1, sx2, sy2, fill=fill, width=width)
+            x += grid_mm
+
+        y = start_y
+        while y <= end_y:
+            sx1, sy1 = self.world_to_screen(min_x, y)
+            sx2, sy2 = self.world_to_screen(max_x, y)
+            fill = self.COLOR_AXIS if abs(y) < 1e-9 else self.COLOR_GRID
+            width = 2 if abs(y) < 1e-9 else 1
+            self.canvas.create_line(sx1, sy1, sx2, sy2, fill=fill, width=width)
+            y += grid_mm
+
+    def _draw_robot_workspace(self) -> None:
+        if not self.robot_workspace_polygon:
+            return
+
+        coords: list[float] = []
+        for x, y in self.robot_workspace_polygon:
+            sx, sy = self.world_to_screen(x, y)
+            coords.extend([sx, sy])
+
+        if len(coords) >= 6:
+            self.canvas.create_polygon(
+                *coords,
+                fill=self.COLOR_WORKSPACE_FILL,
+                outline=self.COLOR_WORKSPACE_OUTLINE,
+                width=2,
+                stipple="gray25",
+            )
+            self.canvas.create_text(
+                coords[0],
+                coords[1] - 12,
+                text="Wagen / Arbeitsbereich",
+                fill=self.COLOR_WORKSPACE_OUTLINE,
+                anchor="sw",
+                font=("Segoe UI", 9),
+            )
+
+    def _draw_tracker(self) -> None:
+        if self.tracker_position is None:
+            return
+
+        x, y = self.tracker_position
+        sx, sy = self.world_to_screen(x, y)
+        r = 10
+
+        self.canvas.create_oval(sx - r, sy - r, sx + r, sy + r, outline="#f57c00", width=2)
+        self.canvas.create_line(sx - 14, sy, sx + 14, sy, fill="#f57c00", width=2)
+        self.canvas.create_line(sx, sy - 14, sx, sy + 14, fill="#f57c00", width=2)
+        self.canvas.create_text(
+            sx + 14,
+            sy - 14,
+            text="Lasertracker",
+            fill="#f57c00",
+            anchor="sw",
+            font=("Segoe UI", 9),
+        )
+
+    def _draw_points(self) -> None:
+        for point in self.points:
+            sx, sy = self.world_to_screen(point.x, point.y)
+
+            radius = 6
+            fill = "#1976d2"
+            outline = "#ffffff"
+            width = 1
+
+            if point.reachable:
+                fill = "#2e7d32"
+                outline = "#ffffff"
+                width = 2
+
+            if point.marked:
+                fill = "#9e9e9e"
+                outline = "#616161"
+                width = 1
+
+            if point.selected:
+                outline = "#f9a825"
+                width = 3
+                radius = 8
+
+            self.canvas.create_oval(
+                sx - radius,
+                sy - radius,
+                sx + radius,
+                sy + radius,
+                fill=fill,
+                outline=outline,
+                width=width,
+            )
+
+            self.canvas.create_text(
+                sx + 10,
+                sy - 10,
+                text=point.name,
+                fill=self.COLOR_TEXT,
+                anchor="sw",
+                font=("Segoe UI", 9),
+            )
+
+    def _draw_scale_bar(self) -> None:
+        canvas_w = max(self.canvas.winfo_width(), 1)
+        canvas_h = max(self.canvas.winfo_height(), 1)
+
+        visible_width_mm = canvas_w / max(self.scale_px_per_mm, 0.001)
+        length_mm = self._nice_length(visible_width_mm / 5.0)
+        length_px = length_mm * self.scale_px_per_mm
+
+        x2 = canvas_w - 28
+        y = canvas_h - 28
+        x1 = x2 - length_px
+
+        self.canvas.create_line(x1, y, x2, y, fill=self.COLOR_TEXT, width=3)
+        self.canvas.create_line(x1, y - 5, x1, y + 5, fill=self.COLOR_TEXT, width=2)
+        self.canvas.create_line(x2, y - 5, x2, y + 5, fill=self.COLOR_TEXT, width=2)
+        self.canvas.create_text(
+            (x1 + x2) / 2.0,
+            y - 10,
+            text=f"{length_mm:g} mm",
+            fill=self.COLOR_TEXT,
+            anchor="s",
+            font=("Segoe UI", 9),
+        )
+
+    def _draw_view_buttons(self) -> None:
+        button_specs = [
+            ("+", "zoom_in"),
+            ("-", "zoom_out"),
+            ("[]", "zoom_all"),
+        ]
+
+        x0 = max(self.canvas.winfo_width() - 112, 8)
+        y0 = 10
+        size = 28
+        gap = 6
+
+        for index, (label, tag_name) in enumerate(button_specs):
+            x1 = x0 + index * (size + gap)
+            y1 = y0
+            x2 = x1 + size
+            y2 = y1 + size
+            tag = f"view_button_{tag_name}"
+
+            self.canvas.create_rectangle(
+                x1,
+                y1,
+                x2,
+                y2,
+                fill=self.COLOR_BUTTON,
+                outline=self.COLOR_BUTTON_BORDER,
+                width=1,
+                tags=("view_button", tag),
+            )
+            self.canvas.create_text(
+                (x1 + x2) / 2.0,
+                (y1 + y2) / 2.0,
+                text=label,
+                fill=self.COLOR_TEXT,
+                font=("Segoe UI", 10, "bold"),
+                tags=("view_button", tag),
+            )
+
+
+class MowerOperatorApp(ctk.CTk):
+    """
+    Klassische Bedienoberflaeche fuer das Mower-Abstecksystem.
+
+    Ziel dieser Version:
+        - helle/graue Windows-artige Bedienoberflaeche
+        - Standard-Menueleiste statt eigener MenuBand
+        - Punktliste links
+        - 2D-Ansicht in der Mitte
+        - Status + Log rechts
+        - aktuelle Aktion unten
+
+    Die Hardwarelogik ist bewusst so gehalten, dass vorhandene Dialoge und
+    spaetere echte Komponenten schrittweise eingehangen werden koennen.
+    """
+
+    COLOR_BG = "#f2f2f2"
+    COLOR_PANEL = "#ffffff"
+    COLOR_PANEL_ALT = "#f7f7f7"
+    COLOR_BORDER = "#c8c8c8"
+    COLOR_TEXT = "#111111"
+    COLOR_MUTED = "#555555"
+    COLOR_GREEN = "#1f9d55"
+    COLOR_RED = "#c62828"
+    COLOR_YELLOW = "#d6a100"
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        if apply_classic_style is not None:
+            apply_classic_style(self)
+
+        self.title("Mower II - Abstecksystem")
+        self.geometry("1500x880")
+        self.minsize(1200, 720)
+        self.configure(fg_color=self.COLOR_BG)
+
+        self.points: list[StakeoutPoint] = []
+        self.selected_point_name: str | None = None
+        self.project_path: Path | None = None
+
+        logs_dir = PROJECT_ROOT / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file_path = logs_dir / f"mower_operator_{timestamp}.log"
+
+        # Komponentenstatus
+        self.xyz_ready = False
+        self.tracker_ready = False
+        self.drehmotor_ready = False
+        self.gyro_ready = False
+
+        # Systemstatus
+        self.homing_done = False
+        self.trafo_valid = False
+        self.arn_active = False
+        self.tracker_data_current = False
+
+        # Lasertrackerkoordinaten
+        self.tracker_station_xyz: tuple[float, float, float] | None = None
+        self.current_lt_measurement_xyz: tuple[float, float, float] | None = None
+
+        # Kompatibilitaet zu bisherigen Namen aus der V3/V5-Oberflaeche
+        self.xyz_connected = False
+        self.tracker_started = False
+        self.skr_connected = False
+        self.gyems_connected = False
+
+        # Spaetere echte Komponenten koennen hier gesetzt werden.
+        self.xyz_worker: Any | None = None
+        self.xyz_state: Any | None = None
+        self.tracker_receiver: Any | None = None
+        self.tracker_state: Any | None = None
+
+        if TrafoManager is not None:
+            self.trafo_manager = TrafoManager()
+        else:
+            self.trafo_manager = None
+
+        self.status_indicators: dict[str, ctk.CTkLabel] = {}
+
         self._build_ui()
-        self.window.protocol("WM_DELETE_WINDOW", self.discard_and_close)
-        self.window.bind("<Escape>", lambda _event: self.discard_and_close())
+        self.load_demo_points()
+        self.set_current_action("Bereit.")
+        self.update_status()
 
-    def show(self) -> None:
-        self.window.after(100, self.process_gui_queue)
-        self.window.after(150, self.start_workflow)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     # --------------------------------------------------
     # UI
     # --------------------------------------------------
 
-    def _configure_styles(self) -> None:
-        style = ttk.Style(self.window)
-        style.configure("Offset.TLabel", font=FONT_NORMAL)
-        style.configure("OffsetBold.TLabel", font=FONT_BOLD)
-        style.configure("Offset.TButton", font=FONT_NORMAL, padding=(8, 4))
-        style.configure("Offset.TLabelframe.Label", font=FONT_SECTION)
-
     def _build_ui(self) -> None:
-        root = ttk.Frame(self.window, padding=12)
-        root.grid(row=0, column=0, sticky="nsew")
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=0)
 
-        self.window.grid_rowconfigure(0, weight=1)
-        self.window.grid_columnconfigure(0, weight=1)
-        root.grid_columnconfigure(0, weight=1)
-        root.grid_rowconfigure(3, weight=1)
+        self._build_standard_menu()
+        self._build_main_area()
+        self._build_action_bar()
 
-        status_frame = ttk.LabelFrame(root, text="Status", padding=10, style="Offset.TLabelframe")
-        status_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        status_frame.grid_columnconfigure(1, weight=1)
+    def _build_standard_menu(self) -> None:
+        menu_bar = Menu(self)
 
-        ttk.Label(status_frame, text="Aktueller Schritt:", style="Offset.TLabel").grid(
-            row=0, column=0, padx=(0, 8), pady=3, sticky="w"
+        file_menu = Menu(menu_bar, tearoff=False)
+        file_menu.add_command(label="Punkte laden...", command=self.load_points_dialog)
+        file_menu.add_separator()
+        file_menu.add_command(label="Projekt speichern", command=self.save_project)
+        file_menu.add_command(label="Projekt speichern unter...", command=self.save_project_as)
+        file_menu.add_separator()
+        file_menu.add_command(label="Log oeffnen", command=self.open_log_file)
+        file_menu.add_separator()
+        file_menu.add_command(label="Beenden", command=self.on_close)
+        menu_bar.add_cascade(label="Datei", menu=file_menu)
+
+        xyz_menu = Menu(menu_bar, tearoff=False)
+        xyz_menu.add_command(label="Verbinden", command=self.connect_xyz)
+        xyz_menu.add_command(label="Trennen", command=self.disconnect_xyz)
+        xyz_menu.add_separator()
+        xyz_menu.add_command(label="Homing", command=self.home_xyz)
+        xyz_menu.add_command(label="Fahre zu Position...", command=self.move_xyz_to_position_dialog)
+        xyz_menu.add_command(label="Position lesen", command=self.read_xyz_position)
+        menu_bar.add_cascade(label="XYZ", menu=xyz_menu)
+
+        tracker_menu = Menu(menu_bar, tearoff=False)
+        tracker_menu.add_command(label="UDP-Empfang starten", command=self.start_tracker)
+        tracker_menu.add_command(label="UDP-Empfang stoppen", command=self.stop_tracker)
+        tracker_menu.add_separator()
+        tracker_menu.add_command(label="Station laden", command=self.load_tracker_station_default)
+        tracker_menu.add_command(label="Station aus Datei wählen...", command=self.load_tracker_position_dialog)
+        menu_bar.add_cascade(label="Tracker", menu=tracker_menu)
+
+        motor_menu = Menu(menu_bar, tearoff=False)
+        motor_menu.add_command(label="Verbinden", command=self.connect_drehmotor)
+        motor_menu.add_command(label="Trennen", command=self.disconnect_drehmotor)
+        motor_menu.add_separator()
+        motor_menu.add_command(label="Referenz setzen", command=self.drehmotor_set_reference)
+        motor_menu.add_separator()
+        motor_menu.add_command(label="Status anzeigen", command=self.show_drehmotor_status)
+        menu_bar.add_cascade(label="Drehmotor", menu=motor_menu)
+
+        gyro_menu = Menu(menu_bar, tearoff=False)
+        gyro_menu.add_command(label="Verbinden", command=self.connect_gyro)
+        gyro_menu.add_command(label="Trennen", command=self.disconnect_gyro)
+        gyro_menu.add_separator()
+        gyro_menu.add_command(label="Status anzeigen", command=self.show_gyro_status)
+        menu_bar.add_cascade(label="Gyro", menu=gyro_menu)
+
+        system_menu = Menu(menu_bar, tearoff=False)
+        system_menu.add_command(label="Transformation starten", command=self.start_transformation)
+        system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren", command=self.offset_calibration)
+        system_menu.add_command(label="Markerhoehe kalibrieren", command=self.calibrate_marker_height)
+        system_menu.add_separator()
+        system_menu.add_command(label="ARN aktivieren", command=self.activate_arn)
+        system_menu.add_command(label="ARN deaktivieren", command=self.deactivate_arn)
+        system_menu.add_separator()
+        system_menu.add_command(label="Aktive Config anzeigen", command=self.show_active_config)
+        system_menu.add_command(label="Config neu laden", command=self.reload_config)
+        menu_bar.add_cascade(label="System", menu=system_menu)
+
+        view_menu = Menu(menu_bar, tearoff=False)
+        view_menu.add_command(label="Karte aktualisieren", command=lambda: self.refresh_points(keep_map_view=True))
+        view_menu.add_command(label="Log leeren", command=self.clear_log)
+        view_menu.add_command(label="Log speichern...", command=self.save_log_dialog)
+        menu_bar.add_cascade(label="Ansicht", menu=view_menu)
+
+        self.configure(menu=menu_bar)
+
+    def _build_main_area(self) -> None:
+        main = ctk.CTkFrame(
+            self,
+            fg_color=self.COLOR_BG,
+            corner_radius=0,
         )
-        self.status_var = tk.StringVar(value="Vorbereitung...")
-        ttk.Label(status_frame, textvariable=self.status_var, style="Offset.TLabel").grid(
-            row=0, column=1, pady=3, sticky="ew"
+        main.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        main.grid_columnconfigure(0, weight=0)
+        main.grid_columnconfigure(1, weight=1)
+        main.grid_columnconfigure(2, weight=0)
+        main.grid_rowconfigure(0, weight=1)
+
+        self._build_point_list_panel(main)
+        self._build_map_panel(main)
+        self._build_right_panel(main)
+
+    def _panel(self, parent: Any) -> ctk.CTkFrame:
+        return ctk.CTkFrame(
+            parent,
+            fg_color=self.COLOR_PANEL,
+            border_width=1,
+            border_color=self.COLOR_BORDER,
+            corner_radius=0,
         )
 
-        ttk.Label(status_frame, text="Fortschritt:", style="Offset.TLabel").grid(
-            row=1, column=0, padx=(0, 8), pady=3, sticky="w"
+    def _section_title(self, parent: Any, text: str, row: int) -> None:
+        ctk.CTkLabel(
+            parent,
+            text=text,
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            anchor="w",
+        ).grid(row=row, column=0, columnspan=3, padx=10, pady=(8, 3), sticky="ew")
+
+    def _build_point_list_panel(self, parent: ctk.CTkFrame) -> None:
+        panel = self._panel(parent)
+        panel.grid(row=0, column=0, padx=(0, 8), pady=0, sticky="nsew")
+        panel.grid_rowconfigure(2, weight=1)
+        panel.grid_columnconfigure(0, weight=1)
+        panel.configure(width=280)
+
+        ctk.CTkLabel(
+            panel,
+            text="Punktliste",
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            anchor="w",
+        ).grid(row=0, column=0, padx=12, pady=(12, 4), sticky="ew")
+
+        self.lbl_point_count = ctk.CTkLabel(panel, text="0 Punkte", text_color=self.COLOR_MUTED, anchor="w")
+        self.lbl_point_count.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="ew")
+
+        self.point_list_frame = ctk.CTkScrollableFrame(
+            panel,
+            width=250,
+            fg_color=self.COLOR_PANEL_ALT,
+            border_width=1,
+            border_color=self.COLOR_BORDER,
+            corner_radius=0,
         )
-        progress_row = ttk.Frame(status_frame)
-        progress_row.grid(row=1, column=1, pady=3, sticky="ew")
-        progress_row.grid_columnconfigure(0, weight=1)
+        self.point_list_frame.grid(row=2, column=0, padx=12, pady=8, sticky="nsew")
+        self.point_list_frame.grid_columnconfigure(0, weight=1)
 
-        self.progress_var = tk.DoubleVar(value=0.0)
-        ttk.Progressbar(
-            progress_row,
-            orient="horizontal",
-            mode="determinate",
-            variable=self.progress_var,
-            maximum=100.0,
-        ).grid(row=0, column=0, sticky="ew")
-
-        self.progress_text_var = tk.StringVar(value="0/0")
-        ttk.Label(progress_row, textvariable=self.progress_text_var, width=10, style="Offset.TLabel").grid(
-            row=0, column=1, padx=(8, 0), sticky="e"
+        self.lbl_selected_point_details = ctk.CTkLabel(
+            panel,
+            text="Auswahl: -",
+            text_color=self.COLOR_TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=250,
         )
+        self.lbl_selected_point_details.grid(row=3, column=0, padx=12, pady=(6, 12), sticky="ew")
 
-        points_frame = ttk.LabelFrame(root, text="Kalibrierpunkte", padding=10, style="Offset.TLabelframe")
-        points_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        points_text = "   ".join(
-            f"{label}: X={x:.0f} Y={y:.0f} Z={z:.0f}" for label, x, y, z in ROBOT_POINTS
+    def _build_map_panel(self, parent: ctk.CTkFrame) -> None:
+        panel = self._panel(parent)
+        panel.grid(row=0, column=1, padx=8, pady=0, sticky="nsew")
+        panel.grid_rowconfigure(0, weight=1)
+        panel.grid_columnconfigure(0, weight=1)
+
+        # In der Operator-Oberflaeche bleibt der Kartenbereich bewusst ruhig:
+        # keine zusaetzliche Ueberschrift und keine zweite Auswahl-Anzeige,
+        # da diese Informationen bereits in der Punktliste stehen.
+        self.lbl_selected_point = None
+
+        self.map_view = OperatorMapView(panel, on_point_selected=self.select_point_by_name)
+        self.map_view.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+    def _build_right_panel(self, parent: ctk.CTkFrame) -> None:
+        panel = self._panel(parent)
+        panel.grid(row=0, column=2, padx=(8, 0), pady=0, sticky="nsew")
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_rowconfigure(5, weight=1)
+        panel.configure(width=310)
+        panel.grid_propagate(False)
+
+        # Kein uebergeordneter Status-Titel: Komponenten/System/Lasertracker
+        # sind in dieser Operator-Oberflaeche die sichtbaren Hauptueberschriften.
+        status_frame = ctk.CTkFrame(panel, fg_color=self.COLOR_PANEL, corner_radius=0)
+        status_frame.grid(row=0, column=0, padx=12, pady=(8, 6), sticky="ew")
+        status_frame.grid_columnconfigure(0, weight=1)
+        status_frame.grid_columnconfigure(1, weight=0, minsize=32)
+
+        row = 0
+        self._section_title(status_frame, "Komponenten", row)
+        row += 1
+        self._add_indicator_row(status_frame, row, "xyz", "XYZ")
+        row += 1
+        self._add_indicator_row(status_frame, row, "tracker", "Tracker")
+        row += 1
+        self._add_indicator_row(status_frame, row, "drehmotor", "Drehmotor")
+        row += 1
+        self._add_indicator_row(status_frame, row, "gyro", "Gyro")
+        row += 1
+
+        self._section_title(status_frame, "System", row)
+        row += 1
+        self._add_indicator_row(status_frame, row, "homing", "Homing")
+        row += 1
+        self._add_indicator_row(status_frame, row, "trafo", "Trafo")
+        row += 1
+        self._add_indicator_row(status_frame, row, "arn", "Reflektornachfuehrung")
+        row += 1
+        self._add_indicator_row(status_frame, row, "trackerdaten", "Trackerdaten")
+        row += 1
+
+        self._section_title(status_frame, "Lasertracker", row)
+        row += 1
+
+        tracker_values_frame = ctk.CTkFrame(
+            status_frame,
+            fg_color=self.COLOR_PANEL,
+            corner_radius=0,
         )
-        ttk.Label(points_frame, text=points_text, style="Offset.TLabel").grid(
-            row=0, column=0, sticky="w"
+        tracker_values_frame.grid(
+            row=row,
+            column=0,
+            columnspan=2,
+            padx=10,
+            pady=(2, 8),
+            sticky="ew",
         )
+        tracker_values_frame.grid_columnconfigure(0, weight=1, uniform="tracker_values")
+        tracker_values_frame.grid_columnconfigure(1, weight=1, uniform="tracker_values")
 
-        result_frame = ttk.LabelFrame(root, text="Ergebnis", padding=10, style="Offset.TLabelframe")
-        result_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
-        for col in (1, 3, 5):
-            result_frame.grid_columnconfigure(col, weight=1)
+        ctk.CTkLabel(
+            tracker_values_frame,
+            text="Station",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+        ).grid(row=0, column=0, padx=(0, 8), pady=(0, 3), sticky="ew")
 
-        self.result_offset_var = tk.StringVar(value="-")
-        self.result_previous_var = tk.StringVar(value=self._format_vector(self.previous_offset_robot))
-        self.result_delta_var = tk.StringVar(value="-")
-        self.result_rms_var = tk.StringVar(value="-")
-        self.result_max_var = tk.StringVar(value="-")
-        self.result_std_var = tk.StringVar(value="-")
+        ctk.CTkLabel(
+            tracker_values_frame,
+            text="Messung",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+        ).grid(row=0, column=1, padx=(8, 0), pady=(0, 3), sticky="ew")
 
-        ttk.Label(result_frame, text="Neuer Offset:", style="Offset.TLabel").grid(row=0, column=0, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_offset_var, style="Offset.TLabel").grid(row=0, column=1, columnspan=5, pady=2, sticky="ew")
+        self.lbl_tracker_station_x = ctk.CTkLabel(
+            tracker_values_frame,
+            text="X=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_station_x.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        ttk.Label(result_frame, text="Bisher:", style="Offset.TLabel").grid(row=1, column=0, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_previous_var, style="Offset.TLabel").grid(row=1, column=1, columnspan=5, pady=2, sticky="ew")
+        self.lbl_tracker_measurement_x = ctk.CTkLabel(
+            tracker_values_frame,
+            text="X=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_measurement_x.grid(row=1, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
 
-        ttk.Label(result_frame, text="Differenz:", style="Offset.TLabel").grid(row=2, column=0, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_delta_var, style="Offset.TLabel").grid(row=2, column=1, columnspan=5, pady=2, sticky="ew")
+        self.lbl_tracker_station_y = ctk.CTkLabel(
+            tracker_values_frame,
+            text="Y=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_station_y.grid(row=2, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        ttk.Label(result_frame, text="RMS:", style="Offset.TLabel").grid(row=3, column=0, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_rms_var, style="Offset.TLabel").grid(row=3, column=1, padx=(0, 16), pady=2, sticky="ew")
-        ttk.Label(result_frame, text="Max:", style="Offset.TLabel").grid(row=3, column=2, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_max_var, style="Offset.TLabel").grid(row=3, column=3, padx=(0, 16), pady=2, sticky="ew")
-        ttk.Label(result_frame, text="Std:", style="Offset.TLabel").grid(row=3, column=4, padx=(0, 6), pady=2, sticky="w")
-        ttk.Label(result_frame, textvariable=self.result_std_var, style="Offset.TLabel").grid(row=3, column=5, pady=2, sticky="ew")
+        self.lbl_tracker_measurement_y = ctk.CTkLabel(
+            tracker_values_frame,
+            text="Y=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_measurement_y.grid(row=2, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
 
-        log_frame = ttk.LabelFrame(root, text="Log", padding=8, style="Offset.TLabelframe")
-        log_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 10))
-        log_frame.grid_rowconfigure(0, weight=1)
-        log_frame.grid_columnconfigure(0, weight=1)
+        self.lbl_tracker_station_z = ctk.CTkLabel(
+            tracker_values_frame,
+            text="Z=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_station_z.grid(row=3, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        self.textbox = ScrolledText(
-            log_frame,
-            wrap="none",
+        self.lbl_tracker_measurement_z = ctk.CTkLabel(
+            tracker_values_frame,
+            text="Z=-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        self.lbl_tracker_measurement_z.grid(row=3, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
+
+        ctk.CTkLabel(
+            panel,
+            text="Log",
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            anchor="w",
+        ).grid(row=2, column=0, padx=12, pady=(6, 4), sticky="ew")
+
+        self.logbox = ctk.CTkTextbox(
+            panel,
+            wrap="word",
+            width=300,
+            height=180,
+            fg_color="#ffffff",
+            text_color=self.COLOR_TEXT,
+            border_width=1,
+            border_color=self.COLOR_BORDER,
+            corner_radius=0,
+        )
+        self.logbox.grid(row=5, column=0, padx=12, pady=(4, 8), sticky="nsew")
+
+        log_button_frame = tk.Frame(
+            panel,
+            bg=self.COLOR_PANEL,
+            highlightthickness=0,
+            bd=0,
+        )
+        log_button_frame.grid(row=6, column=0, padx=12, pady=(4, 12), sticky="ew")
+        log_button_frame.grid_columnconfigure(0, weight=1, uniform="log_buttons")
+        log_button_frame.grid_columnconfigure(1, weight=1, uniform="log_buttons")
+
+        ttk.Button(
+            log_button_frame,
+            text="Log leeren",
+            command=self.clear_log,
+            style="Operator.TButton",
+        ).grid(row=0, column=0, padx=0, pady=0, sticky="ew")
+
+        ttk.Button(
+            log_button_frame,
+            text="Log speichern...",
+            command=self.save_log_dialog,
+            style="Operator.TButton",
+        ).grid(row=0, column=1, padx=0, pady=0, sticky="ew")
+
+    def _add_indicator_row(self, parent: ctk.CTkFrame, row: int, key: str, label: str) -> None:
+        ctk.CTkLabel(
+            parent,
+            text=label,
+            text_color=self.COLOR_TEXT,
+            anchor="w",
             height=18,
-            font=FONT_MONO,
-            background="#ffffff",
-            foreground="#111111",
-        )
-        self.textbox.grid(row=0, column=0, sticky="nsew")
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+        ).grid(row=row, column=0, padx=(10, 12), pady=(0, 0), sticky="w")
 
-        button_frame = ttk.Frame(root)
-        button_frame.grid(row=4, column=0, sticky="ew")
-        for col in range(4):
-            button_frame.grid_columnconfigure(col, weight=1)
-
-        self.btn_cancel = ttk.Button(
-            button_frame,
-            text="Abbrechen",
-            command=self.cancel_workflow,
-            style="Offset.TButton",
+        indicator = ctk.CTkLabel(
+            parent,
+            text="●",
+            text_color=self.COLOR_RED,
+            width=22,
+            height=18,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=22, weight="bold"),
         )
-        self.btn_cancel.grid(row=0, column=0, padx=(0, 6), sticky="ew")
+        indicator.grid(row=row, column=1, padx=(0, 10), pady=(0, 0), sticky="e")
 
-        self.btn_repeat = ttk.Button(
-            button_frame,
-            text="Kalibrierung Wiederholen",
-            command=self.repeat_workflow,
-            state="disabled",
-            style="Offset.TButton",
-        )
-        self.btn_repeat.grid(row=0, column=1, padx=6, sticky="ew")
+        self.status_indicators[key] = indicator
 
-        self.btn_discard = ttk.Button(
-            button_frame,
-            text="Kalibrierung Verwerfen",
-            command=self.discard_and_close,
-            style="Offset.TButton",
+    def _build_action_bar(self) -> None:
+        bar = ctk.CTkFrame(
+            self,
+            fg_color="#e9e9e9",
+            border_width=1,
+            border_color=self.COLOR_BORDER,
+            corner_radius=0,
         )
-        self.btn_discard.grid(row=0, column=2, padx=6, sticky="ew")
+        bar.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+        bar.grid_columnconfigure(0, weight=0)
+        bar.grid_columnconfigure(1, weight=1)
 
-        self.btn_accept = ttk.Button(
-            button_frame,
-            text="Offset Übernehmen",
-            command=self.accept_calibration,
-            state="disabled",
-            style="Offset.TButton",
+        ctk.CTkLabel(
+            bar,
+            text="Aktuelle Aktion:",
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            anchor="w",
+        ).grid(row=0, column=0, padx=(10, 6), pady=6, sticky="w")
+
+        self.lbl_current_action = ctk.CTkLabel(
+            bar,
+            text="Bereit.",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
         )
-        self.btn_accept.grid(row=0, column=3, padx=(6, 0), sticky="ew")
+        self.lbl_current_action.grid(row=0, column=1, padx=(0, 10), pady=6, sticky="ew")
 
     # --------------------------------------------------
-    # Workflow
+    # Datei
     # --------------------------------------------------
 
-    def start_workflow(self) -> None:
-        if self.workflow_running:
+    def load_points_dialog(self) -> None:
+        self.set_current_action("Punktdatei wird geladen...")
+        file_path = filedialog.askopenfilename(
+            title="Punktdatei laden",
+            filetypes=[
+                ("Punktdateien", "*.txt *.csv"),
+                ("Textdateien", "*.txt"),
+                ("CSV-Dateien", "*.csv"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+
+        if not file_path:
+            self.set_current_action("Bereit.")
             return
 
-        self._reset_result_display()
-        self.abort_event.clear()
-        self.measure_button_event.clear()
-        self.reflector_lt_points.clear()
-        self.marker_lt_points.clear()
-        self.workflow_running = True
-
-        self.btn_cancel.configure(state="normal")
-        self.btn_repeat.configure(state="disabled")
-        self.btn_accept.configure(state="disabled")
-        self.btn_discard.configure(state="normal")
-
-        self.workflow_thread = threading.Thread(target=self._workflow_thread_main, daemon=True)
-        self.workflow_thread.start()
-        self.log("Marker-/Reflektoroffset-Kalibrierung gestartet.")
-
-    def _workflow_thread_main(self) -> None:
         try:
-            self._run_workflow()
-        except InterruptedError:
-            self.log("")
-            self.log("Kalibrierung abgebrochen.")
-            self.set_status("Kalibrierung abgebrochen.")
+            self.points = load_points_from_txt(file_path)
         except Exception as exc:
-            self.log("")
-            self.log(f"FEHLER: {exc}")
-            self.set_status(f"Fehler: {exc}")
-        finally:
-            self.gui_queue.put(("workflow_finished", None))
+            self.log(f"FEHLER beim Laden der Punktdatei: {exc}")
+            messagebox.showerror("Punktdatei", str(exc), parent=self)
+            self.set_current_action("Fehler beim Laden der Punktdatei.")
+            return
 
-    def _run_workflow(self) -> None:
-        self._validate_runtime_state()
+        self.selected_point_name = self.points[0].name if self.points else None
+        self._apply_demo_scene()
+        self.refresh_points()
+        self.log(f"Punktdatei geladen: {file_path}")
+        self.set_current_action("Punktdatei geladen.")
 
-        self.log("Ablauf:")
-        self.log("1. Roboter markiert feste Kalibrierpunkte und Reflektor oben wird gemessen.")
-        self.log("2. Danach faehrt der Roboter auf Parkposition X=10 mm / Y=10 mm.")
-        self.log("3. Danach werden die markierten Punkte manuell mit CCR/Nest gemessen.")
-        self.log("4. Aus beiden Messsaetzen wird marker_to_reflector_robot berechnet.")
+    def save_project(self) -> None:
+        if self.project_path is None:
+            self.save_project_as()
+            return
+        self._write_project_file(self.project_path)
 
-        self.run_robot_mark_and_reflector_measurement()
-        self.check_abort()
-
-        self.move_robot_to_park_position()
-        self.check_abort()
-
-        response = self.show_info_dialog_and_wait(
-            title="Manuelle Messung vorbereiten",
-            message=(
-                "Alle Kalibrierpunkte wurden markiert und der obere Reflektor wurde gemessen.\n\n"
-                "Der Roboter wurde auf die Parkposition X=10 mm / Y=10 mm gefahren.\n"
-                "Der Wagen kann nun bei Bedarf zusaetzlich gesichert werden.\n\n"
-                "Im naechsten Schritt werden die Punkte P1 bis P5 manuell mit CCR/Nest gemessen."
-            ),
+    def save_project_as(self) -> None:
+        file_path = filedialog.asksaveasfilename(
+            title="Projekt speichern unter",
+            defaultextension=".json",
+            filetypes=[
+                ("Mower-Projekt", "*.json"),
+                ("Alle Dateien", "*.*"),
+            ],
         )
-        if response != "ok":
-            raise InterruptedError()
+        if not file_path:
+            return
+        self.project_path = Path(file_path)
+        self._write_project_file(self.project_path)
 
-        self.check_abort()
-        self.run_manual_marker_measurements()
-        self.check_abort()
+    def _write_project_file(self, path: Path) -> None:
+        self.set_current_action("Projekt wird gespeichert...")
 
-        result = self.compute_result()
-        self.last_result = result
-
-        self.log_result(result)
-        self.save_result_files(result)
-        self.gui_queue.put(("result_ready", result))
-        self.set_status("Kalibrierung abgeschlossen. Ergebnis prüfen und ggf. übernehmen.")
-
-    def _validate_runtime_state(self) -> None:
-        if self.xyz_worker is None:
-            raise RuntimeError("XYZ-Worker ist nicht verfügbar.")
-        if self.tracker_receiver is None:
-            raise RuntimeError("LasertrackerReceiver ist nicht verfügbar.")
-        if not bool(getattr(self.tracker_receiver, "running", False)):
-            raise RuntimeError("LasertrackerReceiver läuft nicht.")
-
-        state = self.xyz_state_getter()
-        if state is None:
-            raise RuntimeError("Kein XYZ-Zustand verfügbar.")
-        if not bool(getattr(state, "connected", False)):
-            raise RuntimeError("XYZ ist nicht verbunden.")
-        if not bool(getattr(state, "homed", False)):
-            raise RuntimeError("XYZ-Homing wurde noch nicht durchgeführt.")
-
-    def run_robot_mark_and_reflector_measurement(self) -> None:
-        self.log("")
-        self.log("=== Schritt 1: Punkte markieren und Reflektor oben messen ===")
-
-        total = len(ROBOT_POINTS) * 3
-        step = 0
-
-        for label, x, y, z in ROBOT_POINTS:
-            self.check_abort()
-            self.log("")
-            self.log(f"--- {label} ---")
-            self.set_status(f"{label}: fahre Kalibrierpunkt an.")
-            step += 1
-            self.set_progress(step, total)
-            self.log(f"Fahre Kalibrierpunkt: X={x:.3f}, Y={y:.3f}, Z={z:.3f}")
-            self.send_robot_command(
-                "move_absolute_verified",
-                timeout_s=180.0,
-                x=x,
-                y=y,
-                z=z,
-                feedrate=CONFIG.xyz.default_feedrate,
-                tolerance_mm=CONFIG.xyz.tolerance_mm,
-            )
-
-            self.check_abort()
-            self.set_status(f"{label}: markiere Punkt.")
-            step += 1
-            self.set_progress(step, total)
-            self.log(
-                f"Markiere {label}: {CONFIG.marker.shape}, Größe={CONFIG.marker.size_mm:.3f} mm"
-            )
-            self.send_robot_command(
-                "mark_point",
-                timeout_s=180.0,
-                x=x,
-                y=y,
-                label=label,
-                marker_size=CONFIG.marker.size_mm,
-                marker_shape=CONFIG.marker.shape,
-                angle_deg=CONFIG.marker.angle_deg,
-            )
-
-            self.check_abort()
-            self.set_status(f"{label}: messe oberen Reflektor.")
-            step += 1
-            self.set_progress(step, total)
-            self.log(f"Fahre wieder exakt auf Punktmitte {label}.")
-            self.send_robot_command(
-                "move_absolute_verified",
-                timeout_s=180.0,
-                x=x,
-                y=y,
-                z=z,
-                feedrate=CONFIG.xyz.default_feedrate,
-                tolerance_mm=CONFIG.xyz.tolerance_mm,
-            )
-            self.reflector_lt_points[label] = self.capture_tracker_point(f"{label} reflector_lt")
-
-    def move_robot_to_park_position(self) -> None:
-        """Faehrt den Roboter nach dem Markieren auf eine sichere Parkposition.
-
-        Wichtig:
-            Es wird bewusst kein home_all ausgefuehrt. Die Fahrt erfolgt im
-            bereits referenzierten Koordinatensystem ueber move_absolute_verified.
-        """
-
-        self.log("")
-        self.log("=== Schritt 2: Roboter auf Parkposition fahren ===")
-
-        safe_z = float(getattr(CONFIG.xyz, "z_max", 200.0))
-        feedrate = float(getattr(CONFIG.xyz, "default_feedrate", 6000.0))
-        tolerance_mm = float(getattr(CONFIG.xyz, "tolerance_mm", 0.05))
-
-        state = self.xyz_state_getter()
-        current_x = getattr(state, "x", None) if state is not None else None
-        current_y = getattr(state, "y", None) if state is not None else None
-
-        self.set_status("Fahre Roboter auf sichere Z-Parkhoehe.")
-
-        if current_x is not None and current_y is not None:
-            self.log(
-                f"Fahre zuerst auf sichere Z-Hoehe: "
-                f"X={float(current_x):.3f}, Y={float(current_y):.3f}, Z={safe_z:.3f}"
-            )
-            self.send_robot_command(
-                "move_absolute_verified",
-                timeout_s=180.0,
-                x=float(current_x),
-                y=float(current_y),
-                z=safe_z,
-                feedrate=feedrate,
-                tolerance_mm=tolerance_mm,
-            )
-        else:
-            self.log(
-                "Aktuelle XY-Position nicht sicher bekannt; "
-                "fahre direkt auf Parkposition mit sicherer Z-Hoehe."
-            )
-
-        self.check_abort()
-        self.set_status(f"Fahre Parkposition X={PARK_X_MM:.1f} / Y={PARK_Y_MM:.1f} an.")
-        self.log(
-            f"Fahre Parkposition: X={PARK_X_MM:.3f}, "
-            f"Y={PARK_Y_MM:.3f}, Z={safe_z:.3f}"
-        )
-        self.send_robot_command(
-            "move_absolute_verified",
-            timeout_s=180.0,
-            x=PARK_X_MM,
-            y=PARK_Y_MM,
-            z=safe_z,
-            feedrate=feedrate,
-            tolerance_mm=tolerance_mm,
-        )
-
-        self.log("Parkposition erreicht. Manuelle Messung kann vorbereitet werden.")
-
-    def run_manual_marker_measurements(self) -> None:
-        self.log("")
-        self.log("=== Schritt 3: Manuelle Messung der markierten Punkte ===")
-
-        total = len(ROBOT_POINTS)
-        for index, (label, _, _, _) in enumerate(ROBOT_POINTS, start=1):
-            self.check_abort()
-            self.set_status(f"Bitte CCR/Nest auf {label} setzen und messen.")
-            self.set_progress(index - 1, total)
-            self.measure_button_event.clear()
-
-            response = self.show_measure_dialog_and_wait(label)
-            if response == "cancel":
-                raise InterruptedError()
-
-            self.check_abort()
-            self.log("")
-            self.log(f"Manuelle Messung {label}: CCR/Nest wird gemessen.")
-
-            marker_lt_ccr = self.capture_tracker_point(f"{label} marker_lt CCR center")
-            marker_lt = marker_lt_ccr.copy()
-
-            # Annahme: LT-Z zeigt nach oben; gemessen wird CCR-Zentrum.
-            marker_lt[2] -= CONFIG.tracker.ccr_radius_mm
-            self.marker_lt_points[label] = marker_lt
-
-            self.log(
-                f"{label} marker_lt Bodenpunkt korrigiert: "
-                f"X={marker_lt[0]:.6f}, Y={marker_lt[1]:.6f}, Z={marker_lt[2]:.6f}"
-            )
-            self.set_progress(index, total)
-
-    def compute_result(self) -> MarkerOffsetCalibrationResult:
-        samples = []
-        for label, x, y, z in ROBOT_POINTS:
-            samples.append(
-                make_calibration_sample(
-                    label=label,
-                    robot_marker=[x, y, z],
-                    reflector_lt=self.reflector_lt_points[label],
-                    marker_lt=self.marker_lt_points[label],
-                )
-            )
-        return compute_marker_to_reflector_offset(samples)
-
-    # --------------------------------------------------
-    # Dialog handling
-    # --------------------------------------------------
-
-    def show_info_dialog_and_wait(self, title: str, message: str) -> DialogResult:
-        request = DialogRequest(title=title, message=message, mode="info", event=threading.Event())
-        self.gui_queue.put(("dialog", request))
-        while not request.event.wait(timeout=0.1):
-            self.check_abort()
-        return request.result or "cancel"
-
-    def show_measure_dialog_and_wait(self, label: str) -> DialogResult:
-        request = DialogRequest(
-            title=f"Manuelle Messung {label}",
-            message=(
-                f"Bitte CCR/Nest sauber auf {label} setzen.\n\n"
-                "Wenn der Reflektor stabil auf der Markierung sitzt, Messen drücken."
-            ),
-            mode="measure",
-            event=threading.Event(),
-        )
-        self.gui_queue.put(("dialog", request))
-        while not request.event.wait(timeout=0.1):
-            self.check_abort()
-            if self.measure_button_event.is_set():
-                request.result = "measure"
-                request.event.set()
-                break
-        return request.result or "cancel"
-
-    def create_info_dialog(self, request: DialogRequest) -> None:
-        dialog = tk.Toplevel(self.window)
-        dialog.title(request.title)
-        dialog.resizable(False, False)
-        dialog.transient(self.window)
-        dialog.grab_set()
-        _center_window(self.window, dialog, 560, 250)
-
-        frame = ttk.Frame(dialog, padding=14)
-        frame.grid(row=0, column=0, sticky="nsew")
-        frame.grid_columnconfigure(0, weight=1)
-
-        ttk.Label(frame, text=request.message, wraplength=520, justify="left", style="Offset.TLabel").grid(
-            row=0, column=0, pady=(0, 14), sticky="ew"
-        )
-
-        def ok() -> None:
-            request.result = "ok"
-            request.event.set()
-            dialog.destroy()
-
-        ttk.Button(frame, text="OK", command=ok, style="Offset.TButton").grid(
-            row=1, column=0, sticky="ew"
-        )
-        dialog.protocol("WM_DELETE_WINDOW", ok)
-
-    def create_measure_dialog(self, request: DialogRequest) -> None:
-        dialog = tk.Toplevel(self.window)
-        dialog.title(request.title)
-        dialog.resizable(False, False)
-        dialog.transient(self.window)
-        dialog.grab_set()
-        _center_window(self.window, dialog, 560, 270)
-
-        frame = ttk.Frame(dialog, padding=14)
-        frame.grid(row=0, column=0, sticky="nsew")
-        frame.grid_columnconfigure(0, weight=1)
-
-        ttk.Label(frame, text=request.message, wraplength=520, justify="left", style="Offset.TLabel").grid(
-            row=0, column=0, pady=(0, 14), sticky="ew"
-        )
-
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=1, column=0, sticky="ew")
-        buttons.grid_columnconfigure(0, weight=1)
-        buttons.grid_columnconfigure(1, weight=1)
-
-        def measure() -> None:
-            request.result = "measure"
-            request.event.set()
-            dialog.destroy()
-
-        def cancel() -> None:
-            request.result = "cancel"
-            request.event.set()
-            dialog.destroy()
-
-        ttk.Button(buttons, text="Messen", command=measure, style="Offset.TButton").grid(
-            row=0, column=0, padx=(0, 6), sticky="ew"
-        )
-        ttk.Button(buttons, text="Abbrechen", command=cancel, style="Offset.TButton").grid(
-            row=0, column=1, padx=(6, 0), sticky="ew"
-        )
-        dialog.protocol("WM_DELETE_WINDOW", cancel)
-
-    # --------------------------------------------------
-    # Hardware helpers
-    # --------------------------------------------------
-
-    def send_robot_command(self, command: str, timeout_s: float, **kwargs: Any) -> None:
-        self.xyz_worker.send_command(command, **kwargs)
-        self.wait_robot_done(timeout_s=timeout_s)
-
-    def wait_robot_done(self, timeout_s: float) -> None:
-        start = time.time()
-        while time.time() - start < timeout_s:
-            self.check_abort()
-            state = self.xyz_state_getter()
-            queue_empty = True
+        if write_project_file is not None:
             try:
-                queue_empty = self.xyz_worker.command_queue.empty()
-            except Exception:
-                queue_empty = True
-
-            busy = bool(getattr(state, "busy", False)) if state is not None else False
-            error_text = getattr(state, "error_text", "") if state is not None else ""
-
-            if queue_empty and not busy:
-                if error_text:
-                    raise RuntimeError(str(error_text))
-                return
-            time.sleep(0.05)
-        raise TimeoutError("Timeout beim Warten auf XYZRobotWorker.")
-
-    def capture_tracker_point(self, label: str) -> np.ndarray:
-        if self.tracker_receiver is None or not bool(getattr(self.tracker_receiver, "running", False)):
-            raise RuntimeError("LasertrackerReceiver läuft nicht.")
-
-        self.log(f"Messe {label} ...")
-        measurement = self.tracker_receiver.capture_stable_point(
-            timeout_s=CONFIG.tracker.capture_timeout_s,
-            min_age_after_start_s=0.1,
-        )
-        point = np.array([measurement.x, measurement.y, measurement.z], dtype=float)
-        self.log(f"{label}: X={point[0]:.6f}, Y={point[1]:.6f}, Z={point[2]:.6f}")
-        return point
-
-    # --------------------------------------------------
-    # Results
-    # --------------------------------------------------
-
-    def log_result(self, result: MarkerOffsetCalibrationResult) -> None:
-        previous = np.asarray(self.previous_offset_robot, dtype=float)
-        current = result.mean_offset_robot
-        delta = current - previous
-
-        self.log("")
-        self.log("=" * 80)
-        self.log("ERGEBNIS DER KALIBRIERUNG")
-        self.log("=" * 80)
-        self.log(format_offset_result(result))
-
-        self.log("")
-        self.log("Vergleich zur letzten gespeicherten Kalibrierung:")
-        self.log(
-            f"Letzte Kalibrierung [mm]: X={previous[0]:.6f}, Y={previous[1]:.6f}, Z={previous[2]:.6f}"
-        )
-        self.log(
-            f"Aktuelle Kalibrierung [mm]: X={current[0]:.6f}, Y={current[1]:.6f}, Z={current[2]:.6f}"
-        )
-        self.log(
-            f"Abweichung aktuell - letzte [mm]: dX={delta[0]:.6f}, dY={delta[1]:.6f}, "
-            f"dZ={delta[2]:.6f}, |d|={np.linalg.norm(delta):.6f}"
-        )
-
-        self.log("")
-        self.log("Genauigkeitsmaße der aktuellen Kalibrierung:")
-        self.log(
-            f"Std [mm]: X={result.std_offset_robot[0]:.6f}, "
-            f"Y={result.std_offset_robot[1]:.6f}, Z={result.std_offset_robot[2]:.6f}"
-        )
-        self.log(f"RMS Offset={result.rms_offset:.6f} mm | Max Abweichung={result.max_deviation:.6f} mm")
-        self.log(
-            f"Helmert RMS={result.helmert.rms:.6f} mm | Helmert Max={result.helmert.max_residual:.6f} mm | "
-            f"Scale={result.helmert.scale:.12f}"
-        )
-
-    def save_result_files(self, result: MarkerOffsetCalibrationResult) -> None:
-        out_dir = _find_project_root() / "results" / "marker_offset_calibration"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_path = out_dir / f"marker_offset_calibration_{timestamp}.csv"
-        txt_path = out_dir / f"marker_offset_calibration_{timestamp}.txt"
-
-        with csv_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f, delimiter=";")
-            writer.writerow(
-                [
-                    "label",
-                    "robot_x", "robot_y", "robot_z",
-                    "reflector_lt_x", "reflector_lt_y", "reflector_lt_z",
-                    "marker_lt_x", "marker_lt_y", "marker_lt_z",
-                    "offset_robot_x", "offset_robot_y", "offset_robot_z",
-                    "deviation_norm",
-                ]
-            )
-
-            for sample, deviation_norm in zip(result.samples, result.deviation_norms):
-                if sample.offset_robot is None:
-                    raise RuntimeError(f"Sample {sample.label} hat keinen offset_robot.")
-                writer.writerow(
-                    [
-                        sample.label,
-                        *[f"{v:.6f}" for v in sample.robot_marker],
-                        *[f"{v:.6f}" for v in sample.reflector_lt],
-                        *[f"{v:.6f}" for v in sample.marker_lt],
-                        *[f"{v:.6f}" for v in sample.offset_robot],
-                        f"{deviation_norm:.6f}",
-                    ]
+                write_project_file(
+                    path=path,
+                    points=self.points,
+                    status=self._build_project_status(),
                 )
+                self.log(f"Projekt gespeichert: {path}")
+                self.set_current_action("Projekt gespeichert.")
+                return
+            except Exception as exc:
+                self.log(f"Projekt konnte nicht ueber project_io gespeichert werden: {exc}")
 
-            previous = np.asarray(self.previous_offset_robot, dtype=float)
-            current = result.mean_offset_robot
-            delta = current - previous
+        data = {
+            "version": 2,
+            "ui": "operator",
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "points": [
+                {
+                    "name": p.name,
+                    "x": p.x,
+                    "y": p.y,
+                    "z": p.z,
+                    "marked": p.marked,
+                    "reachable": p.reachable,
+                    "last_robot_x": p.last_robot_x,
+                    "last_robot_y": p.last_robot_y,
+                    "residual_mm": p.residual_mm,
+                }
+                for p in self.points
+            ],
+            "status": self._build_project_status(),
+        }
+        path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+        self.log(f"Projekt gespeichert: {path}")
+        self.set_current_action("Projekt gespeichert.")
 
-            writer.writerow([])
-            writer.writerow(["previous_offset_robot", *[f"{v:.6f}" for v in previous]])
-            writer.writerow(["mean_offset_robot", *[f"{v:.6f}" for v in current]])
-            writer.writerow(["delta_current_minus_previous", *[f"{v:.6f}" for v in delta]])
-            writer.writerow(["delta_norm", f"{np.linalg.norm(delta):.6f}"])
-            writer.writerow(["std_offset_robot", *[f"{v:.6f}" for v in result.std_offset_robot]])
-            writer.writerow(["rms_offset", f"{result.rms_offset:.6f}"])
-            writer.writerow(["max_deviation", f"{result.max_deviation:.6f}"])
-            writer.writerow(["helmert_rms", f"{result.helmert.rms:.6f}"])
-            writer.writerow(["helmert_max_residual", f"{result.helmert.max_residual:.6f}"])
-            writer.writerow(["helmert_scale", f"{result.helmert.scale:.12f}"])
+    def _build_project_status(self) -> dict[str, Any]:
+        return {
+            "xyz_ready": self.xyz_ready,
+            "tracker_ready": self.tracker_ready,
+            "drehmotor_ready": self.drehmotor_ready,
+            "gyro_ready": self.gyro_ready,
+            "homing_done": self.homing_done,
+            "trafo_valid": self.trafo_valid,
+            "arn_active": self.arn_active,
+            "tracker_data_current": self.tracker_data_current,
+            "tracker_station_xyz": self.tracker_station_xyz,
+            "current_lt_measurement_xyz": self.current_lt_measurement_xyz,
+        }
 
-        with txt_path.open("w", encoding="utf-8") as f:
-            f.write(format_offset_result(result))
-            f.write("\n\n")
-            f.write("Letzte gespeicherte Kalibrierung [mm]\n")
-            f.write(
-                f"X={self.previous_offset_robot[0]:.6f}, "
-                f"Y={self.previous_offset_robot[1]:.6f}, "
-                f"Z={self.previous_offset_robot[2]:.6f}\n"
+    def open_log_file(self) -> None:
+        self.log("Logdatei wird geoeffnet.")
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(self.log_file_path)  # type: ignore[attr-defined]
+            else:
+                webbrowser.open(self.log_file_path.as_uri())
+        except Exception as exc:
+            self.log(f"Logdatei konnte nicht geoeffnet werden: {exc}")
+            messagebox.showerror("Log oeffnen", str(exc), parent=self)
+
+    def on_close(self) -> None:
+        try:
+            if self.tracker_receiver is not None and hasattr(self.tracker_receiver, "stop"):
+                self.tracker_receiver.stop()
+        except Exception:
+            pass
+
+        try:
+            if self.xyz_worker is not None:
+                if hasattr(self.xyz_worker, "stop"):
+                    self.xyz_worker.stop()
+                elif hasattr(self.xyz_worker, "shutdown"):
+                    self.xyz_worker.shutdown()
+        except Exception:
+            pass
+
+        self.destroy()
+
+    # --------------------------------------------------
+    # XYZ
+    # --------------------------------------------------
+
+    def _ensure_xyz_worker(self) -> bool:
+        """Erzeugt den XYZ-Worker bei Bedarf.
+
+        Passend zur aktuellen Worker-Schnittstelle:
+            XYZRobotWorker(on_event=..., on_state_changed=...)
+            worker.start()
+            worker.send_command(command, **kwargs)
+        """
+        if self.xyz_worker is not None:
+            return True
+
+        if XYZRobotWorker is None:
+            self.log("XYZRobotWorker konnte nicht importiert werden.")
+            messagebox.showerror(
+                "XYZ",
+                "XYZRobotWorker konnte nicht importiert werden.",
+                parent=self,
+            )
+            return False
+
+        try:
+            self.xyz_worker = XYZRobotWorker(
+                on_event=self.on_xyz_event,
+                on_state_changed=self.on_xyz_state_changed,
             )
 
-        self.log("")
-        self.log(f"CSV gespeichert: {csv_path}")
-        self.log(f"TXT gespeichert: {txt_path}")
+            self.xyz_worker.start()
 
-    def update_result_display(self, result: MarkerOffsetCalibrationResult) -> None:
-        previous = np.asarray(self.previous_offset_robot, dtype=float)
-        current = result.mean_offset_robot
-        delta = current - previous
+            self.log("XYZ-Worker initialisiert.")
+            return True
 
-        self.result_offset_var.set(self._format_vector(current))
-        self.result_previous_var.set(self._format_vector(previous))
-        self.result_delta_var.set(
-            f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, |d|={np.linalg.norm(delta):.3f} mm"
-        )
-        self.result_rms_var.set(f"{result.rms_offset:.3f} mm")
-        self.result_max_var.set(f"{result.max_deviation:.3f} mm")
-        self.result_std_var.set(
-            f"X={result.std_offset_robot[0]:.3f}, Y={result.std_offset_robot[1]:.3f}, Z={result.std_offset_robot[2]:.3f}"
-        )
-
-    def accept_calibration(self) -> None:
-        if self.last_result is None:
-            return
-
-        vector = tuple(float(v) for v in self.last_result.mean_offset_robot)
-
-        try:
-            update_marker_to_reflector_robot(vector)
-            CONFIG.transformation.marker_to_reflector_robot = vector
         except Exception as exc:
-            self.log(f"FEHLER beim Speichern des Offsets: {exc}")
-            messagebox.showerror("Marker-/Reflektoroffset", str(exc), parent=self.window)
+            self.xyz_worker = None
+            self.log(f"XYZ-Worker konnte nicht initialisiert werden: {exc}")
+            messagebox.showerror("XYZ", str(exc), parent=self)
+            return False
+
+    def on_xyz_state_changed(self, state: Any) -> None:
+        self.xyz_state = state
+
+        def apply_state() -> None:
+            self.xyz_ready = bool(getattr(state, "connected", False))
+            self.xyz_connected = self.xyz_ready
+            self.homing_done = bool(getattr(state, "homed", False))
+            self.update_status()
+
+        self.after(0, apply_state)
+
+    def on_xyz_event(self, event: Any) -> None:
+        message = str(getattr(event, "message", event))
+        level = str(getattr(getattr(event, "level", ""), "name", getattr(event, "level", "")))
+
+        def apply_event() -> None:
+            if level.upper() == "ERROR":
+                self.log(f"XYZ FEHLER: {message}")
+                self.set_current_action(f"XYZ Fehler: {message}")
+            else:
+                self.log(f"XYZ: {message}")
+
+                if "Verbindung hergestellt" in message:
+                    self.set_current_action("XYZ verbunden.")
+                elif "Verbindung getrennt" in message:
+                    self.set_current_action("XYZ getrennt.")
+                elif "Homing gestartet" in message:
+                    self.set_current_action("XYZ-Homing laeuft...")
+                elif "Homing abgeschlossen" in message:
+                    self.set_current_action("XYZ-Homing abgeschlossen.")
+                elif "Position gelesen" in message:
+                    self.set_current_action("XYZ-Position gelesen.")
+
+        self.after(0, apply_event)
+
+    def _send_xyz_command(self, command: str, **kwargs: Any) -> bool:
+        if not self._ensure_xyz_worker():
+            return False
+
+        if self.xyz_worker is None or not hasattr(self.xyz_worker, "send_command"):
+            self.log("XYZ-Worker besitzt keine send_command(...)-Schnittstelle.")
+            return False
+
+        try:
+            self.xyz_worker.send_command(command, **kwargs)
+            return True
+        except Exception as exc:
+            self.log(f"XYZ-Befehl '{command}' konnte nicht gesendet werden: {exc}")
+            messagebox.showerror("XYZ", str(exc), parent=self)
+            return False
+
+    def connect_xyz(self) -> None:
+        self.set_current_action("XYZ wird verbunden...")
+
+        if CONFIG is None:
+            messagebox.showerror("XYZ", "CONFIG ist nicht geladen.", parent=self)
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
             return
 
-        self.previous_offset_robot = vector
-        self.log("")
-        self.log("Offset wurde dauerhaft in config/mower_config.json gespeichert:")
-        self.log(f"  X={vector[0]:.6f}, Y={vector[1]:.6f}, Z={vector[2]:.6f}")
+        if show_xyz_connect_dialog is None:
+            messagebox.showerror(
+                "XYZ",
+                "XYZ-Connect-Dialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: XYZ-Connect-Dialog nicht verfügbar.")
+            return
 
-        if self.on_finished:
-            self.on_finished()
+        selected_port = show_xyz_connect_dialog(
+            parent=self,
+            default_port=CONFIG.xyz.port,
+            baudrate=CONFIG.xyz.baudrate,
+        )
 
-        self.close()
+        if not selected_port:
+            self.set_current_action("Bereit.")
+            return
+
+        self.connect_xyz_with_port(selected_port)
+
+
+    def connect_xyz_with_port(self, port: str) -> None:
+        if CONFIG is None:
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
+            return
+
+        self.log(f"XYZ verbinden: Port={port}, Baudrate={CONFIG.xyz.baudrate}")
+        ok = self._send_xyz_command(
+            "connect",
+            port=port,
+            baudrate=CONFIG.xyz.baudrate,
+        )
+
+        if ok:
+            self.set_current_action("XYZ-Verbindung wird aufgebaut...")
+        else:
+            self.set_current_action("XYZ-Verbindung fehlgeschlagen.")
+
+    def disconnect_xyz(self) -> None:
+        self.set_current_action("XYZ wird getrennt...")
+        ok = self._send_xyz_command("disconnect")
+
+        if ok:
+            self.log("XYZ trennen angefordert.")
+            self.set_current_action("XYZ-Trennung angefordert.")
+        else:
+            self.set_current_action("XYZ-Trennung fehlgeschlagen.")
+
+        # UI-Zustand direkt zuruecksetzen; falls der Worker danach noch einen
+        # State sendet, wird dieser durch on_xyz_state_changed uebernommen.
+        self.xyz_ready = False
+        self.xyz_connected = False
+        self.homing_done = False
+        self.update_status()
+
+    def home_xyz(self) -> None:
+        self.set_current_action("XYZ-Homing wird durchgefuehrt...")
+
+        if not self.xyz_ready:
+            self.log("XYZ-Homing nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning("XYZ Homing", "XYZ ist nicht verbunden.", parent=self)
+            self.set_current_action("Homing nicht moeglich: XYZ nicht verbunden.")
+            return
+
+        ok = self._send_xyz_command("home_all")
+        if ok:
+            self.log("XYZ Homing angefordert.")
+            self.set_current_action("XYZ-Homing laeuft...")
+        else:
+            self.set_current_action("XYZ-Homing konnte nicht gestartet werden.")
+
+    def move_xyz_to_position_dialog(self) -> None:
+        self.set_current_action("XYZ manuell bewegen...")
+
+        if not self.xyz_ready:
+            self.log("XYZ-Bewegungsdialog nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning("XYZ bewegen", "XYZ ist nicht verbunden.", parent=self)
+            self.set_current_action("XYZ-Bewegung nicht moeglich: XYZ nicht verbunden.")
+            return
+
+        if show_xyz_manual_move_dialog is None:
+            messagebox.showerror(
+                "XYZ",
+                "XYZ-Bewegungsdialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: XYZ-Bewegungsdialog nicht verfügbar.")
+            return
+
+        show_xyz_manual_move_dialog(
+            parent=self,
+            config=CONFIG,
+            xyz_state_getter=lambda: self.xyz_state,
+            send_xyz_command=self._send_xyz_command,
+            read_xyz_position=self.read_xyz_position,
+            log=self.log,
+            set_current_action=self.set_current_action,
+        )
+        self.set_current_action("Bereit.")
+
+    def read_xyz_position(self) -> None:
+        self.set_current_action("XYZ-Position wird gelesen...")
+
+        if not self.xyz_ready:
+            self.log("XYZ-Position lesen nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning("XYZ", "XYZ ist nicht verbunden.", parent=self)
+            self.set_current_action("XYZ-Position lesen nicht moeglich.")
+            return
+
+        ok = self._send_xyz_command("read_position")
+        if ok:
+            self.log("XYZ Position lesen angefordert.")
+            self.set_current_action("XYZ-Position wird gelesen...")
+        else:
+            self.set_current_action("XYZ-Position konnte nicht gelesen werden.")
 
     # --------------------------------------------------
-    # Queue / state
+    # Tracker
     # --------------------------------------------------
 
-    def process_gui_queue(self) -> None:
-        if self.closed:
+    def start_tracker(self) -> None:
+        self.set_current_action("Tracker UDP-Empfang wird gestartet...")
+
+        if CONFIG is None:
+            messagebox.showerror("Tracker", "CONFIG ist nicht geladen.", parent=self)
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
+            return
+
+        if LasertrackerReceiver is None:
+            messagebox.showerror(
+                "Tracker",
+                "LasertrackerReceiver konnte nicht importiert werden.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: LasertrackerReceiver nicht verfügbar.")
+            return
+
+        if self.tracker_receiver is not None and getattr(self.tracker_receiver, "running", False):
+            self.log("Tracker UDP-Empfang läuft bereits.")
+            self.set_current_action("Tracker UDP-Empfang läuft bereits.")
             return
 
         try:
-            while True:
-                kind, payload = self.gui_queue.get_nowait()
+            self.tracker_receiver = LasertrackerReceiver(
+                port=CONFIG.tracker.udp_port,
+                bind_ip="0.0.0.0",
+                on_state_changed=self.on_tracker_state_changed,
+                on_log=self.on_tracker_log,
+                on_error=self.on_tracker_error,
+            )
+            self.tracker_receiver.start()
 
-                if kind == "log":
-                    self._write_log(str(payload))
-                elif kind == "status":
-                    self.status_var.set(str(payload))
-                elif kind == "progress":
-                    current, total = payload
-                    value = 100.0 * current / total if total else 0.0
-                    self.progress_var.set(value)
-                    self.progress_text_var.set(f"{current}/{total}")
-                elif kind == "dialog":
-                    request: DialogRequest = payload
-                    if request.mode == "info":
-                        self.create_info_dialog(request)
-                    elif request.mode == "measure":
-                        self.create_measure_dialog(request)
-                elif kind == "result_ready":
-                    result: MarkerOffsetCalibrationResult = payload
-                    self.update_result_display(result)
-                    self.btn_accept.configure(state="normal")
-                elif kind == "workflow_finished":
-                    self.workflow_running = False
-                    self.btn_cancel.configure(state="disabled")
-                    self.btn_repeat.configure(state="normal")
-        except queue.Empty:
-            pass
-
-        if not self.closed:
-            self.window.after(100, self.process_gui_queue)
-
-    def set_status(self, text: str) -> None:
-        self.gui_queue.put(("status", text))
-
-    def set_progress(self, current: int, total: int) -> None:
-        self.gui_queue.put(("progress", (current, total)))
-
-    def log(self, text: str) -> None:
-        self.gui_queue.put(("log", text))
-        if self.external_log:
-            self.external_log(f"[Offset] {text}")
-
-    def _write_log(self, text: str) -> None:
-        timestamp = time.strftime("%H:%M:%S")
-        try:
-            self.textbox.insert("end", f"[{timestamp}] {text}\n")
-            self.textbox.see("end")
-        except Exception:
-            pass
-
-    def repeat_workflow(self) -> None:
-        if self.workflow_running:
+        except Exception as exc:
+            self.tracker_receiver = None
+            self.tracker_state = None
+            self.tracker_ready = False
+            self.tracker_started = False
+            self.tracker_data_current = False
+            self.current_lt_measurement_xyz = None
+            self.log(f"Tracker UDP-Empfang konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Tracker", str(exc), parent=self)
+            self.set_current_action("Tracker UDP-Empfang konnte nicht gestartet werden.")
+            self.update_status()
             return
-        self.log("")
-        self.log("------------------------------------------------------------")
-        self.log("KALIBRIERUNG WIRD WIEDERHOLT")
-        self.log("------------------------------------------------------------")
-        self.start_workflow()
 
-    def cancel_workflow(self) -> None:
-        if self.workflow_running:
-            self.abort_event.set()
-            self.measure_button_event.set()
-            self.set_status("Abbruch angefordert...")
-            self.log("Abbruch angefordert...")
+        if self.tracker_receiver is not None and getattr(self.tracker_receiver, "running", False):
+            self.tracker_ready = True
+            self.tracker_started = True
+            self.tracker_data_current = False
+            self.log(f"Tracker UDP-Empfang gestartet auf Port {CONFIG.tracker.udp_port}.")
+            self.set_current_action("Tracker UDP-Empfang gestartet.")
+        else:
+            self.tracker_ready = False
+            self.tracker_started = False
+            self.tracker_data_current = False
+            self.current_lt_measurement_xyz = None
+            self.set_current_action("Tracker UDP-Empfang nicht gestartet.")
 
-    def discard_and_close(self) -> None:
-        if self.workflow_running:
-            self.abort_event.set()
-            self.measure_button_event.set()
+        self.update_status()
 
-        if self.on_finished:
-            self.on_finished()
+    def stop_tracker(self) -> None:
+        self.set_current_action("Tracker UDP-Empfang wird gestoppt...")
 
-        self.close()
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
         try:
-            self.window.grab_release()
-        except Exception:
-            pass
-        self.window.destroy()
+            if self.tracker_receiver is not None:
+                self.tracker_receiver.stop()
+        except Exception as exc:
+            self.log(f"Tracker UDP-Empfang konnte nicht gestoppt werden: {exc}")
 
-    def check_abort(self) -> None:
-        if self.abort_event.is_set():
-            raise InterruptedError()
+        self.tracker_receiver = None
+        self.tracker_state = None
 
-    def _reset_result_display(self) -> None:
-        self.last_result = None
-        self.status_var.set("Vorbereitung...")
-        self.progress_var.set(0.0)
-        self.progress_text_var.set("0/0")
-        self.result_offset_var.set("-")
-        self.result_previous_var.set(self._format_vector(self.previous_offset_robot))
-        self.result_delta_var.set("-")
-        self.result_rms_var.set("-")
-        self.result_max_var.set("-")
-        self.result_std_var.set("-")
+        self.tracker_ready = False
+        self.tracker_started = False
+        self.tracker_data_current = False
+        self.current_lt_measurement_xyz = None
+
+        self.log("Tracker UDP-Empfang gestoppt.")
+        self.set_current_action("Tracker UDP-Empfang gestoppt.")
+        self.update_status()
+
+    def on_tracker_state_changed(self, state: Any) -> None:
+        self.tracker_state = state
+
+        def apply_state() -> None:
+            receiver_running = (
+                self.tracker_receiver is not None
+                and getattr(self.tracker_receiver, "running", False)
+            )
+
+            self.tracker_ready = bool(receiver_running)
+            self.tracker_started = self.tracker_ready
+
+            data_valid = bool(getattr(state, "data_valid", False))
+            stale = bool(getattr(state, "stale", True))
+
+            self.tracker_data_current = data_valid and not stale
+
+            x = getattr(state, "x", None)
+            y = getattr(state, "y", None)
+            z = getattr(state, "z", None)
+
+            if self.tracker_data_current and x is not None and y is not None and z is not None:
+                self.current_lt_measurement_xyz = (float(x), float(y), float(z))
+            elif not data_valid:
+                self.current_lt_measurement_xyz = None
+
+            self.update_status()
+
+        self.after(0, apply_state)
+
+    def on_tracker_log(self, text: str) -> None:
+        def apply_log() -> None:
+            self.log(f"Tracker: {text}")
+
+            if "UDP Receiver gestartet" in text:
+                self.set_current_action("Tracker UDP-Empfang gestartet.")
+            elif "UDP-Daten werden empfangen" in text:
+                self.set_current_action("Trackerdaten werden empfangen.")
+            elif "Messdaten sind aktuell" in text:
+                self.set_current_action("Trackerdaten aktuell.")
+            elif "Messdaten sind veraltet" in text:
+                self.set_current_action("Trackerdaten veraltet.")
+            elif "UDP Receiver gestoppt" in text:
+                self.set_current_action("Tracker UDP-Empfang gestoppt.")
+
+        self.after(0, apply_log)
+
+    def on_tracker_error(self, text: str) -> None:
+        def apply_error() -> None:
+            self.log(f"Tracker FEHLER: {text}")
+            self.set_current_action(f"Tracker Fehler: {text}")
+            self.tracker_data_current = False
+            self.update_status()
+
+        self.after(0, apply_error)
+
+    def load_tracker_station_default(self) -> None:
+        self._load_tracker_station_from_path(get_tracker_station_file())
+
+    def load_tracker_position_dialog(self) -> None:
+        self.set_current_action("Trackerstation wird geladen...")
+        file_path = filedialog.askopenfilename(
+            title="Trackerstation aus Datei laden",
+            initialdir=str(get_tracker_station_file().parent),
+            initialfile=get_tracker_station_file().name,
+            filetypes=[
+                ("Textdateien", "*.txt *.csv"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+        if not file_path:
+            self.set_current_action("Bereit.")
+            return
+
+        self._load_tracker_station_from_path(Path(file_path))
+
+    def _load_tracker_station_from_path(self, path: Path) -> None:
+        self.set_current_action("Trackerstation wird geladen...")
+
+        try:
+            x, y, z = self._read_tracker_xyz_from_file(path)
+        except Exception as exc:
+            self.log(f"Trackerstation konnte nicht geladen werden: {exc}")
+            messagebox.showerror("Trackerstation", str(exc), parent=self)
+            self.set_current_action("Trackerstation konnte nicht geladen werden.")
+            return
+
+        self.tracker_station_xyz = (x, y, z)
+        self.map_view.set_tracker_position((x, y))
+        self.log(f"Trackerstation geladen: X={x:.3f}, Y={y:.3f}, Z={z:.3f} aus {path}")
+        self.set_current_action("Trackerstation geladen.")
+        self.update_status()
 
     @staticmethod
-    def _format_vector(vector: Any) -> str:
-        arr = np.asarray(vector, dtype=float)
-        return f"X={arr[0]:.3f}, Y={arr[1]:.3f}, Z={arr[2]:.3f} mm"
+    def _read_tracker_xyz_from_file(path: Path) -> tuple[float, float, float]:
+        if not path.exists():
+            raise FileNotFoundError(f"Datei nicht gefunden: {path}")
+
+        text = path.read_text(encoding="utf-8")
+
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            raw = line.strip()
+            if not raw or raw.startswith("#"):
+                continue
+
+            # Erwartetes Standardformat aus dem SA Measurement Plan:
+            #   0.000000,0.000000,0.000000
+            # Robustheit: auch Leerzeichen, Semikolon und Tabulatoren zulassen.
+            parts = raw.replace(",", " ").replace(";", " ").replace("\t", " ").split()
+
+            numeric_values: list[float] = []
+            for part in parts:
+                try:
+                    numeric_values.append(float(part))
+                except ValueError:
+                    continue
+
+            if len(numeric_values) >= 3:
+                return numeric_values[0], numeric_values[1], numeric_values[2]
+
+            raise ValueError(
+                f"Zeile {line_number}: keine gültigen X/Y/Z-Koordinaten gefunden. "
+                "Erwartet wird z. B. 0.000000,0.000000,0.000000"
+            )
+
+        raise ValueError(f"Datei enthält keine Trackerstation: {path}")
+
+    def show_tracker_status(self) -> None:
+        if self.tracker_state is None:
+            self.log(
+                "Tracker Status: "
+                f"UDP={'gestartet' if self.tracker_ready else 'gestoppt'}, "
+                f"Station={self._format_xyz(self.tracker_station_xyz)}, "
+                f"Messung={self._format_xyz(self.current_lt_measurement_xyz)}"
+            )
+            return
+
+        state = self.tracker_state
+        age = getattr(state, "data_age_seconds", None)
+        age_text = "-" if age is None else f"{float(age):.2f}s"
+
+        self.log(
+            "Tracker Status: "
+            f"UDP={'gestartet' if self.tracker_ready else 'gestoppt'}, "
+            f"receiving={getattr(state, 'receiving', False)}, "
+            f"valid={getattr(state, 'data_valid', False)}, "
+            f"stale={getattr(state, 'stale', True)}, "
+            f"stable={getattr(state, 'stable', False)}, "
+            f"age={age_text}, "
+            f"count={getattr(state, 'measurement_count', 0)}, "
+            f"Station={self._format_xyz(self.tracker_station_xyz)}, "
+            f"Messung={self._format_xyz(self.current_lt_measurement_xyz)}"
+        )
+
+    # --------------------------------------------------
+    # Drehmotor / Gyro
+    # --------------------------------------------------
+
+    def connect_drehmotor(self) -> None:
+        self.set_current_action("Drehmotor wird verbunden...")
+        self.drehmotor_ready = True
+        self.skr_connected = True
+        self.log("Drehmotor verbunden. Hinweis: In dieser Erstversion als Status gesetzt.")
+        self.set_current_action("Drehmotor verbunden.")
+        self.update_status()
+
+    def disconnect_drehmotor(self) -> None:
+        self.set_current_action("Drehmotor wird getrennt...")
+        self.drehmotor_ready = False
+        self.skr_connected = False
+        self.log("Drehmotor getrennt.")
+        self.set_current_action("Drehmotor getrennt.")
+        self.update_status()
+
+    def drehmotor_set_reference(self) -> None:
+        self.set_current_action("Drehmotor-Referenz wird gesetzt...")
+        self.log("Drehmotor Referenz setzen: noch nicht implementiert.")
+        self.set_current_action("Drehmotor-Referenz angefordert.")
+
+    def show_drehmotor_status(self) -> None:
+        self.log(f"Drehmotor Status: {'bereit' if self.drehmotor_ready else 'nicht bereit'}")
+
+    def connect_gyro(self) -> None:
+        self.set_current_action("Gyro wird verbunden...")
+        self.gyro_ready = True
+        self.gyems_connected = True
+        self.log("Gyro verbunden. Hinweis: In dieser Erstversion als Status gesetzt.")
+        self.set_current_action("Gyro verbunden.")
+        self.update_status()
+
+    def disconnect_gyro(self) -> None:
+        self.set_current_action("Gyro wird getrennt...")
+        self.gyro_ready = False
+        self.gyems_connected = False
+        self.log("Gyro getrennt.")
+        self.set_current_action("Gyro getrennt.")
+        self.update_status()
+
+    def show_gyro_status(self) -> None:
+        self.log(f"Gyro Status: {'bereit' if self.gyro_ready else 'nicht bereit'}")
+
+    # --------------------------------------------------
+    # System
+    # --------------------------------------------------
+
+    def start_transformation(self) -> None:
+        self.set_current_action("Transformation wird vorbereitet...")
+
+        if show_trafo_dialog is None:
+            self.log("Trafo-Dialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Transformation",
+                "Trafo-Dialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Trafo-Dialog nicht verfügbar.")
+            return
+
+        if self.trafo_manager is None:
+            self.log("Transformation nicht möglich: TrafoManager ist nicht verfügbar.")
+            messagebox.showerror(
+                "Transformation",
+                "TrafoManager ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: TrafoManager nicht verfügbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Transformation nicht möglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Transformation",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Transformation nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
+            messagebox.showwarning(
+                "Transformation",
+                "Bitte zuerst XYZ-Homing durchführen.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: Homing fehlt.")
+            return
+
+        if not self.tracker_ready or self.tracker_receiver is None:
+            self.log("Transformation nicht möglich: Tracker UDP-Empfang läuft nicht.")
+            messagebox.showwarning(
+                "Transformation",
+                "Tracker UDP-Empfang läuft nicht.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: Tracker nicht bereit.")
+            return
+
+        if not self.tracker_data_current:
+            self.log("Transformation nicht möglich: keine aktuellen Trackerdaten vorhanden.")
+            messagebox.showwarning(
+                "Transformation",
+                "Es sind keine aktuellen Trackerdaten vorhanden.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: keine aktuellen Trackerdaten.")
+            return
+
+        try:
+            self.log("Transformationsdialog wird geöffnet.")
+            self.set_current_action("Transformation läuft...")
+
+            show_trafo_dialog(
+                parent=self,
+                xyz_worker=self.xyz_worker,
+                tracker_receiver=self.tracker_receiver,
+                xyz_state_getter=lambda: self.xyz_state,
+                trafo_manager=self.trafo_manager,
+                on_finished=self.on_trafo_finished,
+                log=self.log,
+            )
+
+        except Exception as exc:
+            self.log(f"Trafo-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Transformation", str(exc), parent=self)
+            self.set_current_action("Transformation konnte nicht gestartet werden.")
+            self.update_status()
+
+    def on_trafo_finished(self) -> None:
+        if self.trafo_manager is not None:
+            self.trafo_valid = bool(getattr(self.trafo_manager, "valid", False))
+        self.set_current_action("Transformation abgeschlossen.")
+        self.update_status()
+
+    def offset_calibration(self) -> None:
+        self.set_current_action("Marker-/Reflektoroffset-Kalibrierung wird vorbereitet...")
+
+        if show_marker_offset_calibration_dialog is None:
+            self.log("Marker-/Reflektoroffset-Dialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Marker-/Reflektoroffset",
+                "Marker-/Reflektoroffset-Dialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Offset-Dialog nicht verfügbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Offset-Kalibrierung nicht möglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Marker-/Reflektoroffset",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Offset-Kalibrierung nicht möglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Offset-Kalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
+            messagebox.showwarning(
+                "Marker-/Reflektoroffset",
+                "Bitte zuerst XYZ-Homing durchführen.",
+                parent=self,
+            )
+            self.set_current_action("Offset-Kalibrierung nicht möglich: Homing fehlt.")
+            return
+
+        if not self.tracker_ready or self.tracker_receiver is None:
+            self.log("Offset-Kalibrierung nicht möglich: Tracker UDP-Empfang läuft nicht.")
+            messagebox.showwarning(
+                "Marker-/Reflektoroffset",
+                "Tracker UDP-Empfang läuft nicht.",
+                parent=self,
+            )
+            self.set_current_action("Offset-Kalibrierung nicht möglich: Tracker nicht bereit.")
+            return
+
+        if not self.tracker_data_current:
+            self.log("Offset-Kalibrierung nicht möglich: keine aktuellen Trackerdaten vorhanden.")
+            messagebox.showwarning(
+                "Marker-/Reflektoroffset",
+                "Es sind keine aktuellen Trackerdaten vorhanden.",
+                parent=self,
+            )
+            self.set_current_action("Offset-Kalibrierung nicht möglich: keine aktuellen Trackerdaten.")
+            return
+
+        try:
+            self.log("Marker-/Reflektoroffset-Dialog wird geöffnet.")
+            self.set_current_action("Marker-/Reflektoroffset-Kalibrierung läuft...")
+
+            show_marker_offset_calibration_dialog(
+                parent=self,
+                xyz_worker=self.xyz_worker,
+                tracker_receiver=self.tracker_receiver,
+                xyz_state_getter=lambda: self.xyz_state,
+                on_finished=self.on_marker_offset_calibration_finished,
+                log=self.log,
+            )
+
+        except Exception as exc:
+            self.log(f"Offset-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Marker-/Reflektoroffset", str(exc), parent=self)
+            self.set_current_action("Offset-Kalibrierung konnte nicht gestartet werden.")
+            self.update_status()
+
+    def on_marker_offset_calibration_finished(self) -> None:
+        self.set_current_action("Marker-/Reflektoroffset-Kalibrierung abgeschlossen.")
+        self.update_status()
+
+    def calibrate_marker_height(self) -> None:
+        self.set_current_action("Markerhoehen-Kalibrierung wird vorbereitet...")
+
+        if CONFIG is None:
+            messagebox.showerror("Markerhoehe", "CONFIG ist nicht geladen.", parent=self)
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
+            return
+
+        if show_marker_height_calibration_dialog is None:
+            self.log("Markerhoehen-Dialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Markerhoehe",
+                "Markerhoehen-Dialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Markerhoehen-Dialog nicht verfuegbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Markerhoehen-Kalibrierung nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning("Markerhoehe", "XYZ ist nicht verbunden.", parent=self)
+            self.set_current_action("Markerhoehen-Kalibrierung nicht moeglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Markerhoehen-Kalibrierung nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            messagebox.showwarning(
+                "Markerhoehe",
+                "Bitte zuerst XYZ-Homing durchfuehren.",
+                parent=self,
+            )
+            self.set_current_action("Markerhoehen-Kalibrierung nicht moeglich: Homing fehlt.")
+            return
+
+        try:
+            self.log("Markerhoehen-Dialog wird geoeffnet.")
+            self.set_current_action("Markerhoehe wird kalibriert...")
+            show_marker_height_calibration_dialog(
+                parent=self,
+                config=CONFIG,
+                xyz_state_getter=lambda: self.xyz_state,
+                send_xyz_command=self._send_xyz_command,
+                read_xyz_position=self.read_xyz_position,
+                log=self.log,
+                set_current_action=self.set_current_action,
+                on_finished=self.on_marker_height_calibration_finished,
+            )
+            self.set_current_action("Bereit.")
+        except Exception as exc:
+            self.log(f"Markerhoehen-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Markerhoehe", str(exc), parent=self)
+            self.set_current_action("Markerhoehen-Kalibrierung konnte nicht gestartet werden.")
+
+    def on_marker_height_calibration_finished(self) -> None:
+        try:
+            self.log(
+                "Markerhoehe aktiv: "
+                f"Z_MARK={CONFIG.marker.z_mark_mm:.3f} mm, "
+                f"Z_CLEAR={CONFIG.marker.z_clear_mm:.3f} mm, "
+                f"Z_TRAVEL={CONFIG.marker.z_travel_mm:.3f} mm"
+            )
+        except Exception:
+            pass
+        self.set_current_action("Markerhoehen-Kalibrierung abgeschlossen.")
+        self.update_status()
+
+    def activate_arn(self) -> None:
+        self.set_current_action("Reflektornachfuehrung wird aktiviert...")
+        self.arn_active = True
+        self.log("Reflektornachfuehrung aktiviert.")
+        self.set_current_action("Reflektornachfuehrung aktiv.")
+        self.update_status()
+
+    def deactivate_arn(self) -> None:
+        self.set_current_action("Reflektornachfuehrung wird deaktiviert...")
+        self.arn_active = False
+        self.log("Reflektornachfuehrung deaktiviert.")
+        self.set_current_action("Reflektornachfuehrung inaktiv.")
+        self.update_status()
+
+    def show_active_config(self) -> None:
+        message = "Config konnte nicht geladen werden." if CONFIG is None else self._format_config_text()
+        self.log("Aktive Config angezeigt.")
+        messagebox.showinfo("Aktive Config", message, parent=self)
+
+    def reload_config(self) -> None:
+        self.set_current_action("Config neu laden angefordert...")
+        self.log("Config neu laden: noch nicht implementiert. Aktuell wird CONFIG beim Programmstart geladen.")
+
+    # --------------------------------------------------
+    # Point handling
+    # --------------------------------------------------
+
+    def load_demo_points(self) -> None:
+        self.points = create_demo_points()
+        self.selected_point_name = self.points[0].name if self.points else None
+        self._apply_demo_scene()
+        self.refresh_points()
+        self.log("Demo-Punkte geladen.")
+
+    def refresh_points(self, *, keep_map_view: bool = False) -> None:
+        for point in self.points:
+            point.selected = point.name == self.selected_point_name
+
+        self._update_point_list()
+        self.map_view.set_points(self.points, keep_view=keep_map_view)
+        self._update_selected_label()
+        self.lbl_point_count.configure(text=f"{len(self.points)} Punkte")
+
+    def _update_point_list(self) -> None:
+        for child in self.point_list_frame.winfo_children():
+            child.destroy()
+
+        for row, point in enumerate(self.points):
+            text = f"{point.name:<10}  {point.status_text}"
+            if point.reachable and not point.marked:
+                text += "  *"
+
+            is_selected = point.name == self.selected_point_name
+            button = ctk.CTkButton(
+                self.point_list_frame,
+                text=text,
+                anchor="w",
+                fg_color="#d9eaff" if is_selected else "#eeeeee",
+                hover_color="#c7ddf6",
+                text_color=self.COLOR_TEXT,
+                border_width=1,
+                border_color="#b8b8b8",
+                corner_radius=0,
+                command=lambda name=point.name: self.select_point_by_name(name),
+            )
+            button.grid(row=row, column=0, padx=4, pady=3, sticky="ew")
+
+    def select_point_by_name(self, name: str) -> None:
+        if not any(point.name == name for point in self.points):
+            return
+        self.selected_point_name = name
+        self.refresh_points(keep_map_view=True)
+        self.set_current_action(f"Punkt {name} ausgewaehlt.")
+
+    def selected_point(self) -> StakeoutPoint | None:
+        for point in self.points:
+            if point.name == self.selected_point_name:
+                return point
+        return None
+
+    def _update_selected_label(self) -> None:
+        point = self.selected_point()
+        if point is None:
+            if self.lbl_selected_point is not None:
+                self.lbl_selected_point.configure(text="Auswahl: -")
+            self.lbl_selected_point_details.configure(text="Auswahl: -")
+            return
+
+        if self.lbl_selected_point is not None:
+            self.lbl_selected_point.configure(text=f"Auswahl: {point.name} | {point.status_text}")
+        self.lbl_selected_point_details.configure(
+            text=(
+                f"Auswahl:\n"
+                f"{point.name}\n"
+                f"{point.xyz_text()}\n"
+                f"Status: {point.status_text}\n"
+                f"Erreichbar: {'ja' if point.reachable else 'nein'}"
+            )
+        )
+
+    # --------------------------------------------------
+    # Demo scene / reachability placeholder
+    # --------------------------------------------------
+
+    def _apply_demo_scene(self) -> None:
+        if not self.points:
+            self.map_view.set_tracker_position(None)
+            self.map_view.set_robot_workspace_polygon(None)
+            return
+
+        min_x = min(point.x for point in self.points)
+        max_x = max(point.x for point in self.points)
+        min_y = min(point.y for point in self.points)
+        max_y = max(point.y for point in self.points)
+
+        if self.tracker_station_xyz is None:
+            tracker_xy = (min_x - 180.0, min_y - 120.0)
+            self.map_view.set_tracker_position(tracker_xy)
+        else:
+            self.map_view.set_tracker_position((self.tracker_station_xyz[0], self.tracker_station_xyz[1]))
+
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        half_w = self._config_float("xyz", "x_max", 500.0) / 2.0
+        half_h = self._config_float("xyz", "y_max", 400.0) / 2.0
+
+        workspace_polygon = [
+            (center_x - half_w, center_y - half_h),
+            (center_x + half_w, center_y - half_h),
+            (center_x + half_w, center_y + half_h),
+            (center_x - half_w, center_y + half_h),
+        ]
+        self.map_view.set_robot_workspace_polygon(workspace_polygon)
+
+        for point in self.points:
+            point.reachable = self._point_in_polygon((point.x, point.y), workspace_polygon)
+
+    @staticmethod
+    def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+        x, y = point
+        inside = False
+        j = len(polygon) - 1
+
+        for i in range(len(polygon)):
+            xi, yi = polygon[i]
+            xj, yj = polygon[j]
+            intersect = ((yi > y) != (yj > y)) and (
+                x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi
+            )
+            if intersect:
+                inside = not inside
+            j = i
+        return inside
+
+    # --------------------------------------------------
+    # Status / Log
+    # --------------------------------------------------
+
+    def set_current_action(self, text: str) -> None:
+        self.lbl_current_action.configure(text=text)
+
+    def update_status(self) -> None:
+        self._set_indicator("xyz", self.xyz_ready, "bereit", "nicht bereit")
+        self._set_indicator("tracker", self.tracker_ready, "bereit", "nicht bereit")
+        self._set_indicator("drehmotor", self.drehmotor_ready, "bereit", "nicht bereit")
+        self._set_indicator("gyro", self.gyro_ready, "bereit", "nicht bereit")
+
+        self._set_indicator("homing", self.homing_done, "referenziert", "nicht referenziert")
+        self._set_indicator("trafo", self.trafo_valid, "gueltig", "ungueltig")
+        self._set_indicator("arn", self.arn_active, "aktiv", "inaktiv")
+        self._set_indicator("trackerdaten", self.tracker_data_current, "aktuell", "keine aktuellen Daten")
+
+        station_x, station_y, station_z = self._format_xyz_components(self.tracker_station_xyz)
+        measurement_x, measurement_y, measurement_z = self._format_xyz_components(self.current_lt_measurement_xyz)
+
+        self.lbl_tracker_station_x.configure(text=station_x)
+        self.lbl_tracker_station_y.configure(text=station_y)
+        self.lbl_tracker_station_z.configure(text=station_z)
+
+        self.lbl_tracker_measurement_x.configure(text=measurement_x)
+        self.lbl_tracker_measurement_y.configure(text=measurement_y)
+        self.lbl_tracker_measurement_z.configure(text=measurement_z)
+
+    def _set_indicator(self, key: str, active: bool, active_text: str, inactive_text: str) -> None:
+        indicator = self.status_indicators[key]
+        indicator.configure(text_color=self.COLOR_GREEN if active else self.COLOR_RED)
+
+    @staticmethod
+    def _format_xyz(values: tuple[float, float, float] | None) -> str:
+        if values is None:
+            return "X=-  Y=-  Z=-"
+        x, y, z = values
+        return f"X={x:.3f}  Y={y:.3f}  Z={z:.3f}"
+
+    @staticmethod
+    def _format_xyz_components(values: tuple[float, float, float] | None) -> tuple[str, str, str]:
+        if values is None:
+            return "X=-", "Y=-", "Z=-"
+        x, y, z = values
+        return f"X={x:.3f}", f"Y={y:.3f}", f"Z={z:.3f}"
+
+    def _format_config_text(self) -> str:
+        if CONFIG is None:
+            return "Config: nicht geladen"
+        return (
+            "Config:\n"
+            f"  XYZ: {CONFIG.xyz.port} @ {CONFIG.xyz.baudrate}\n"
+            f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
+            f"  Workspace X/Y/Z:\n"
+            f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
+            f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"
+            f"    Z {CONFIG.xyz.z_min:.0f}..{CONFIG.xyz.z_max:.0f}\n"
+            f"  Offset:\n"
+            f"    X={CONFIG.transformation.marker_to_reflector_robot[0]:.3f}\n"
+            f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
+            f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}"
+        )
+
+    def _config_float(self, section: str, name: str, fallback: float) -> float:
+        if CONFIG is None:
+            return fallback
+        obj = getattr(CONFIG, section, None)
+        if obj is None:
+            return fallback
+        return float(getattr(obj, name, fallback))
+
+    def log(self, text: str) -> None:
+        timestamp = time.strftime("%H:%M:%S")
+        line = f"[{timestamp}] {text}"
+        self.logbox.insert("end", line + "\n")
+        self.logbox.see("end")
+        try:
+            with self.log_file_path.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
+
+    def clear_log(self) -> None:
+        self.logbox.delete("1.0", "end")
+        self.set_current_action("Log geleert.")
+
+    def save_log_dialog(self) -> None:
+        content = self.logbox.get("1.0", "end-1c")
+        if not content.strip():
+            messagebox.showinfo("Log speichern", "Das Log ist leer.", parent=self)
+            return
+
+        default_name = f"mower_operator_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_path = filedialog.asksaveasfilename(
+            title="Log speichern",
+            defaultextension=".txt",
+            initialfile=default_name,
+            filetypes=[
+                ("Textdateien", "*.txt"),
+                ("Logdateien", "*.log"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+        if not file_path:
+            return
+
+        try:
+            Path(file_path).write_text(content + "\n", encoding="utf-8")
+        except Exception as exc:
+            messagebox.showerror("Log speichern", f"Log konnte nicht gespeichert werden:\n{exc}", parent=self)
+            self.set_current_action("Fehler beim Speichern des Logs.")
+            return
+
+        self.log(f"Log gespeichert: {file_path}")
+        self.set_current_action("Log gespeichert.")
 
 
-def _find_project_root() -> Path:
-    file_path = Path(__file__).resolve()
-    for parent in file_path.parents:
-        if (parent / "config" / "mower_config.py").exists():
-            return parent
-    return Path.cwd()
+if __name__ == "__main__":
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
 
-
-def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int) -> None:
-    parent.update_idletasks()
-
-    try:
-        parent_x = parent.winfo_rootx()
-        parent_y = parent.winfo_rooty()
-        parent_w = parent.winfo_width()
-        parent_h = parent.winfo_height()
-    except Exception:
-        parent_x = 0
-        parent_y = 0
-        parent_w = width
-        parent_h = height
-
-    x = parent_x + max((parent_w - width) // 2, 0)
-    y = parent_y + max((parent_h - height) // 2, 0)
-    window.geometry(f"{width}x{height}+{x}+{y}")
+    app = MowerOperatorApp()
+    app.mainloop()

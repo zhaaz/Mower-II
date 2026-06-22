@@ -9,6 +9,11 @@ from typing import Optional
 from XYZ_Robot.stroke_font import STROKE_FONT
 from XYZ_Robot.marker_shapes import MARKER_SHAPES
 
+try:
+    from config.mower_config import CONFIG
+except Exception:
+    CONFIG = None
+
 class XYZRobot:
     # --------------------------------------------------
     # Feedrate / Verfahrgeschwindigkeit Achsen mm/min
@@ -17,9 +22,10 @@ class XYZRobot:
     DEFAULT_FEEDRATE_Z = 900.0
     DEFAULT_FEEDRATE_MARKING = 2000.0
 
+    # Fallbackwerte. Produktiv werden die Werte aus CONFIG.marker verwendet.
     Z_MARK = 166.0
-    Z_CLEAR = 172.0
-    Z_TRAVEL = 178.0
+    Z_CLEAR = Z_MARK + 5.0
+    Z_TRAVEL = Z_MARK + 10.0
 
     # --------------------------------------------------
     # Arbeitsraum [mm]
@@ -172,14 +178,29 @@ class XYZRobot:
         command = self._build_move_command(x=dx, y=dy, z=dz, feedrate=feedrate)
         return self.send_gcode(command, command_timeout=command_timeout)
 
+    def _configured_z_mark(self) -> float:
+        if CONFIG is not None and hasattr(CONFIG, "marker"):
+            return float(getattr(CONFIG.marker, "z_mark_mm", self.Z_MARK))
+        return self.Z_MARK
+
+    def _configured_z_clear(self) -> float:
+        if CONFIG is not None and hasattr(CONFIG, "marker") and hasattr(CONFIG.marker, "z_clear_mm"):
+            return float(CONFIG.marker.z_clear_mm)
+        return self._configured_z_mark() + 5.0
+
+    def _configured_z_travel(self) -> float:
+        if CONFIG is not None and hasattr(CONFIG, "marker") and hasattr(CONFIG.marker, "z_travel_mm"):
+            return float(CONFIG.marker.z_travel_mm)
+        return self._configured_z_mark() + 10.0
+
     def z_to_mark(self):
-        return self.move_absolute(z=self.Z_MARK, feedrate=self.DEFAULT_FEEDRATE_Z)
+        return self.move_absolute(z=self._configured_z_mark(), feedrate=self.DEFAULT_FEEDRATE_Z)
 
     def z_to_travel(self):
-        return self.move_absolute(z=self.Z_TRAVEL, feedrate=self.DEFAULT_FEEDRATE_Z)
+        return self.move_absolute(z=self._configured_z_travel(), feedrate=self.DEFAULT_FEEDRATE_Z)
 
     def z_to_clear(self):
-        return self.move_absolute(z=self.Z_CLEAR, feedrate=self.DEFAULT_FEEDRATE_Z)
+        return self.move_absolute(z=self._configured_z_clear(), feedrate=self.DEFAULT_FEEDRATE_Z)
 
     def move_xy_travel_relative(self, dx=None, dy=None):
         return self.move_relative(dx=dx, dy=dy, feedrate=self.DEFAULT_FEEDRATE_XY)

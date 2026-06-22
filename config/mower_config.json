@@ -20,7 +20,8 @@
     "marker": {
         "shape": "plus",
         "size_mm": 40.0,
-        "angle_deg": 0.0
+        "angle_deg": 0.0,
+        "z_mark_mm": 166.0
     },
     "transformation": {
         "marker_to_reflector_robot": [
