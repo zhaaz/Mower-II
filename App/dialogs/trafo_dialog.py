@@ -1,4 +1,4 @@
-# App/dialogs/trafo_dialog_classic.py
+# App/dialogs/trafo_dialog.py
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ FONT_SECTION = ("Segoe UI", 11, "bold")
 FONT_MONO = ("Consolas", 10)
 
 
-def show_trafo_dialog_classic(
+def show_trafo_dialog(
         *,
         parent: tk.Misc,
         xyz_worker: Any,
@@ -34,14 +34,14 @@ def show_trafo_dialog_classic(
         on_finished: FinishedCallback | None = None,
         log: LogFunction | None = None,
 ) -> None:
-    """Klassischer Tk-Dialog fuer die Transformationsmessung.
+    """Tk-Dialog fuer die Transformationsmessung.
 
     Der Workflow startet direkt nach dem Oeffnen des Dialogs. Die eigentliche
     Berechnung laeuft in einem Hintergrundthread; GUI-Updates erfolgen ueber
     eine Queue im Tk-Hauptthread.
     """
 
-    dialog = TrafoDialogClassic(
+    dialog = TrafoDialog(
         parent=parent,
         xyz_worker=xyz_worker,
         tracker_receiver=tracker_receiver,
@@ -53,7 +53,7 @@ def show_trafo_dialog_classic(
     dialog.show()
 
 
-class TrafoDialogClassic:
+class TrafoDialog:
     def __init__(
             self,
             *,

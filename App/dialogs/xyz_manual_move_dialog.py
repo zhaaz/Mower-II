@@ -1,4 +1,4 @@
-# App/dialogs/xyz_manual_move_dialog_classic.py
+# App/dialogs/xyz_manual_move_dialog.py
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ ActionFunction = Callable[[str], None]
 ReadPositionFunction = Callable[[], None]
 
 
-def show_xyz_manual_move_dialog_classic(
+def show_xyz_manual_move_dialog(
         parent: tk.Misc,
         *,
         config: Any,
@@ -24,7 +24,7 @@ def show_xyz_manual_move_dialog_classic(
         log: LogFunction,
         set_current_action: ActionFunction,
 ) -> None:
-    """Klassischer Tk-Dialog für Jog, Positionslesen und absolute XYZ-Fahrt."""
+    """Tk-Dialog für Jog, Positionslesen und absolute XYZ-Fahrt."""
 
     dialog = tk.Toplevel(parent)
     dialog.title("XYZ manuell bewegen")

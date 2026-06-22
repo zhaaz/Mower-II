@@ -1,4 +1,4 @@
-# App/dialogs/xyz_connect_dialog_classic.py
+# App/dialogs/xyz_connect_dialog.py
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 
-def show_xyz_connect_dialog_classic(
+def show_xyz_connect_dialog(
         parent: tk.Misc,
         *,
         default_port: str,
         baudrate: int,
 ) -> str | None:
-    """Klassischer Tk-Dialog zum Verbinden des XYZ-Roboters.
+    """Tk-Dialog zum Verbinden des XYZ-Roboters.
 
     Gibt den ausgewählten Port zurück oder None bei Abbruch.
     """

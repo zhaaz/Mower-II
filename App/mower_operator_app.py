@@ -68,14 +68,14 @@ except Exception:
     FONT_MONO = ("Consolas", 9)
 
 try:
-    from App.dialogs.xyz_connect_dialog_classic import show_xyz_connect_dialog_classic
+    from App.dialogs.xyz_connect_dialog import show_xyz_connect_dialog
 except Exception:
-    show_xyz_connect_dialog_classic = None
+    show_xyz_connect_dialog = None
 
 try:
-    from App.dialogs.xyz_manual_move_dialog_classic import show_xyz_manual_move_dialog_classic
+    from App.dialogs.xyz_manual_move_dialog import show_xyz_manual_move_dialog
 except Exception:
-    show_xyz_manual_move_dialog_classic = None
+    show_xyz_manual_move_dialog = None
 
 try:
     from App.services.project_io import write_project_file
@@ -93,9 +93,9 @@ except Exception:
     LasertrackerReceiver = None
 
 try:
-    from App.dialogs.trafo_dialog_classic import show_trafo_dialog_classic
+    from App.dialogs.trafo_dialog import show_trafo_dialog
 except Exception:
-    show_trafo_dialog_classic = None
+    show_trafo_dialog = None
 
 try:
     from Transformation.trafo_manager import TrafoManager
@@ -1052,16 +1052,16 @@ class MowerOperatorApp(ctk.CTk):
             self.set_current_action("Fehler: CONFIG nicht geladen.")
             return
 
-        if show_xyz_connect_dialog_classic is None:
+        if show_xyz_connect_dialog is None:
             messagebox.showerror(
                 "XYZ",
-                "Klassischer XYZ-Connect-Dialog ist nicht verfügbar.",
+                "XYZ-Connect-Dialog ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Fehler: XYZ-Connect-Dialog nicht verfügbar.")
             return
 
-        selected_port = show_xyz_connect_dialog_classic(
+        selected_port = show_xyz_connect_dialog(
             parent=self,
             default_port=CONFIG.xyz.port,
             baudrate=CONFIG.xyz.baudrate,
@@ -1133,16 +1133,16 @@ class MowerOperatorApp(ctk.CTk):
             self.set_current_action("XYZ-Bewegung nicht moeglich: XYZ nicht verbunden.")
             return
 
-        if show_xyz_manual_move_dialog_classic is None:
+        if show_xyz_manual_move_dialog is None:
             messagebox.showerror(
                 "XYZ",
-                "Klassischer XYZ-Bewegungsdialog ist nicht verfügbar.",
+                "XYZ-Bewegungsdialog ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Fehler: XYZ-Bewegungsdialog nicht verfügbar.")
             return
 
-        show_xyz_manual_move_dialog_classic(
+        show_xyz_manual_move_dialog(
             parent=self,
             config=CONFIG,
             xyz_state_getter=lambda: self.xyz_state,
@@ -1462,11 +1462,11 @@ class MowerOperatorApp(ctk.CTk):
     def start_transformation(self) -> None:
         self.set_current_action("Transformation wird vorbereitet...")
 
-        if show_trafo_dialog_classic is None:
-            self.log("Klassischer Trafo-Dialog ist nicht verfügbar.")
+        if show_trafo_dialog is None:
+            self.log("Trafo-Dialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Transformation",
-                "Klassischer Trafo-Dialog ist nicht verfügbar.",
+                "Trafo-Dialog ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Fehler: Trafo-Dialog nicht verfügbar.")
@@ -1526,7 +1526,7 @@ class MowerOperatorApp(ctk.CTk):
             self.log("Transformationsdialog wird geöffnet.")
             self.set_current_action("Transformation läuft...")
 
-            show_trafo_dialog_classic(
+            show_trafo_dialog(
                 parent=self,
                 xyz_worker=self.xyz_worker,
                 tracker_receiver=self.tracker_receiver,
