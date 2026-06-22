@@ -8,7 +8,7 @@ dist/
 *.spec
 
 logs/
-project_tree.txt
+project_tree*.txt
 
 data/*
 !data/.gitkeep
