@@ -34,6 +34,11 @@ SelectionFlag = str
 SELECTED: SelectionFlag = "[x]"
 NOT_SELECTED: SelectionFlag = "[ ]"
 
+LABEL_NONE = "Keine"
+LABEL_POINT_NAME = "Punktnummer"
+LABEL_REMARK = "Bemerkung"
+LABEL_OPTIONS = (LABEL_NONE, LABEL_POINT_NAME, LABEL_REMARK)
+
 
 def show_point_marking_dialog(
         *,
@@ -106,14 +111,15 @@ class PointMarkingDialog:
 
         self.result_by_iid: dict[str, PointReachability] = {}
         self.selected_iids: set[str] = set()
+        self.label_mode_var = tk.StringVar(value=LABEL_POINT_NAME)
 
         self.window = tk.Toplevel(parent)
         self.window.title("Punkte markieren")
-        self.window.minsize(620, 520)
+        self.window.minsize(720, 540)
         self.window.transient(parent)
         self.window.grab_set()
 
-        _center_window(parent, self.window, 760, 620)
+        _center_window(parent, self.window, 900, 640)
 
         self._configure_styles()
         self._build_ui()
@@ -144,7 +150,7 @@ class PointMarkingDialog:
         self.window.grid_rowconfigure(0, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
         root.grid_columnconfigure(0, weight=1)
-        root.grid_rowconfigure(1, weight=1)
+        root.grid_rowconfigure(2, weight=1)
 
         summary_frame = ttk.LabelFrame(root, text="Zusammenfassung", padding=10, style="PointMarking.TLabelframe")
         summary_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
@@ -167,12 +173,34 @@ class PointMarkingDialog:
             sticky="w",
         )
 
+        label_frame = ttk.LabelFrame(root, text="Beschriftung", padding=10, style="PointMarking.TLabelframe")
+        label_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        label_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(label_frame, text="Beschriftung:", style="PointMarking.TLabel").grid(
+            row=0, column=0, padx=(0, 8), sticky="w"
+        )
+        self.label_mode_combo = ttk.Combobox(
+            label_frame,
+            textvariable=self.label_mode_var,
+            values=LABEL_OPTIONS,
+            state="readonly",
+            width=24,
+            font=FONT_NORMAL,
+        )
+        self.label_mode_combo.grid(row=0, column=1, sticky="w")
+        ttk.Label(
+            label_frame,
+            text="Bemerkung wird nur verwendet, wenn sie in der Punktdatei vorhanden ist.",
+            style="PointMarking.TLabel",
+        ).grid(row=1, column=0, columnspan=2, pady=(6, 0), sticky="w")
+
         table_frame = ttk.LabelFrame(root, text="Markierbare Punkte", padding=8, style="PointMarking.TLabelframe")
-        table_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+        table_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
-        columns = ("selected", "name", "status")
+        columns = ("selected", "name", "status", "marker", "remark")
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -183,9 +211,13 @@ class PointMarkingDialog:
         self.tree.heading("selected", text="Auswahl")
         self.tree.heading("name", text="Punktname")
         self.tree.heading("status", text="Status")
+        self.tree.heading("marker", text="Markierung")
+        self.tree.heading("remark", text="Bemerkung")
         self.tree.column("selected", width=90, stretch=False, anchor="center")
-        self.tree.column("name", width=260, stretch=True, anchor="w")
-        self.tree.column("status", width=140, stretch=False, anchor="w")
+        self.tree.column("name", width=210, stretch=True, anchor="w")
+        self.tree.column("status", width=120, stretch=False, anchor="w")
+        self.tree.column("marker", width=130, stretch=False, anchor="w")
+        self.tree.column("remark", width=220, stretch=True, anchor="w")
         self.tree.grid(row=0, column=0, sticky="nsew")
         self.tree.bind("<ButtonRelease-1>", self.on_table_click)
         self.tree.bind("<space>", self.on_space_toggle)
@@ -195,7 +227,7 @@ class PointMarkingDialog:
         self.tree.configure(yscrollcommand=scrollbar.set)
 
         log_frame = ttk.LabelFrame(root, text="Log", padding=8, style="PointMarking.TLabelframe")
-        log_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
+        log_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 10))
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
 
@@ -210,7 +242,7 @@ class PointMarkingDialog:
         self.textbox.grid(row=0, column=0, sticky="nsew")
 
         button_frame = ttk.Frame(root)
-        button_frame.grid(row=3, column=0, sticky="ew")
+        button_frame.grid(row=4, column=0, sticky="ew")
         for col in range(3):
             button_frame.grid_columnconfigure(col, weight=1)
 
@@ -261,6 +293,8 @@ class PointMarkingDialog:
                     SELECTED if is_selected else NOT_SELECTED,
                     result.name,
                     result.status_text,
+                    self.marker_text_for_point(result.point),
+                    self.remark_for_point(result.point),
                 ),
             )
 
@@ -282,6 +316,10 @@ class PointMarkingDialog:
         self.btn_selected.configure(state=state_selected)
         self.btn_all.configure(state=state_all)
         self.btn_close.configure(state=state_close, text=close_text)
+        try:
+            self.label_mode_combo.configure(state="disabled" if self.workflow_running else "readonly")
+        except Exception:
+            pass
 
     def on_table_click(self, event: tk.Event) -> None:
         if self.workflow_running:
@@ -314,7 +352,16 @@ class PointMarkingDialog:
             flag = SELECTED
 
         result = self.result_by_iid[iid]
-        self.tree.item(iid, values=(flag, result.name, result.status_text))
+        self.tree.item(
+            iid,
+            values=(
+                flag,
+                result.name,
+                result.status_text,
+                self.marker_text_for_point(result.point),
+                self.remark_for_point(result.point),
+            ),
+        )
         self.update_buttons()
 
     # --------------------------------------------------
@@ -348,6 +395,7 @@ class PointMarkingDialog:
         self.abort_event.clear()
         self.update_buttons()
         self.log(f"Markierung gestartet: {len(selected_results)} Punkt(e).")
+        self.log(f"Beschriftung: {self.label_mode_var.get()}")
 
         self.workflow_thread = threading.Thread(
             target=self._marking_thread_main,
@@ -375,15 +423,17 @@ class PointMarkingDialog:
                     self.log(f"{result.name}: wird uebersprungen, nicht mehr erreichbar ({refreshed.reason}).")
                     continue
 
-                self.log(f"{index}/{total}: markiere {result.name}.")
+                label_text = self.get_label_for_point(result.point)
+                label_info = label_text if label_text else "ohne Beschriftung"
+                self.log(f"{index}/{total}: markiere {result.name} ({label_info}).")
                 self.send_robot_command(
                     "mark_point",
                     timeout_s=240.0,
                     x=float(refreshed.robot_x),
                     y=float(refreshed.robot_y),
-                    label=result.name,
+                    label=label_text,
                     marker_size=CONFIG.marker.size_mm,
-                    marker_shape=CONFIG.marker.shape,
+                    marker_shape=self.marker_shape_for_point(result.point),
                     angle_deg=CONFIG.marker.angle_deg,
                 )
 
@@ -404,6 +454,39 @@ class PointMarkingDialog:
             self.gui_queue.put(("error", str(exc)))
         finally:
             self.gui_queue.put(("workflow_finished", None))
+
+    def get_label_for_point(self, point: Any) -> str:
+        mode = self.label_mode_var.get()
+
+        if mode == LABEL_NONE:
+            return ""
+
+        if mode == LABEL_REMARK:
+            return str(getattr(point, "remark", "")).strip()
+
+        return str(getattr(point, "name", "")).strip()
+
+    @staticmethod
+    def marker_shape_for_point(point: Any) -> str:
+        shape = str(getattr(point, "marker_shape", "")).strip()
+        return shape if shape else str(getattr(CONFIG.marker, "shape", "plus"))
+
+    @staticmethod
+    def marker_text_for_point(point: Any) -> str:
+        code = getattr(point, "marker_code", None)
+        shape = str(getattr(point, "marker_shape", "")).strip()
+
+        if code is None and not shape:
+            return str(getattr(CONFIG.marker, "shape", "plus"))
+
+        if code is None:
+            return shape
+
+        return f"{code} / {shape}" if shape else str(code)
+
+    @staticmethod
+    def remark_for_point(point: Any) -> str:
+        return str(getattr(point, "remark", "")).strip()
 
     def _validate_runtime_state(self) -> None:
         if self.xyz_worker is None:
@@ -514,6 +597,8 @@ class PointMarkingDialog:
                     SELECTED if is_selected else NOT_SELECTED,
                     result.name,
                     result.status_text,
+                    self.marker_text_for_point(result.point),
+                    self.remark_for_point(result.point),
                 ),
             )
 

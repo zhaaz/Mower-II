@@ -919,6 +919,9 @@ class MowerOperatorApp(ctk.CTk):
                     "x": p.x,
                     "y": p.y,
                     "z": p.z,
+                    "marker_code": getattr(p, "marker_code", 1),
+                    "marker_shape": getattr(p, "marker_shape", "plus"),
+                    "remark": getattr(p, "remark", ""),
                     "marked": p.marked,
                     "reachable": p.reachable,
                     "last_robot_x": p.last_robot_x,
@@ -1908,7 +1911,13 @@ class MowerOperatorApp(ctk.CTk):
             child.destroy()
 
         for row, point in enumerate(self.points):
-            text = f"{point.name:<10}  {point.status_text}"
+            remark = str(getattr(point, "remark", "")).strip()
+            marker_shape = str(getattr(point, "marker_shape", "plus")).strip()
+            if remark:
+                text = f"{point.name:<10}  {point.status_text:<13}  {marker_shape:<12}  {remark}"
+            else:
+                text = f"{point.name:<10}  {point.status_text:<13}  {marker_shape}"
+
             if point.reachable and not point.marked:
                 text += "  *"
 
@@ -1950,12 +1959,19 @@ class MowerOperatorApp(ctk.CTk):
 
         if self.lbl_selected_point is not None:
             self.lbl_selected_point.configure(text=f"Auswahl: {point.name} | {point.status_text}")
+        remark = str(getattr(point, "remark", "")).strip()
+        marker_code = getattr(point, "marker_code", 1)
+        marker_shape = str(getattr(point, "marker_shape", "plus")).strip()
+        remark_text = remark if remark else "-"
+
         self.lbl_selected_point_details.configure(
             text=(
                 f"Auswahl:\n"
                 f"{point.name}\n"
                 f"{point.xyz_text()}\n"
                 f"Status: {point.status_text}\n"
+                f"Markierung: {marker_code} / {marker_shape}\n"
+                f"Bemerkung: {remark_text}\n"
                 f"Erreichbar: {'ja' if point.reachable else 'nein'}"
             )
         )
