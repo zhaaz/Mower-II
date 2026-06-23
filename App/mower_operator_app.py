@@ -108,6 +108,16 @@ except Exception:
     show_marker_height_calibration_dialog = None
 
 try:
+    from App.dialogs.point_marking_dialog import show_point_marking_dialog
+except Exception:
+    show_point_marking_dialog = None
+
+try:
+    from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
+except Exception:
+    show_system_initialization_dialog = None
+
+try:
     from Transformation.trafo_manager import TrafoManager
 except Exception:
     TrafoManager = None
@@ -497,9 +507,12 @@ class MowerOperatorApp(ctk.CTk):
         menu_bar.add_cascade(label="Gyro", menu=gyro_menu)
 
         system_menu = Menu(menu_bar, tearoff=False)
+        system_menu.add_command(label="Initialisieren", command=self.initialize_system)
+        system_menu.add_separator()
         system_menu.add_command(label="Transformation starten", command=self.start_transformation)
         system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren", command=self.offset_calibration)
         system_menu.add_command(label="Markerhoehe kalibrieren", command=self.calibrate_marker_height)
+        system_menu.add_command(label="Punkte markieren", command=self.mark_points_dialog)
         system_menu.add_separator()
         system_menu.add_command(label="ARN aktivieren", command=self.activate_arn)
         system_menu.add_command(label="ARN deaktivieren", command=self.deactivate_arn)
@@ -1470,6 +1483,75 @@ class MowerOperatorApp(ctk.CTk):
     # System
     # --------------------------------------------------
 
+    def initialize_system(self) -> None:
+        self.set_current_action("Systeminitialisierung wird vorbereitet...")
+
+        if CONFIG is None:
+            messagebox.showerror("Initialisieren", "CONFIG ist nicht geladen.", parent=self)
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
+            return
+
+        if show_system_initialization_dialog is None:
+            self.log("Initialisierungsdialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Initialisieren",
+                "Initialisierungsdialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Initialisierungsdialog nicht verfügbar.")
+            return
+
+        if show_trafo_dialog is None:
+            self.log("Initialisierung nicht möglich: Trafo-Dialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Initialisieren",
+                "Trafo-Dialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Initialisierung nicht möglich: Trafo-Dialog fehlt.")
+            return
+
+        if self.trafo_manager is None:
+            self.log("Initialisierung nicht möglich: TrafoManager ist nicht verfügbar.")
+            messagebox.showerror(
+                "Initialisieren",
+                "TrafoManager ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Initialisierung nicht möglich: TrafoManager fehlt.")
+            return
+
+        try:
+            self.log("Initialisierungsdialog wird geöffnet.")
+            self.set_current_action("Systeminitialisierung läuft...")
+
+            show_system_initialization_dialog(
+                parent=self,
+                config=CONFIG,
+                xyz_worker_getter=lambda: self.xyz_worker,
+                ensure_xyz_worker=self._ensure_xyz_worker,
+                xyz_state_getter=lambda: self.xyz_state,
+                send_xyz_command=self._send_xyz_command,
+                tracker_receiver_getter=lambda: self.tracker_receiver,
+                tracker_data_current_getter=lambda: self.tracker_data_current,
+                start_tracker=self.start_tracker,
+                trafo_manager=self.trafo_manager,
+                show_trafo_dialog=show_trafo_dialog,
+                on_trafo_finished=self.on_trafo_finished,
+                on_finished=self.on_system_initialization_finished,
+                log=self.log,
+            )
+
+        except Exception as exc:
+            self.log(f"Initialisierungsdialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Initialisieren", str(exc), parent=self)
+            self.set_current_action("Systeminitialisierung konnte nicht gestartet werden.")
+            self.update_status()
+
+    def on_system_initialization_finished(self) -> None:
+        self.set_current_action("Systeminitialisierung abgeschlossen.")
+        self.update_status()
+
     def start_transformation(self) -> None:
         self.set_current_action("Transformation wird vorbereitet...")
 
@@ -1644,34 +1726,39 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         if show_marker_height_calibration_dialog is None:
-            self.log("Markerhoehen-Dialog ist nicht verfuegbar.")
+            self.log("Markerhoehen-Dialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Markerhoehe",
-                "Markerhoehen-Dialog ist nicht verfuegbar.",
+                "Markerhoehen-Dialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: Markerhoehen-Dialog nicht verfuegbar.")
+            self.set_current_action("Fehler: Markerhoehen-Dialog nicht verfügbar.")
             return
 
         if not self.xyz_ready or self.xyz_worker is None:
-            self.log("Markerhoehen-Kalibrierung nicht moeglich: XYZ ist nicht verbunden.")
-            messagebox.showwarning("Markerhoehe", "XYZ ist nicht verbunden.", parent=self)
-            self.set_current_action("Markerhoehen-Kalibrierung nicht moeglich: XYZ nicht verbunden.")
+            self.log("Markerhoehen-Kalibrierung nicht möglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Markerhoehe",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Markerhoehen-Kalibrierung nicht möglich: XYZ nicht verbunden.")
             return
 
         if not self.homing_done:
-            self.log("Markerhoehen-Kalibrierung nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            self.log("Markerhoehen-Kalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
             messagebox.showwarning(
                 "Markerhoehe",
-                "Bitte zuerst XYZ-Homing durchfuehren.",
+                "Bitte zuerst XYZ-Homing durchführen.",
                 parent=self,
             )
-            self.set_current_action("Markerhoehen-Kalibrierung nicht moeglich: Homing fehlt.")
+            self.set_current_action("Markerhoehen-Kalibrierung nicht möglich: Homing fehlt.")
             return
 
         try:
-            self.log("Markerhoehen-Dialog wird geoeffnet.")
-            self.set_current_action("Markerhoehe wird kalibriert...")
+            self.log("Markerhoehen-Dialog wird geöffnet.")
+            self.set_current_action("Markerhoehen-Kalibrierung läuft...")
+
             show_marker_height_calibration_dialog(
                 parent=self,
                 config=CONFIG,
@@ -1682,23 +1769,95 @@ class MowerOperatorApp(ctk.CTk):
                 set_current_action=self.set_current_action,
                 on_finished=self.on_marker_height_calibration_finished,
             )
-            self.set_current_action("Bereit.")
+
         except Exception as exc:
             self.log(f"Markerhoehen-Dialog konnte nicht gestartet werden: {exc}")
             messagebox.showerror("Markerhoehe", str(exc), parent=self)
             self.set_current_action("Markerhoehen-Kalibrierung konnte nicht gestartet werden.")
+            self.update_status()
 
     def on_marker_height_calibration_finished(self) -> None:
-        try:
-            self.log(
-                "Markerhoehe aktiv: "
-                f"Z_MARK={CONFIG.marker.z_mark_mm:.3f} mm, "
-                f"Z_CLEAR={CONFIG.marker.z_clear_mm:.3f} mm, "
-                f"Z_TRAVEL={CONFIG.marker.z_travel_mm:.3f} mm"
-            )
-        except Exception:
-            pass
         self.set_current_action("Markerhoehen-Kalibrierung abgeschlossen.")
+        self.update_status()
+
+
+    def mark_points_dialog(self) -> None:
+        self.set_current_action("Punkte markieren wird vorbereitet...")
+
+        if show_point_marking_dialog is None:
+            self.log("Punkte-markieren-Dialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Punkte markieren",
+                "Punkte-markieren-Dialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Punkte-markieren-Dialog nicht verfuegbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Punkte markieren nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Punkte markieren",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Punkte markieren nicht moeglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Punkte markieren nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            messagebox.showwarning(
+                "Punkte markieren",
+                "Bitte zuerst XYZ-Homing durchfuehren.",
+                parent=self,
+            )
+            self.set_current_action("Punkte markieren nicht moeglich: Homing fehlt.")
+            return
+
+        if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
+            self.log("Punkte markieren nicht moeglich: keine gueltige Transformation vorhanden.")
+            messagebox.showwarning(
+                "Punkte markieren",
+                "Es ist keine gueltige Transformation vorhanden.",
+                parent=self,
+            )
+            self.set_current_action("Punkte markieren nicht moeglich: Trafo ungueltig.")
+            return
+
+        if not self.points:
+            self.log("Punkte markieren nicht moeglich: keine Punkte geladen.")
+            messagebox.showwarning(
+                "Punkte markieren",
+                "Es sind keine Punkte geladen.",
+                parent=self,
+            )
+            self.set_current_action("Punkte markieren nicht moeglich: keine Punkte geladen.")
+            return
+
+        try:
+            self.log("Punkte-markieren-Dialog wird geoeffnet.")
+            self.set_current_action("Punkte markieren...")
+
+            show_point_marking_dialog(
+                parent=self,
+                points=self.points,
+                xyz_worker=self.xyz_worker,
+                xyz_state_getter=lambda: self.xyz_state,
+                trafo_manager=self.trafo_manager,
+                on_points_changed=lambda: self.refresh_points(keep_map_view=True),
+                on_finished=self.on_point_marking_finished,
+                log=self.log,
+            )
+
+        except Exception as exc:
+            self.log(f"Punkte-markieren-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Punkte markieren", str(exc), parent=self)
+            self.set_current_action("Punkte markieren konnte nicht gestartet werden.")
+            self.update_status()
+
+    def on_point_marking_finished(self) -> None:
+        self.set_current_action("Punkte markieren abgeschlossen.")
+        self.refresh_points(keep_map_view=True)
         self.update_status()
 
     def activate_arn(self) -> None:
@@ -1913,6 +2072,11 @@ class MowerOperatorApp(ctk.CTk):
             f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
             f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"
             f"    Z {CONFIG.xyz.z_min:.0f}..{CONFIG.xyz.z_max:.0f}\n"
+            f"  Marker:\n"
+            f"    Shape={CONFIG.marker.shape}, Size={CONFIG.marker.size_mm:.3f} mm\n"
+            f"    Z_MARK={getattr(CONFIG.marker, 'z_mark_mm', 166.0):.3f} mm\n"
+            f"    Z_CLEAR={getattr(CONFIG.marker, 'z_clear_mm', getattr(CONFIG.marker, 'z_mark_mm', 166.0) + 5.0):.3f} mm\n"
+            f"    Z_TRAVEL={getattr(CONFIG.marker, 'z_travel_mm', getattr(CONFIG.marker, 'z_mark_mm', 166.0) + 10.0):.3f} mm\n"
             f"  Offset:\n"
             f"    X={CONFIG.transformation.marker_to_reflector_robot[0]:.3f}\n"
             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
