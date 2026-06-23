@@ -440,7 +440,8 @@ class MowerOperatorApp(ctk.CTk):
         self.status_indicators: dict[str, ctk.CTkLabel] = {}
 
         self._build_ui()
-        self.load_demo_points()
+        self._apply_demo_scene()
+        self.refresh_points()
         self.set_current_action("Bereit.")
         self.update_status()
 
@@ -450,7 +451,31 @@ class MowerOperatorApp(ctk.CTk):
     # UI
     # --------------------------------------------------
 
+
+    def _configure_operator_tree_styles(self) -> None:
+        style = ttk.Style(self)
+        style.configure(
+            "Operator.Treeview",
+            font=FONT_NORMAL,
+            rowheight=25,
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground=self.COLOR_TEXT,
+        )
+        style.configure(
+            "Operator.Treeview.Heading",
+            font=FONT_BOLD,
+            background="#f0f0f0",
+            foreground=self.COLOR_TEXT,
+        )
+        style.map(
+            "Operator.Treeview",
+            background=[("selected", "#d9eaff")],
+            foreground=[("selected", self.COLOR_TEXT)],
+        )
+
     def _build_ui(self) -> None:
+        self._configure_operator_tree_styles()
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
@@ -464,6 +489,7 @@ class MowerOperatorApp(ctk.CTk):
 
         file_menu = Menu(menu_bar, tearoff=False)
         file_menu.add_command(label="Punkte laden...", command=self.load_points_dialog)
+        file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
         file_menu.add_separator()
         file_menu.add_command(label="Projekt speichern", command=self.save_project)
         file_menu.add_command(label="Projekt speichern unter...", command=self.save_project_as)
@@ -569,7 +595,8 @@ class MowerOperatorApp(ctk.CTk):
         panel.grid(row=0, column=0, padx=(0, 8), pady=0, sticky="nsew")
         panel.grid_rowconfigure(2, weight=1)
         panel.grid_columnconfigure(0, weight=1)
-        panel.configure(width=280)
+        panel.configure(width=360)
+        panel.grid_propagate(False)
 
         ctk.CTkLabel(
             panel,
@@ -582,26 +609,101 @@ class MowerOperatorApp(ctk.CTk):
         self.lbl_point_count = ctk.CTkLabel(panel, text="0 Punkte", text_color=self.COLOR_MUTED, anchor="w")
         self.lbl_point_count.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="ew")
 
-        self.point_list_frame = ctk.CTkScrollableFrame(
+        list_container = tk.Frame(
             panel,
-            width=250,
-            fg_color=self.COLOR_PANEL_ALT,
-            border_width=1,
-            border_color=self.COLOR_BORDER,
-            corner_radius=0,
+            bg=self.COLOR_PANEL_ALT,
+            highlightthickness=1,
+            highlightbackground=self.COLOR_BORDER,
+            bd=0,
         )
-        self.point_list_frame.grid(row=2, column=0, padx=12, pady=8, sticky="nsew")
-        self.point_list_frame.grid_columnconfigure(0, weight=1)
+        list_container.grid(row=2, column=0, padx=12, pady=8, sticky="nsew")
+        list_container.grid_rowconfigure(0, weight=1)
+        list_container.grid_columnconfigure(0, weight=1)
 
-        self.lbl_selected_point_details = ctk.CTkLabel(
-            panel,
-            text="Auswahl: -",
-            text_color=self.COLOR_TEXT,
-            justify="left",
-            anchor="w",
-            wraplength=250,
+        self.point_tree = ttk.Treeview(
+            list_container,
+            columns=("name", "status", "shape", "remark"),
+            show="headings",
+            selectmode="browse",
+            height=18,
+            style="Operator.Treeview",
         )
-        self.lbl_selected_point_details.grid(row=3, column=0, padx=12, pady=(6, 12), sticky="ew")
+        self.point_tree.heading("name", text="Punkt")
+        self.point_tree.heading("status", text="Status")
+        self.point_tree.heading("shape", text="Typ")
+        self.point_tree.heading("remark", text="Bemerkung")
+
+        self.point_tree.column("name", width=70, minwidth=55, stretch=False, anchor="w")
+        self.point_tree.column("status", width=82, minwidth=70, stretch=False, anchor="w")
+        self.point_tree.column("shape", width=62, minwidth=48, stretch=False, anchor="center")
+        self.point_tree.column("remark", width=120, minwidth=80, stretch=True, anchor="w")
+
+        self.point_tree.grid(row=0, column=0, sticky="nsew")
+        self.point_tree.bind("<<TreeviewSelect>>", self.on_point_tree_selected)
+        self.point_tree.bind("<Double-1>", self.on_point_tree_double_click)
+
+        scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=self.point_tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.point_tree.configure(yscrollcommand=scrollbar.set)
+
+        details_frame = tk.Frame(
+            panel,
+            bg=self.COLOR_PANEL,
+            highlightthickness=1,
+            highlightbackground=self.COLOR_BORDER,
+            bd=0,
+        )
+        details_frame.grid(row=3, column=0, padx=12, pady=(6, 12), sticky="ew")
+        details_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            details_frame,
+            text="Ausgewählter Punkt",
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            anchor="w",
+        ).grid(row=0, column=0, padx=8, pady=(7, 2), sticky="ew")
+
+        self.point_detail_body = tk.Frame(
+            details_frame,
+            bg=self.COLOR_PANEL,
+            highlightthickness=0,
+            bd=0,
+        )
+        self.point_detail_body.grid(row=1, column=0, padx=8, pady=(0, 8), sticky="ew")
+        self.point_detail_body.grid_columnconfigure(0, weight=0, minsize=92)
+        self.point_detail_body.grid_columnconfigure(1, weight=1)
+
+        self.point_detail_value_labels: dict[str, ctk.CTkLabel] = {}
+        detail_rows = [
+            ("name", "Punktnummer:"),
+            ("coordinates", "Koordinaten:"),
+            ("status", "Status:"),
+            ("marker", "Markierung:"),
+            ("remark", "Bemerkung:"),
+        ]
+
+        for detail_row, (key, label_text) in enumerate(detail_rows):
+            ctk.CTkLabel(
+                self.point_detail_body,
+                text=label_text,
+                text_color=self.COLOR_TEXT,
+                anchor="w",
+                justify="left",
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            ).grid(row=detail_row, column=0, padx=(0, 10), pady=0, sticky="w")
+
+            value_label = ctk.CTkLabel(
+                self.point_detail_body,
+                text="-",
+                text_color=self.COLOR_TEXT,
+                anchor="w",
+                justify="left",
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+                wraplength=235,
+            )
+            value_label.grid(row=detail_row, column=1, padx=0, pady=0, sticky="ew")
+            self.point_detail_value_labels[key] = value_label
 
     def _build_map_panel(self, parent: ctk.CTkFrame) -> None:
         panel = self._panel(parent)
@@ -872,6 +974,30 @@ class MowerOperatorApp(ctk.CTk):
         self.refresh_points()
         self.log(f"Punktdatei geladen: {file_path}")
         self.set_current_action("Punktdatei geladen.")
+
+    def clear_points_dialog(self) -> None:
+        if not self.points:
+            self.log("Punkte löschen: keine Punkte geladen.")
+            self.set_current_action("Keine Punkte geladen.")
+            return
+
+        confirmed = messagebox.askyesno(
+            "Punkte löschen",
+            "Punkte wirklich löschen?",
+            parent=self,
+        )
+
+        if not confirmed:
+            self.set_current_action("Punkte löschen abgebrochen.")
+            return
+
+        count = len(self.points)
+        self.points = []
+        self.selected_point_name = None
+        self._apply_demo_scene()
+        self.refresh_points()
+        self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt.")
+        self.set_current_action("Punktliste gelöscht.")
 
     def save_project(self) -> None:
         if self.project_path is None:
@@ -1904,37 +2030,68 @@ class MowerOperatorApp(ctk.CTk):
         self._update_point_list()
         self.map_view.set_points(self.points, keep_view=keep_map_view)
         self._update_selected_label()
-        self.lbl_point_count.configure(text=f"{len(self.points)} Punkte")
+        reachable_count = sum(1 for point in self.points if point.reachable)
+        marked_count = sum(1 for point in self.points if point.marked)
+        self.lbl_point_count.configure(
+            text=f"{len(self.points)} Punkte | {reachable_count} erreichbar | {marked_count} markiert"
+        )
 
     def _update_point_list(self) -> None:
-        for child in self.point_list_frame.winfo_children():
-            child.destroy()
+        if not hasattr(self, "point_tree"):
+            return
 
-        for row, point in enumerate(self.points):
+        current_selection = self.selected_point_name
+        for item in self.point_tree.get_children():
+            self.point_tree.delete(item)
+
+        for point in self.points:
             remark = str(getattr(point, "remark", "")).strip()
-            marker_shape = str(getattr(point, "marker_shape", "plus")).strip()
-            if remark:
-                text = f"{point.name:<10}  {point.status_text:<13}  {marker_shape:<12}  {remark}"
-            else:
-                text = f"{point.name:<10}  {point.status_text:<13}  {marker_shape}"
-
-            if point.reachable and not point.marked:
-                text += "  *"
-
-            is_selected = point.name == self.selected_point_name
-            button = ctk.CTkButton(
-                self.point_list_frame,
-                text=text,
-                anchor="w",
-                fg_color="#d9eaff" if is_selected else "#eeeeee",
-                hover_color="#c7ddf6",
-                text_color=self.COLOR_TEXT,
-                border_width=1,
-                border_color="#b8b8b8",
-                corner_radius=0,
-                command=lambda name=point.name: self.select_point_by_name(name),
+            self.point_tree.insert(
+                "",
+                "end",
+                iid=point.name,
+                values=(
+                    point.name,
+                    self._point_status_display(point),
+                    self._marker_shape_symbol(point),
+                    remark,
+                ),
             )
-            button.grid(row=row, column=0, padx=4, pady=3, sticky="ew")
+
+        if current_selection and any(point.name == current_selection for point in self.points):
+            try:
+                self.point_tree.selection_set(current_selection)
+                self.point_tree.focus(current_selection)
+                self.point_tree.see(current_selection)
+            except Exception:
+                pass
+
+    def on_point_tree_selected(self, _event: tk.Event | None = None) -> None:
+        if not hasattr(self, "point_tree"):
+            return
+
+        selection = self.point_tree.selection()
+        if not selection:
+            return
+
+        name = str(selection[0])
+        if name == self.selected_point_name:
+            return
+
+        if not any(point.name == name for point in self.points):
+            return
+
+        self.selected_point_name = name
+        for point in self.points:
+            point.selected = point.name == self.selected_point_name
+        self.map_view.set_points(self.points, keep_view=True)
+        self._update_selected_label()
+        self.set_current_action(f"Punkt {name} ausgewaehlt.")
+
+    def on_point_tree_double_click(self, _event: tk.Event | None = None) -> None:
+        point = self.selected_point()
+        if point is not None:
+            self.set_current_action(f"Punkt {point.name} ausgewaehlt.")
 
     def select_point_by_name(self, name: str) -> None:
         if not any(point.name == name for point in self.points):
@@ -1954,27 +2111,83 @@ class MowerOperatorApp(ctk.CTk):
         if point is None:
             if self.lbl_selected_point is not None:
                 self.lbl_selected_point.configure(text="Auswahl: -")
-            self.lbl_selected_point_details.configure(text="Auswahl: -")
+            self._set_point_detail_values(
+                name="-",
+                coordinates="-",
+                status="-",
+                marker="-",
+                remark="-",
+            )
             return
 
         if self.lbl_selected_point is not None:
             self.lbl_selected_point.configure(text=f"Auswahl: {point.name} | {point.status_text}")
-        remark = str(getattr(point, "remark", "")).strip()
+
+        remark = str(getattr(point, "remark", "")).strip() or "-"
         marker_code = getattr(point, "marker_code", 1)
         marker_shape = str(getattr(point, "marker_shape", "plus")).strip()
-        remark_text = remark if remark else "-"
+        marker_text = self._marker_shape_label(marker_shape)
 
-        self.lbl_selected_point_details.configure(
-            text=(
-                f"Auswahl:\n"
-                f"{point.name}\n"
-                f"{point.xyz_text()}\n"
-                f"Status: {point.status_text}\n"
-                f"Markierung: {marker_code} / {marker_shape}\n"
-                f"Bemerkung: {remark_text}\n"
-                f"Erreichbar: {'ja' if point.reachable else 'nein'}"
-            )
+        self._set_point_detail_values(
+            name=str(point.name),
+            coordinates=point.xyz_text(),
+            status=self._point_status_display(point),
+            marker=f"{marker_code} - {marker_text}",
+            remark=remark,
         )
+
+    def _set_point_detail_values(
+            self,
+            *,
+            name: str,
+            coordinates: str,
+            status: str,
+            marker: str,
+            remark: str,
+    ) -> None:
+        values = {
+            "name": name,
+            "coordinates": coordinates,
+            "status": status,
+            "marker": marker,
+            "remark": remark,
+        }
+
+        labels = getattr(self, "point_detail_value_labels", {})
+        for key, value in values.items():
+            label = labels.get(key)
+            if label is not None:
+                label.configure(text=value)
+
+    @staticmethod
+    def _marker_shape_label(marker_shape: str) -> str:
+        labels = {
+            "plus": "Plus",
+            "cross": "Kreuz",
+            "circle_point": "Kreis/Punkt",
+            "plus_circle": "Plus/Kreis",
+            "none": "Keine",
+        }
+        return labels.get(str(marker_shape).strip(), str(marker_shape).strip() or "-")
+
+    def _marker_shape_symbol(self, point: StakeoutPoint) -> str:
+        marker_shape = str(getattr(point, "marker_shape", "plus")).strip()
+        symbols = {
+            "plus": "+",
+            "cross": "X",
+            "circle_point": "○",
+            "plus_circle": "+○",
+            "none": "-",
+        }
+        return symbols.get(marker_shape, self._marker_shape_label(marker_shape))
+
+    @staticmethod
+    def _point_status_display(point: StakeoutPoint) -> str:
+        if bool(getattr(point, "marked", False)):
+            return "markiert"
+        if bool(getattr(point, "reachable", False)):
+            return "erreichbar"
+        return "offen"
 
     # --------------------------------------------------
     # Demo scene / reachability placeholder
