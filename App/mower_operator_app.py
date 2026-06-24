@@ -88,6 +88,11 @@ except Exception:
     XYZRobotWorker = None
 
 try:
+    from KVH_DSP.kvh_dsp_worker import KVHDSPWorker
+except Exception:
+    KVHDSPWorker = None
+
+try:
     from Lasertracker.lasertracker_receiver import LasertrackerReceiver
 except Exception:
     LasertrackerReceiver = None
@@ -116,6 +121,11 @@ try:
     from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
 except Exception:
     show_system_initialization_dialog = None
+
+try:
+    from App.dialogs.kvh_drift_dialog import show_kvh_drift_dialog
+except Exception:
+    show_kvh_drift_dialog = None
 
 try:
     from Transformation.trafo_manager import TrafoManager
@@ -428,6 +438,8 @@ class MowerOperatorApp(ctk.CTk):
         self.xyz_state: Any | None = None
         self.tracker_receiver: Any | None = None
         self.tracker_state: Any | None = None
+        self.gyro_worker: Any | None = None
+        self.gyro_state: Any | None = None
 
         if TrafoManager is not None:
             self.trafo_manager = TrafoManager()
@@ -525,6 +537,9 @@ class MowerOperatorApp(ctk.CTk):
         gyro_menu = Menu(menu_bar, tearoff=False)
         gyro_menu.add_command(label="Verbinden", command=self.connect_gyro)
         gyro_menu.add_command(label="Trennen", command=self.disconnect_gyro)
+        gyro_menu.add_separator()
+        gyro_menu.add_command(label="Winkel auf 0 setzen", command=self.reset_gyro_angle)
+        gyro_menu.add_command(label="Drift bestimmen", command=self.determine_gyro_drift)
         gyro_menu.add_separator()
         gyro_menu.add_command(label="Status anzeigen", command=self.show_gyro_status)
         menu_bar.add_cascade(label="Gyro", menu=gyro_menu)
@@ -1100,6 +1115,12 @@ class MowerOperatorApp(ctk.CTk):
         except Exception:
             pass
 
+        try:
+            if self.gyro_worker is not None and hasattr(self.gyro_worker, "stop"):
+                self.gyro_worker.stop()
+        except Exception:
+            pass
+
         self.destroy()
 
     # --------------------------------------------------
@@ -1587,24 +1608,219 @@ class MowerOperatorApp(ctk.CTk):
     def show_drehmotor_status(self) -> None:
         self.log(f"Drehmotor Status: {'bereit' if self.drehmotor_ready else 'nicht bereit'}")
 
+    def _ensure_gyro_worker(self) -> bool:
+        """Erzeugt den KVH-DSP-Worker bei Bedarf."""
+        if self.gyro_worker is not None:
+            return True
+
+        if KVHDSPWorker is None:
+            self.log("KVHDSPWorker konnte nicht importiert werden.")
+            messagebox.showerror(
+                "Gyro",
+                "KVHDSPWorker konnte nicht importiert werden.",
+                parent=self,
+            )
+            return False
+
+        try:
+            self.gyro_worker = KVHDSPWorker(
+                on_log=self.on_gyro_log,
+                on_state_changed=self.on_gyro_state_changed,
+            )
+            self.gyro_worker.start()
+            self.log("KVH-DSP-Worker initialisiert.")
+            return True
+        except Exception as exc:
+            self.gyro_worker = None
+            self.log(f"KVH-DSP-Worker konnte nicht initialisiert werden: {exc}")
+            messagebox.showerror("Gyro", str(exc), parent=self)
+            return False
+
+    def on_gyro_state_changed(self, state: Any) -> None:
+        self.gyro_state = state
+
+        def apply_state() -> None:
+            self.gyro_ready = bool(getattr(state, "connected", False))
+            self.gyems_connected = self.gyro_ready
+            self.update_status()
+
+        try:
+            self.after(0, apply_state)
+        except Exception:
+            pass
+
+    def on_gyro_log(self, text: str) -> None:
+        def apply_log() -> None:
+            self.log(f"Gyro: {text}")
+            lower_text = text.lower()
+            if "driftmessung abgeschlossen" in lower_text:
+                self.set_current_action("KVH DSP Driftmessung abgeschlossen.")
+            elif "drift gesetzt" in lower_text:
+                self.set_current_action("KVH DSP Driftwert gesetzt.")
+            elif "driftmessung gestoppt" in lower_text:
+                self.set_current_action("KVH DSP Driftmessung gestoppt.")
+
+        try:
+            self.after(0, apply_log)
+        except Exception:
+            pass
+
     def connect_gyro(self) -> None:
-        self.set_current_action("Gyro wird verbunden...")
-        self.gyro_ready = True
-        self.gyems_connected = True
-        self.log("Gyro verbunden. Hinweis: In dieser Erstversion als Status gesetzt.")
-        self.set_current_action("Gyro verbunden.")
-        self.update_status()
+        self.set_current_action("KVH DSP wird verbunden...")
+
+        if CONFIG is None:
+            messagebox.showerror("Gyro", "CONFIG ist nicht geladen.", parent=self)
+            self.set_current_action("Fehler: CONFIG nicht geladen.")
+            return
+
+        default_port = str(getattr(getattr(CONFIG, "gyro", None), "port", "COM3"))
+        baudrate = int(getattr(getattr(CONFIG, "gyro", None), "baudrate", 375000))
+
+        port = simpledialog.askstring(
+            "Gyro verbinden",
+            "KVH-DSP COM-Port:",
+            initialvalue=default_port,
+            parent=self,
+        )
+
+        if not port:
+            self.set_current_action("Bereit.")
+            return
+
+        if not self._ensure_gyro_worker():
+            self.set_current_action("KVH DSP konnte nicht initialisiert werden.")
+            return
+
+        try:
+            self.gyro_worker.send_command(
+                "connect",
+                port=port.strip(),
+                baudrate=baudrate,
+            )
+            self.log(f"KVH DSP verbinden angefordert: {port.strip()} @ {baudrate}.")
+            self.set_current_action("KVH DSP Verbindung wird aufgebaut...")
+        except Exception as exc:
+            self.log(f"KVH DSP verbinden fehlgeschlagen: {exc}")
+            messagebox.showerror("Gyro", str(exc), parent=self)
+            self.set_current_action("KVH DSP Verbindung fehlgeschlagen.")
 
     def disconnect_gyro(self) -> None:
-        self.set_current_action("Gyro wird getrennt...")
-        self.gyro_ready = False
-        self.gyems_connected = False
-        self.log("Gyro getrennt.")
-        self.set_current_action("Gyro getrennt.")
+        self.set_current_action("KVH DSP wird getrennt...")
+
+        if self.gyro_worker is None:
+            self.gyro_ready = False
+            self.gyems_connected = False
+            self.update_status()
+            self.set_current_action("KVH DSP ist bereits getrennt.")
+            return
+
+        try:
+            self.gyro_worker.send_command("disconnect")
+            self.log("KVH DSP trennen angefordert.")
+            self.set_current_action("KVH DSP Trennung angefordert.")
+        except Exception as exc:
+            self.log(f"KVH DSP trennen fehlgeschlagen: {exc}")
+            messagebox.showerror("Gyro", str(exc), parent=self)
+            self.set_current_action("KVH DSP Trennung fehlgeschlagen.")
+
+    def reset_gyro_angle(self) -> None:
+        self.set_current_action("KVH DSP Winkel wird auf 0 gesetzt...")
+
+        if not self._gyro_connected_for_command("Winkel auf 0 setzen"):
+            return
+
+        try:
+            self.gyro_worker.send_command("reset_angle")
+            self.log("KVH DSP Winkel auf 0 setzen angefordert.")
+            self.set_current_action("KVH DSP Winkel auf 0 gesetzt.")
+        except Exception as exc:
+            self.log(f"KVH DSP Winkel-Reset fehlgeschlagen: {exc}")
+            messagebox.showerror("Gyro", str(exc), parent=self)
+            self.set_current_action("KVH DSP Winkel-Reset fehlgeschlagen.")
+
+    def determine_gyro_drift(self) -> None:
+        self.set_current_action("KVH DSP Driftmessung wird vorbereitet...")
+
+        if not self._gyro_connected_for_command("Drift bestimmen"):
+            return
+
+        if show_kvh_drift_dialog is None:
+            self.log("KVH Driftdialog ist nicht verfügbar.")
+            messagebox.showerror(
+                "Gyro",
+                "KVH Driftdialog ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: KVH Driftdialog nicht verfügbar.")
+            return
+
+        default_seconds = float(getattr(getattr(CONFIG, "gyro", None), "default_drift_seconds", 30.0))
+
+        try:
+            show_kvh_drift_dialog(
+                parent=self,
+                state_getter=lambda: self.gyro_state,
+                send_gyro_command=self.gyro_worker.send_command,
+                default_seconds=default_seconds,
+                on_finished=self.on_gyro_drift_finished,
+                log=lambda text: self.log(f"Gyro: {text}"),
+                set_current_action=self.set_current_action,
+            )
+        except Exception as exc:
+            self.log(f"KVH Driftdialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Gyro", str(exc), parent=self)
+            self.set_current_action("KVH Driftdialog konnte nicht gestartet werden.")
+
+    def on_gyro_drift_finished(self) -> None:
+        self.set_current_action("KVH DSP Driftmessung abgeschlossen.")
         self.update_status()
 
     def show_gyro_status(self) -> None:
-        self.log(f"Gyro Status: {'bereit' if self.gyro_ready else 'nicht bereit'}")
+        state = self.gyro_state
+
+        if state is None:
+            message = "KVH DSP Status: nicht initialisiert"
+            self.log(message)
+            messagebox.showinfo("Gyro Status", message, parent=self)
+            return
+
+        message = (
+            "KVH DSP Status:\n"
+            f"  Verbunden: {'ja' if bool(getattr(state, 'connected', False)) else 'nein'}\n"
+            f"  Status: {getattr(state, 'status_text', '-')}\n"
+            f"  Port: {getattr(state, 'port', '-') or '-'}\n"
+            f"  Baudrate: {getattr(state, 'baudrate', '-') or '-'}\n"
+            f"  Winkel: {float(getattr(state, 'angle_deg', 0.0)):+.6f} deg\n"
+            f"  Rate: {float(getattr(state, 'rate_dps', 0.0)):+.6f} deg/s\n"
+            f"  Drift: {float(getattr(state, 'drift_dps', 0.0)):+.10f} deg/s\n"
+            f"  Gemessene Drift: {self._format_optional_float(getattr(state, 'pending_drift_dps', None), precision=10, suffix=' deg/s')}\n"
+            f"  Drift-Fortschritt: {float(getattr(state, 'drift_progress', 0.0)) * 100.0:.1f}% "
+            f"({float(getattr(state, 'drift_elapsed_s', 0.0)):.1f} / "
+            f"{float(getattr(state, 'drift_duration_s', 0.0)):.1f} s)\n"
+            f"  Gültige Pakete: {int(getattr(state, 'valid_packets', 0))}\n"
+            f"  Übersprungene Bytes: {int(getattr(state, 'skipped_bytes', 0))}\n"
+            f"  Driftmessung aktiv: {'ja' if bool(getattr(state, 'drift_active', False)) else 'nein'}"
+        )
+        self.log(
+            "KVH DSP Status: "
+            f"connected={bool(getattr(state, 'connected', False))}, "
+            f"angle={float(getattr(state, 'angle_deg', 0.0)):+.6f} deg, "
+            f"rate={float(getattr(state, 'rate_dps', 0.0)):+.6f} deg/s, "
+            f"drift={float(getattr(state, 'drift_dps', 0.0)):+.10f} deg/s"
+        )
+        messagebox.showinfo("Gyro Status", message, parent=self)
+
+    def _gyro_connected_for_command(self, action_name: str) -> bool:
+        if self.gyro_worker is None or self.gyro_state is None or not bool(getattr(self.gyro_state, "connected", False)):
+            self.log(f"Gyro: {action_name} nicht möglich, KVH DSP ist nicht verbunden.")
+            messagebox.showwarning(
+                "Gyro",
+                "KVH DSP ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action(f"{action_name} nicht möglich: KVH DSP nicht verbunden.")
+            return False
+        return True
 
     # --------------------------------------------------
     # System
@@ -2318,6 +2534,8 @@ class MowerOperatorApp(ctk.CTk):
             "Config:\n"
             f"  XYZ: {CONFIG.xyz.port} @ {CONFIG.xyz.baudrate}\n"
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
+            f"  Gyro/KVH DSP: {getattr(getattr(CONFIG, 'gyro', None), 'port', 'COM3')} @ "
+            f"{getattr(getattr(CONFIG, 'gyro', None), 'baudrate', 375000)}\n"
             f"  Workspace X/Y/Z:\n"
             f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
             f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"

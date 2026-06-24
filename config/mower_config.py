@@ -21,7 +21,7 @@ class XYZConfig:
     x_max: float = 500.0
 
     y_min: float = 0.0
-    y_max: float = 440.0
+    y_max: float = 400.0
 
     z_min: float = 150.0
     z_max: float = 200.0
@@ -39,6 +39,13 @@ class TrackerConfig:
     capture_timeout_s: float = 30.0
 
     ccr_radius_mm: float = 19.05
+
+
+@dataclass
+class GyroConfig:
+    port: str = "COM3"
+    baudrate: int = 375000
+    default_drift_seconds: float = 30.0
 
 
 @dataclass
@@ -91,6 +98,7 @@ class PathsConfig:
 class MowerConfig:
     xyz: XYZConfig
     tracker: TrackerConfig
+    gyro: GyroConfig
     marker: MarkerConfig
     transformation: TransformationConfig
     paths: PathsConfig
@@ -103,6 +111,7 @@ class MowerConfig:
 DEFAULT_CONFIG = MowerConfig(
     xyz=XYZConfig(),
     tracker=TrackerConfig(),
+    gyro=GyroConfig(),
     marker=MarkerConfig(),
     transformation=TransformationConfig(),
     paths=PathsConfig(),
@@ -155,6 +164,7 @@ def load_config() -> MowerConfig:
 
     xyz_data = _section(data, "xyz")
     tracker_data = _section(data, "tracker")
+    gyro_data = _section(data, "gyro")
     marker_data = _section(data, "marker")
     transformation_data = _section(data, "transformation")
     paths_data = _section(data, "paths")
@@ -174,6 +184,7 @@ def load_config() -> MowerConfig:
     return MowerConfig(
         xyz=XYZConfig(**xyz_data),
         tracker=TrackerConfig(**tracker_data),
+        gyro=GyroConfig(**gyro_data),
         marker=MarkerConfig(**marker_data),
         transformation=transformation,
         paths=PathsConfig(**paths_data),
