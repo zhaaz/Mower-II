@@ -37,6 +37,10 @@ class MapView(ctk.CTkFrame):
         self.points: list[StakeoutPoint] = []
         self.tracker_position: tuple[float, float] | None = None
         self.robot_workspace_polygon: list[tuple[float, float]] | None = None
+        self.robot_wagon_outline_polygon: list[tuple[float, float]] | None = None
+        self.robot_front_arrow: tuple[tuple[float, float], tuple[float, float]] | None = None
+        self.robot_reflector_position: tuple[float, float] | None = None
+        self.robot_marker_position: tuple[float, float] | None = None
 
         self.view_center_x = 0.0
         self.view_center_y = 0.0
@@ -86,6 +90,50 @@ class MapView(ctk.CTkFrame):
         self.robot_workspace_polygon = polygon
         self.redraw()
 
+    def set_robot_wagon_outline_polygon(
+        self,
+        polygon: list[tuple[float, float]] | None,
+    ) -> None:
+        self.robot_wagon_outline_polygon = polygon
+        self.redraw()
+
+    def set_robot_front_arrow(
+        self,
+        arrow: tuple[tuple[float, float], tuple[float, float]] | None,
+    ) -> None:
+        self.robot_front_arrow = arrow
+        self.redraw()
+
+    def set_robot_reflector_position(
+        self,
+        position: tuple[float, float] | None,
+    ) -> None:
+        self.robot_reflector_position = position
+        self.redraw()
+
+    def set_robot_marker_position(
+        self,
+        position: tuple[float, float] | None,
+    ) -> None:
+        self.robot_marker_position = position
+        self.redraw()
+
+    def set_robot_visualization(
+        self,
+        *,
+        workspace_polygon: list[tuple[float, float]] | None = None,
+        wagon_outline_polygon: list[tuple[float, float]] | None = None,
+        front_arrow: tuple[tuple[float, float], tuple[float, float]] | None = None,
+        reflector_position: tuple[float, float] | None = None,
+        marker_position: tuple[float, float] | None = None,
+    ) -> None:
+        self.robot_workspace_polygon = workspace_polygon
+        self.robot_wagon_outline_polygon = wagon_outline_polygon
+        self.robot_front_arrow = front_arrow
+        self.robot_reflector_position = reflector_position
+        self.robot_marker_position = marker_position
+        self.redraw()
+
     def zoom_all(self) -> None:
         bounds = self._calculate_bounds()
 
@@ -131,7 +179,10 @@ class MapView(ctk.CTkFrame):
         self.canvas.delete("all")
 
         self._draw_background_grid()
+        self._draw_robot_wagon_outline()
         self._draw_robot_workspace()
+        self._draw_robot_front_arrow()
+        self._draw_robot_reflector_marker()
         self._draw_tracker()
         self._draw_points()
         self._draw_scale_bar()
@@ -198,6 +249,30 @@ class MapView(ctk.CTkFrame):
             self.canvas.create_line(sx1, sy1, sx2, sy2, fill="#2b2b2b")
             y += grid_mm
 
+    def _draw_robot_wagon_outline(self) -> None:
+        if not self.robot_wagon_outline_polygon:
+            return
+
+        coords: list[tuple[float, float]] = [
+            self.world_to_screen(x, y)
+            for x, y in self.robot_wagon_outline_polygon
+        ]
+
+        if len(coords) < 3:
+            return
+
+        closed = coords + [coords[0]]
+        flat: list[float] = []
+        for sx, sy in closed:
+            flat.extend([sx, sy])
+
+        self.canvas.create_line(
+            *flat,
+            fill="#666666",
+            width=1,
+            dash=(6, 4),
+        )
+
     def _draw_robot_workspace(self) -> None:
         if not self.robot_workspace_polygon:
             return
@@ -210,18 +285,67 @@ class MapView(ctk.CTkFrame):
         if len(coords) >= 6:
             self.canvas.create_polygon(
                 *coords,
-                fill="#263238",
+                fill="#004d5c",
                 outline="#00bcd4",
                 width=2,
-                stipple="gray25",
+                stipple="gray12",
+            )
+
+    def _draw_robot_front_arrow(self) -> None:
+        if self.robot_front_arrow is None:
+            return
+
+        (start_x, start_y), (end_x, end_y) = self.robot_front_arrow
+        sx1, sy1 = self.world_to_screen(start_x, start_y)
+        sx2, sy2 = self.world_to_screen(end_x, end_y)
+
+        self.canvas.create_line(
+            sx1,
+            sy1,
+            sx2,
+            sy2,
+            fill="#006f8a",
+            width=3,
+            arrow=tk.LAST,
+            arrowshape=(16, 20, 7),
+        )
+
+    def _draw_robot_reflector_marker(self) -> None:
+        if self.robot_reflector_position is not None:
+            x, y = self.robot_reflector_position
+            sx, sy = self.world_to_screen(x, y)
+            r = 5
+            self.canvas.create_oval(
+                sx - r,
+                sy - r,
+                sx + r,
+                sy + r,
+                fill="#ffffff",
+                outline="#006f8a",
+                width=2,
             )
             self.canvas.create_text(
-                coords[0],
-                coords[1] - 12,
-                text="Wagen / Arbeitsbereich",
-                fill="#00bcd4",
+                sx + 8,
+                sy + 8,
+                text="R",
+                fill="#006f8a",
+                anchor="nw",
+                font=("Segoe UI", 8, "bold"),
+            )
+
+        if self.robot_marker_position is not None:
+            x, y = self.robot_marker_position
+            sx, sy = self.world_to_screen(x, y)
+            r = 6
+            self.canvas.create_line(sx - r, sy, sx + r, sy, fill="#c62828", width=2)
+            self.canvas.create_line(sx, sy - r, sx, sy + r, fill="#c62828", width=2)
+            self.canvas.create_text(
+                sx + 8,
+                sy - 8,
+                text="M",
+                fill="#c62828",
                 anchor="sw",
-                font=("Segoe UI", 9),
+                font=("Segoe UI", 8, "bold"),
             )
 
     def _draw_tracker(self) -> None:
@@ -444,6 +568,24 @@ class MapView(ctk.CTkFrame):
             for x, y in self.robot_workspace_polygon:
                 xs.append(x)
                 ys.append(y)
+
+        if self.robot_wagon_outline_polygon:
+            for x, y in self.robot_wagon_outline_polygon:
+                xs.append(x)
+                ys.append(y)
+
+        if self.robot_front_arrow:
+            for x, y in self.robot_front_arrow:
+                xs.append(x)
+                ys.append(y)
+
+        if self.robot_reflector_position is not None:
+            xs.append(self.robot_reflector_position[0])
+            ys.append(self.robot_reflector_position[1])
+
+        if self.robot_marker_position is not None:
+            xs.append(self.robot_marker_position[0])
+            ys.append(self.robot_marker_position[1])
 
         if not xs or not ys:
             return None

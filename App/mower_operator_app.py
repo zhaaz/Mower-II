@@ -128,6 +128,11 @@ except Exception:
     CoordinateMapper = None
     RobotWorkspace = None
 
+try:
+    from App.services.map_visualization import build_map_visualization_state
+except Exception:
+    build_map_visualization_state = None
+
 
 def project_path(relative_path: str | Path) -> Path:
     """
@@ -162,7 +167,7 @@ class OperatorMapView(MapView):
     COLOR_TEXT = "#222222"
     COLOR_BUTTON = "#f7f7f7"
     COLOR_BUTTON_BORDER = "#9e9e9e"
-    COLOR_WORKSPACE_FILL = "#dceff5"
+    COLOR_WORKSPACE_FILL = "#eaf6fb"
     COLOR_WORKSPACE_OUTLINE = "#0086a8"
 
     def _draw_background_grid(self) -> None:
@@ -221,15 +226,7 @@ class OperatorMapView(MapView):
                 fill=self.COLOR_WORKSPACE_FILL,
                 outline=self.COLOR_WORKSPACE_OUTLINE,
                 width=2,
-                stipple="gray25",
-            )
-            self.canvas.create_text(
-                coords[0],
-                coords[1] - 12,
-                text="Wagen / Arbeitsbereich",
-                fill=self.COLOR_WORKSPACE_OUTLINE,
-                anchor="sw",
-                font=("Segoe UI", 9),
+                stipple="gray12",
             )
 
     def _draw_tracker(self) -> None:
@@ -1154,6 +1151,7 @@ class MowerOperatorApp(ctk.CTk):
             self.xyz_connected = self.xyz_ready
             self.homing_done = bool(getattr(state, "homed", False))
             self.update_status()
+            self.update_map_visualization(keep_view=True)
 
         self.after(0, apply_state)
 
@@ -1495,7 +1493,7 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         self.tracker_station_xyz = (x, y, z)
-        self.map_view.set_tracker_position((x, y))
+        self.update_map_visualization(keep_view=True)
         self.log(f"Trackerstation geladen: X={x:.3f}, Y={y:.3f}, Z={z:.3f} aus {path}")
         self.set_current_action("Trackerstation geladen.")
         self.update_status()
@@ -1767,6 +1765,7 @@ class MowerOperatorApp(ctk.CTk):
     def on_trafo_finished(self) -> None:
         if self.trafo_manager is not None:
             self.trafo_valid = bool(getattr(self.trafo_manager, "valid", False))
+        self.update_map_visualization(keep_view=False)
         self.set_current_action("Transformation abgeschlossen.")
         self.update_status()
 
@@ -2028,6 +2027,7 @@ class MowerOperatorApp(ctk.CTk):
             point.selected = point.name == self.selected_point_name
 
         self._update_point_list()
+        self.update_map_visualization(keep_view=True)
         self.map_view.set_points(self.points, keep_view=keep_map_view)
         self._update_selected_label()
         reachable_count = sum(1 for point in self.points if point.reachable)
@@ -2194,37 +2194,58 @@ class MowerOperatorApp(ctk.CTk):
     # --------------------------------------------------
 
     def _apply_demo_scene(self) -> None:
-        if not self.points:
-            self.map_view.set_tracker_position(None)
-            self.map_view.set_robot_workspace_polygon(None)
+        """Aktualisiert die Kartenvisualisierung ohne Demo-Arbeitsbereich.
+
+        Der Name bleibt aus Kompatibilitaetsgruenden erhalten, wird aber nicht mehr
+        fuer einen kuenstlichen Rahmen um die Punkte verwendet. Der Arbeitsbereich
+        wird nur aus der aktiven Transformation berechnet.
+        """
+
+        self.update_map_visualization(keep_view=True)
+
+    def update_map_visualization(self, *, keep_view: bool = True) -> None:
+        """Berechnet und zeichnet Arbeitsbereich, Frontpfeil, Reflektor und Marker."""
+
+        if not hasattr(self, "map_view"):
             return
 
-        min_x = min(point.x for point in self.points)
-        max_x = max(point.x for point in self.points)
-        min_y = min(point.y for point in self.points)
-        max_y = max(point.y for point in self.points)
-
-        if self.tracker_station_xyz is None:
-            tracker_xy = (min_x - 180.0, min_y - 120.0)
-            self.map_view.set_tracker_position(tracker_xy)
-        else:
+        if self.tracker_station_xyz is not None:
             self.map_view.set_tracker_position((self.tracker_station_xyz[0], self.tracker_station_xyz[1]))
+        else:
+            self.map_view.set_tracker_position(None)
 
-        center_x = (min_x + max_x) / 2.0
-        center_y = (min_y + max_y) / 2.0
-        half_w = self._config_float("xyz", "x_max", 500.0) / 2.0
-        half_h = self._config_float("xyz", "y_max", 400.0) / 2.0
+        if build_map_visualization_state is None or CONFIG is None:
+            if hasattr(self.map_view, "set_robot_visualization"):
+                self.map_view.set_robot_visualization(
+                    workspace_polygon=None,
+                    wagon_outline_polygon=None,
+                    front_arrow=None,
+                    reflector_position=None,
+                    marker_position=None,
+                )
+            else:
+                self.map_view.set_robot_workspace_polygon(None)
+            return
 
-        workspace_polygon = [
-            (center_x - half_w, center_y - half_h),
-            (center_x + half_w, center_y - half_h),
-            (center_x + half_w, center_y + half_h),
-            (center_x - half_w, center_y + half_h),
-        ]
-        self.map_view.set_robot_workspace_polygon(workspace_polygon)
+        state = build_map_visualization_state(
+            trafo_manager=self.trafo_manager,
+            config=CONFIG,
+            xyz_state=self.xyz_state,
+        )
 
-        for point in self.points:
-            point.reachable = self._point_in_polygon((point.x, point.y), workspace_polygon)
+        if hasattr(self.map_view, "set_robot_visualization"):
+            self.map_view.set_robot_visualization(
+                workspace_polygon=state.workspace_polygon,
+                wagon_outline_polygon=state.wagon_outline_polygon,
+                front_arrow=state.front_arrow,
+                reflector_position=state.reflector_position,
+                marker_position=state.marker_position,
+            )
+        else:
+            self.map_view.set_robot_workspace_polygon(state.workspace_polygon)
+
+        if not keep_view:
+            self.map_view.zoom_all()
 
     @staticmethod
     def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
