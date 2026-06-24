@@ -21,7 +21,7 @@ class XYZConfig:
     x_max: float = 500.0
 
     y_min: float = 0.0
-    y_max: float = 400.0
+    y_max: float = 440.0
 
     z_min: float = 150.0
     z_max: float = 200.0
