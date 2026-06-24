@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import time
@@ -441,6 +442,12 @@ class MowerOperatorApp(ctk.CTk):
         self.gyro_worker: Any | None = None
         self.gyro_state: Any | None = None
 
+        # Orientierung der Wagen-/Roboter-X-Achse im Lasertracker-XY-System.
+        # Referenz kommt aus der aktiven Transformation; der KVH liefert danach
+        # nur die relative Winkeländerung seit dem Nullsetzen.
+        self.gyro_reference_angle_deg: float | None = None
+        self.gyro_lt_reference_orientation_deg: float | None = None
+
         if TrafoManager is not None:
             self.trafo_manager = TrafoManager()
         else:
@@ -754,7 +761,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
         live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
-        live.grid_rowconfigure(13, weight=1)
+        live.grid_rowconfigure(14, weight=1)
         self._add_live_section_label(live, row=0, text="XYZ-Roboter")
         self._add_live_value_row(live, row=1, key="xyz_x", label="X")
         self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
@@ -765,7 +772,8 @@ class MowerOperatorApp(ctk.CTk):
 
         self._add_live_section_label(live, row=10, text="Gyro / KVH")
         self._add_live_value_row(live, row=11, key="gyro_angle", label="Winkel")
-        self._add_live_value_row(live, row=12, key="gyro_drift", label="Drift")
+        self._add_live_value_row(live, row=12, key="gyro_orientation_lt", label="Orientierung LT")
+        self._add_live_value_row(live, row=13, key="gyro_drift", label="Drift")
 
     def _status_card(
             self,
@@ -1733,6 +1741,9 @@ class MowerOperatorApp(ctk.CTk):
 
         try:
             self.gyro_worker.send_command("reset_angle")
+            self.gyro_reference_angle_deg = 0.0
+            if self.trafo_valid:
+                self._update_gyro_orientation_reference_from_trafo(log_result=False)
             self.log("KVH DSP Winkel auf 0 setzen angefordert.")
             self.set_current_action("KVH DSP Winkel auf 0 gesetzt.")
         except Exception as exc:
@@ -1880,6 +1891,10 @@ class MowerOperatorApp(ctk.CTk):
                 tracker_receiver_getter=lambda: self.tracker_receiver,
                 tracker_data_current_getter=lambda: self.tracker_data_current,
                 start_tracker=self.start_tracker,
+                gyro_worker_getter=lambda: self.gyro_worker,
+                ensure_gyro_worker=self._ensure_gyro_worker,
+                gyro_state_getter=lambda: self.gyro_state,
+                send_gyro_command=lambda command, **kwargs: self.gyro_worker.send_command(command, **kwargs) if self.gyro_worker is not None else None,
                 trafo_manager=self.trafo_manager,
                 show_trafo_dialog=show_trafo_dialog,
                 on_trafo_finished=self.on_trafo_finished,
@@ -1983,6 +1998,10 @@ class MowerOperatorApp(ctk.CTk):
     def on_trafo_finished(self) -> None:
         if self.trafo_manager is not None:
             self.trafo_valid = bool(getattr(self.trafo_manager, "valid", False))
+
+        if self.trafo_valid:
+            self._update_gyro_orientation_reference_from_trafo(log_result=True)
+
         self.update_map_visualization(keep_view=False)
         self.set_current_action("Transformation abgeschlossen.")
         self.update_status()
@@ -2583,7 +2602,82 @@ class MowerOperatorApp(ctk.CTk):
 
         gyro = self.gyro_state
         self._set_live_value("gyro_angle", self._format_unsigned_positive_value(getattr(gyro, "angle_deg", None), precision=3, suffix=" °"))
+        self._set_live_value("gyro_orientation_lt", self._format_unsigned_positive_value(self._current_gyro_orientation_lt_deg(), precision=3, suffix=" °"))
         self._set_live_value("gyro_drift", self._format_unsigned_positive_value(getattr(gyro, "drift_dps", None), precision=7, suffix=" °/s"))
+
+    def _update_gyro_orientation_reference_from_trafo(self, *, log_result: bool = False) -> None:
+        """Setzt die Orientierungsreferenz aus der aktiven Transformation.
+
+        Die aktive Transformation liefert die Orientierung der Roboter-X-Achse
+        im Lasertracker-XY-System. Der KVH-Winkel wird relativ zu diesem
+        Zeitpunkt addiert.
+        """
+        orientation = self._orientation_lt_from_active_trafo()
+        if orientation is None:
+            self.gyro_lt_reference_orientation_deg = None
+            self.gyro_reference_angle_deg = None
+            return
+
+        gyro_angle = 0.0
+        if self.gyro_state is not None:
+            try:
+                gyro_angle = float(getattr(self.gyro_state, "angle_deg", 0.0))
+            except Exception:
+                gyro_angle = 0.0
+
+        self.gyro_lt_reference_orientation_deg = orientation
+        self.gyro_reference_angle_deg = gyro_angle
+
+        if log_result:
+            self.log(
+                "Gyro-Orientierungsreferenz gesetzt: "
+                f"Orientierung LT={orientation:.3f} deg, KVH-Winkel={gyro_angle:.3f} deg."
+            )
+
+    def _orientation_lt_from_active_trafo(self) -> float | None:
+        if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
+            return None
+
+        trafo = getattr(self.trafo_manager, "active_trafo", None)
+        rotation = getattr(trafo, "rotation", None)
+        if rotation is None:
+            return None
+
+        try:
+            # Roboter +X zeigt nach vorne. Die erste Spalte der Rotationsmatrix
+            # ist diese Achse im Lasertracker-System.
+            vx = float(rotation[0, 0])
+            vy = float(rotation[1, 0])
+        except Exception:
+            try:
+                vx = float(rotation[0][0])
+                vy = float(rotation[1][0])
+            except Exception:
+                return None
+
+        angle = math.degrees(math.atan2(vy, vx))
+        return self._normalize_angle_360(angle)
+
+    def _current_gyro_orientation_lt_deg(self) -> float | None:
+        if self.gyro_lt_reference_orientation_deg is None or self.gyro_reference_angle_deg is None:
+            return None
+        if self.gyro_state is None:
+            return None
+
+        try:
+            gyro_angle = float(getattr(self.gyro_state, "angle_deg", 0.0))
+        except Exception:
+            return None
+
+        delta = gyro_angle - self.gyro_reference_angle_deg
+        return self._normalize_angle_360(self.gyro_lt_reference_orientation_deg + delta)
+
+    @staticmethod
+    def _normalize_angle_360(angle_deg: float) -> float:
+        value = float(angle_deg) % 360.0
+        if value < 0.0:
+            value += 360.0
+        return value
 
     def _set_live_value(self, key: str, text: str) -> None:
         label = self.live_value_labels.get(key)

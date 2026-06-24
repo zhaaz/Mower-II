@@ -18,6 +18,7 @@ FinishedCallback = Callable[[], None]
 SendXYZCommand = Callable[..., bool]
 StartTrackerFunction = Callable[[], None]
 ShowTrafoDialogFunction = Callable[..., None]
+SendGyroCommand = Callable[..., Any]
 
 DialogRequestKind = Literal["trafo"]
 
@@ -53,7 +54,11 @@ def show_system_initialization_dialog(
         tracker_receiver_getter: Callable[[], Any],
         tracker_data_current_getter: Callable[[], bool],
         start_tracker: StartTrackerFunction,
-        trafo_manager: Any,
+        gyro_worker_getter: Callable[[], Any] | None = None,
+        ensure_gyro_worker: Callable[[], bool] | None = None,
+        gyro_state_getter: StateGetter | None = None,
+        send_gyro_command: SendGyroCommand | None = None,
+        trafo_manager: Any = None,
         show_trafo_dialog: ShowTrafoDialogFunction | None,
         on_trafo_finished: FinishedCallback | None = None,
         on_finished: FinishedCallback | None = None,
@@ -69,6 +74,10 @@ def show_system_initialization_dialog(
         tracker_receiver_getter=tracker_receiver_getter,
         tracker_data_current_getter=tracker_data_current_getter,
         start_tracker=start_tracker,
+        gyro_worker_getter=gyro_worker_getter,
+        ensure_gyro_worker=ensure_gyro_worker,
+        gyro_state_getter=gyro_state_getter,
+        send_gyro_command=send_gyro_command,
         trafo_manager=trafo_manager,
         show_trafo_dialog=show_trafo_dialog,
         on_trafo_finished=on_trafo_finished,
@@ -84,8 +93,11 @@ class SystemInitializationDialog:
     Ablauf:
         1. XYZ auf Config-Default-Port verbinden
         2. XYZ Homing durchfuehren
-        3. Lasertracker UDP starten
-        4. Transformationsdialog starten
+        3. Lasertracker UDP starten und auf aktuelle Daten warten
+        4. KVH/Gyro verbinden
+        5. KVH/Gyro Drift bestimmen und setzen
+        6. KVH/Gyro Winkel auf 0 setzen
+        7. Transformationsdialog starten
     """
 
     def __init__(
@@ -100,6 +112,10 @@ class SystemInitializationDialog:
             tracker_receiver_getter: Callable[[], Any],
             tracker_data_current_getter: Callable[[], bool],
             start_tracker: StartTrackerFunction,
+            gyro_worker_getter: Callable[[], Any] | None,
+            ensure_gyro_worker: Callable[[], bool] | None,
+            gyro_state_getter: StateGetter | None,
+            send_gyro_command: SendGyroCommand | None,
             trafo_manager: Any,
             show_trafo_dialog: ShowTrafoDialogFunction | None,
             on_trafo_finished: FinishedCallback | None = None,
@@ -115,6 +131,10 @@ class SystemInitializationDialog:
         self.tracker_receiver_getter = tracker_receiver_getter
         self.tracker_data_current_getter = tracker_data_current_getter
         self.start_tracker = start_tracker
+        self.gyro_worker_getter = gyro_worker_getter
+        self.ensure_gyro_worker = ensure_gyro_worker
+        self.gyro_state_getter = gyro_state_getter
+        self.send_gyro_command = send_gyro_command
         self.trafo_manager = trafo_manager
         self.show_trafo_dialog = show_trafo_dialog
         self.on_trafo_finished = on_trafo_finished
@@ -132,6 +152,9 @@ class SystemInitializationDialog:
             StepState("xyz_connect", "XYZ verbinden"),
             StepState("homing", "XYZ Homing"),
             StepState("tracker", "Tracker UDP starten"),
+            StepState("gyro_connect", "Gyro / KVH verbinden"),
+            StepState("gyro_drift", "Gyro / KVH Drift bestimmen"),
+            StepState("gyro_zero", "Gyro / KVH Winkel nullsetzen"),
             StepState("trafo", "Transformation durchführen"),
         ]
         self.step_vars: dict[str, tk.StringVar] = {}
@@ -201,7 +224,7 @@ class SystemInitializationDialog:
             maximum=100.0,
         ).grid(row=0, column=0, sticky="ew")
 
-        self.progress_text_var = tk.StringVar(value="0/4")
+        self.progress_text_var = tk.StringVar(value=f"0/{len(self.steps)}")
         ttk.Label(progress_row, textvariable=self.progress_text_var, width=10, style="Init.TLabel").grid(
             row=0, column=1, padx=(8, 0), sticky="e"
         )
@@ -309,8 +332,17 @@ class SystemInitializationDialog:
         self.start_tracker_udp()
         self.set_progress(3, len(self.steps))
 
-        self.run_transformation()
+        self.connect_gyro_default()
         self.set_progress(4, len(self.steps))
+
+        self.determine_and_set_gyro_drift()
+        self.set_progress(5, len(self.steps))
+
+        self.reset_gyro_angle()
+        self.set_progress(6, len(self.steps))
+
+        self.run_transformation()
+        self.set_progress(7, len(self.steps))
 
     def connect_xyz_default(self) -> None:
         self.check_abort()
@@ -392,6 +424,113 @@ class SystemInitializationDialog:
         self.log("Aktuelle Trackerdaten vorhanden.")
         self.set_step("tracker", "OK")
 
+    def connect_gyro_default(self) -> None:
+        self.check_abort()
+        self.set_step("gyro_connect", "läuft")
+        self.set_status("Gyro / KVH wird verbunden.")
+
+        if self.ensure_gyro_worker is None or self.gyro_state_getter is None or self.send_gyro_command is None:
+            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+
+        port = str(getattr(getattr(self.config, "gyro", None), "port", "COM3"))
+        baudrate = int(getattr(getattr(self.config, "gyro", None), "baudrate", 375000))
+        self.log(f"Gyro / KVH verbinden: Port={port}, Baudrate={baudrate}")
+
+        state = self.gyro_state_getter()
+        if state is not None and bool(getattr(state, "connected", False)):
+            current_port = getattr(state, "port", "")
+            self.log(f"Gyro / KVH ist bereits verbunden. Port={current_port or '-'}")
+            self.set_step("gyro_connect", "bereits verbunden")
+            return
+
+        ok = self.ensure_gyro_worker()
+        if not ok:
+            raise RuntimeError("Gyro/KVH-Worker konnte nicht initialisiert werden.")
+
+        self.send_gyro_command("connect", port=port, baudrate=baudrate)
+
+        self.wait_for_gyro_state(
+            predicate=lambda state: bool(getattr(state, "connected", False)),
+            timeout_s=20.0,
+            error_text="Timeout beim Verbinden mit Gyro / KVH.",
+        )
+
+        self.log("Gyro / KVH verbunden.")
+        self.set_step("gyro_connect", "OK")
+
+    def determine_and_set_gyro_drift(self) -> None:
+        self.check_abort()
+        self.set_step("gyro_drift", "läuft")
+        self.set_status("Gyro / KVH Driftmessung: Wagen ruhig halten.")
+
+        if self.gyro_state_getter is None or self.send_gyro_command is None:
+            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+
+        state = self.gyro_state_getter()
+        if state is None or not bool(getattr(state, "connected", False)):
+            raise RuntimeError("Gyro / KVH ist nicht verbunden.")
+
+        duration_s = float(getattr(getattr(self.config, "gyro", None), "default_drift_seconds", 30.0))
+        duration_s = max(duration_s, 1.0)
+
+        self.log("WICHTIG: Wagen während der Driftmessung ruhig halten.")
+        self.log(f"Gyro / KVH Driftmessung starten: Dauer={duration_s:.1f} s")
+        time.sleep(1.0)
+        self.check_abort()
+
+        self.send_gyro_command("determine_drift", seconds=duration_s)
+
+        self.wait_for_gyro_state(
+            predicate=lambda state: bool(getattr(state, "drift_active", False)),
+            timeout_s=5.0,
+            error_text="Gyro / KVH Driftmessung wurde nicht gestartet.",
+        )
+
+        self.wait_for_gyro_state(
+            predicate=lambda state: (
+                not bool(getattr(state, "drift_active", False))
+                and getattr(state, "pending_drift_dps", None) is not None
+            ),
+            timeout_s=duration_s + 10.0,
+            error_text="Timeout bei der Gyro / KVH Driftmessung.",
+        )
+
+        pending = getattr(self.gyro_state_getter(), "pending_drift_dps", None)
+        self.log(f"Gyro / KVH Drift gemessen: {float(pending):.10f} deg/s")
+
+        self.send_gyro_command("set_drift")
+        self.wait_for_gyro_state(
+            predicate=lambda state: getattr(state, "pending_drift_dps", None) is None,
+            timeout_s=5.0,
+            error_text="Gyro / KVH Driftwert konnte nicht gesetzt werden.",
+        )
+
+        drift = float(getattr(self.gyro_state_getter(), "drift_dps", 0.0))
+        self.log(f"Gyro / KVH Drift gesetzt: {drift:.10f} deg/s")
+        self.set_step("gyro_drift", "OK")
+
+    def reset_gyro_angle(self) -> None:
+        self.check_abort()
+        self.set_step("gyro_zero", "läuft")
+        self.set_status("Gyro / KVH Winkel wird auf 0 gesetzt.")
+
+        if self.gyro_state_getter is None or self.send_gyro_command is None:
+            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+
+        state = self.gyro_state_getter()
+        if state is None or not bool(getattr(state, "connected", False)):
+            raise RuntimeError("Gyro / KVH ist nicht verbunden.")
+
+        self.send_gyro_command("reset_angle")
+        self.wait_for_gyro_state(
+            predicate=lambda state: abs(float(getattr(state, "angle_deg", 0.0))) < 0.05,
+            timeout_s=5.0,
+            error_text="Gyro / KVH Winkel konnte nicht auf 0 gesetzt werden.",
+        )
+
+        self.log("Gyro / KVH Winkel auf 0 gesetzt.")
+        self.set_step("gyro_zero", "OK")
+
     def run_transformation(self) -> None:
         self.check_abort()
         self.set_step("trafo", "läuft")
@@ -461,6 +600,23 @@ class SystemInitializationDialog:
                 return
             time.sleep(0.1)
         raise TimeoutError("Keine aktuellen Trackerdaten empfangen.")
+
+    def wait_for_gyro_state(self, *, predicate: Callable[[Any], bool], timeout_s: float, error_text: str) -> None:
+        if self.gyro_state_getter is None:
+            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+
+        start = time.time()
+        while time.time() - start < timeout_s:
+            self.check_abort()
+            state = self.gyro_state_getter()
+            if state is not None:
+                error = getattr(state, "error_text", None)
+                if error:
+                    raise RuntimeError(str(error))
+                if predicate(state):
+                    return
+            time.sleep(0.05)
+        raise TimeoutError(error_text)
 
     # --------------------------------------------------
     # GUI queue
