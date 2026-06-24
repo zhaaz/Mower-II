@@ -374,7 +374,7 @@ class MowerOperatorApp(ctk.CTk):
         - Standard-Menueleiste statt eigener MenuBand
         - Punktliste links
         - 2D-Ansicht in der Mitte
-        - Status + Log rechts
+        - Status und Live-Werte rechts
         - aktuelle Aktion unten
 
     Die Hardwarelogik ist bewusst so gehalten, dass vorhandene Dialoge und
@@ -561,8 +561,6 @@ class MowerOperatorApp(ctk.CTk):
 
         view_menu = Menu(menu_bar, tearoff=False)
         view_menu.add_command(label="Karte aktualisieren", command=lambda: self.refresh_points(keep_map_view=True))
-        view_menu.add_command(label="Log leeren", command=self.clear_log)
-        view_menu.add_command(label="Log speichern...", command=self.save_log_dialog)
         menu_bar.add_cascade(label="Ansicht", menu=view_menu)
 
         self.configure(menu=menu_bar)
@@ -735,195 +733,199 @@ class MowerOperatorApp(ctk.CTk):
         panel = self._panel(parent)
         panel.grid(row=0, column=2, padx=(8, 0), pady=0, sticky="nsew")
         panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(5, weight=1)
-        panel.configure(width=310)
+        panel.grid_rowconfigure(2, weight=1)
+        panel.configure(width=330)
         panel.grid_propagate(False)
 
-        # Kein uebergeordneter Status-Titel: Komponenten/System/Lasertracker
-        # sind in dieser Operator-Oberflaeche die sichtbaren Hauptueberschriften.
-        status_frame = ctk.CTkFrame(panel, fg_color=self.COLOR_PANEL, corner_radius=0)
-        status_frame.grid(row=0, column=0, padx=12, pady=(8, 6), sticky="ew")
-        status_frame.grid_columnconfigure(0, weight=1)
-        status_frame.grid_columnconfigure(1, weight=0, minsize=32)
+        self.status_indicators: dict[str, ctk.CTkLabel] = {}
+        self.status_text_labels: dict[str, ctk.CTkLabel] = {}
+        self.live_value_labels: dict[str, ctk.CTkLabel] = {}
 
-        row = 0
-        self._section_title(status_frame, "Komponenten", row)
-        row += 1
-        self._add_indicator_row(status_frame, row, "xyz", "XYZ")
-        row += 1
-        self._add_indicator_row(status_frame, row, "tracker", "Tracker")
-        row += 1
-        self._add_indicator_row(status_frame, row, "drehmotor", "Drehmotor")
-        row += 1
-        self._add_indicator_row(status_frame, row, "gyro", "Gyro")
-        row += 1
+        components = self._status_card(panel, title="Komponenten", row=0)
+        self._add_status_row(components, row=0, key="xyz", label="XYZ-Roboter")
+        self._add_status_row(components, row=1, key="tracker", label="Lasertracker")
+        self._add_status_row(components, row=2, key="gyro", label="Gyro / KVH")
+        self._add_status_row(components, row=3, key="drehmotor", label="Drehmotor / GYEMS")
 
-        self._section_title(status_frame, "System", row)
-        row += 1
-        self._add_indicator_row(status_frame, row, "homing", "Homing")
-        row += 1
-        self._add_indicator_row(status_frame, row, "trafo", "Trafo")
-        row += 1
-        self._add_indicator_row(status_frame, row, "arn", "Reflektornachfuehrung")
-        row += 1
-        self._add_indicator_row(status_frame, row, "trackerdaten", "Trackerdaten")
-        row += 1
+        system = self._status_card(panel, title="Systemzustände", row=1)
+        self._add_status_row(system, row=0, key="homing", label="Homing")
+        self._add_status_row(system, row=1, key="trafo", label="Transformation")
+        self._add_status_row(system, row=2, key="trackerdaten", label="Trackerdaten")
+        self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
-        self._section_title(status_frame, "Lasertracker", row)
-        row += 1
+        live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
+        live.grid_rowconfigure(13, weight=1)
+        self._add_live_section_label(live, row=0, text="XYZ-Roboter")
+        self._add_live_value_row(live, row=1, key="xyz_x", label="X")
+        self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
+        self._add_live_value_row(live, row=3, key="xyz_z", label="Z")
 
-        tracker_values_frame = ctk.CTkFrame(
-            status_frame,
-            fg_color=self.COLOR_PANEL,
-            corner_radius=0,
+        self._add_live_section_label(live, row=4, text="Lasertracker")
+        self._add_tracker_live_table(live, start_row=5)
+
+        self._add_live_section_label(live, row=10, text="Gyro / KVH")
+        self._add_live_value_row(live, row=11, key="gyro_angle", label="Winkel")
+        self._add_live_value_row(live, row=12, key="gyro_drift", label="Drift")
+
+    def _status_card(
+            self,
+            parent: ctk.CTkFrame,
+            *,
+            title: str,
+            row: int,
+            sticky: str = "ew",
+    ) -> tk.Frame:
+        card = tk.Frame(
+            parent,
+            bg=self.COLOR_PANEL,
+            highlightthickness=1,
+            highlightbackground=self.COLOR_BORDER,
+            bd=0,
         )
-        tracker_values_frame.grid(
-            row=row,
-            column=0,
-            columnspan=2,
-            padx=10,
-            pady=(2, 8),
-            sticky="ew",
-        )
-        tracker_values_frame.grid_columnconfigure(0, weight=1, uniform="tracker_values")
-        tracker_values_frame.grid_columnconfigure(1, weight=1, uniform="tracker_values")
+        card.grid(row=row, column=0, padx=12, pady=(8 if row == 0 else 6, 6), sticky=sticky)
+        card.grid_columnconfigure(1, weight=1)
+        card.grid_columnconfigure(2, weight=0)
 
         ctk.CTkLabel(
-            tracker_values_frame,
-            text="Station",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
-        ).grid(row=0, column=0, padx=(0, 8), pady=(0, 3), sticky="ew")
-
-        ctk.CTkLabel(
-            tracker_values_frame,
-            text="Messung",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
-        ).grid(row=0, column=1, padx=(8, 0), pady=(0, 3), sticky="ew")
-
-        self.lbl_tracker_station_x = ctk.CTkLabel(
-            tracker_values_frame,
-            text="X=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_station_x.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
-
-        self.lbl_tracker_measurement_x = ctk.CTkLabel(
-            tracker_values_frame,
-            text="X=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_measurement_x.grid(row=1, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
-
-        self.lbl_tracker_station_y = ctk.CTkLabel(
-            tracker_values_frame,
-            text="Y=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_station_y.grid(row=2, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
-
-        self.lbl_tracker_measurement_y = ctk.CTkLabel(
-            tracker_values_frame,
-            text="Y=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_measurement_y.grid(row=2, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
-
-        self.lbl_tracker_station_z = ctk.CTkLabel(
-            tracker_values_frame,
-            text="Z=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_station_z.grid(row=3, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
-
-        self.lbl_tracker_measurement_z = ctk.CTkLabel(
-            tracker_values_frame,
-            text="Z=-",
-            text_color=self.COLOR_TEXT,
-            anchor="w",
-            font=ctk.CTkFont(family="Consolas", size=12),
-        )
-        self.lbl_tracker_measurement_z.grid(row=3, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
-
-        ctk.CTkLabel(
-            panel,
-            text="Log",
+            card,
+            text=title,
             text_color=self.COLOR_TEXT,
             font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
             anchor="w",
-        ).grid(row=2, column=0, padx=12, pady=(6, 4), sticky="ew")
+        ).grid(row=0, column=0, columnspan=3, padx=10, pady=(8, 5), sticky="ew")
 
-        self.logbox = ctk.CTkTextbox(
-            panel,
-            wrap="word",
-            width=300,
-            height=180,
-            fg_color="#ffffff",
-            text_color=self.COLOR_TEXT,
-            border_width=1,
-            border_color=self.COLOR_BORDER,
-            corner_radius=0,
+        content = tk.Frame(card, bg=self.COLOR_PANEL, highlightthickness=0, bd=0)
+        content.grid(row=1, column=0, columnspan=3, padx=10, pady=(0, 9), sticky="nsew")
+        content.grid_columnconfigure(0, weight=0, minsize=24)
+        content.grid_columnconfigure(1, weight=1)
+        content.grid_columnconfigure(2, weight=0, minsize=105)
+        return content
+
+    def _add_status_row(self, parent: tk.Frame, row: int, key: str, label: str) -> None:
+        indicator = ctk.CTkLabel(
+            parent,
+            text="●",
+            text_color="#9e9e9e",
+            width=20,
+            height=20,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=18, weight="bold"),
         )
-        self.logbox.grid(row=5, column=0, padx=12, pady=(4, 8), sticky="nsew")
+        indicator.grid(row=row, column=0, padx=(0, 6), pady=1, sticky="w")
 
-        log_button_frame = tk.Frame(
-            panel,
-            bg=self.COLOR_PANEL,
-            highlightthickness=0,
-            bd=0,
-        )
-        log_button_frame.grid(row=6, column=0, padx=12, pady=(4, 12), sticky="ew")
-        log_button_frame.grid_columnconfigure(0, weight=1, uniform="log_buttons")
-        log_button_frame.grid_columnconfigure(1, weight=1, uniform="log_buttons")
-
-        ttk.Button(
-            log_button_frame,
-            text="Log leeren",
-            command=self.clear_log,
-            style="Operator.TButton",
-        ).grid(row=0, column=0, padx=0, pady=0, sticky="ew")
-
-        ttk.Button(
-            log_button_frame,
-            text="Log speichern...",
-            command=self.save_log_dialog,
-            style="Operator.TButton",
-        ).grid(row=0, column=1, padx=0, pady=0, sticky="ew")
-
-    def _add_indicator_row(self, parent: ctk.CTkFrame, row: int, key: str, label: str) -> None:
         ctk.CTkLabel(
             parent,
             text=label,
             text_color=self.COLOR_TEXT,
             anchor="w",
-            height=18,
+            height=20,
             font=ctk.CTkFont(family=FONT_FAMILY, size=13),
-        ).grid(row=row, column=0, padx=(10, 12), pady=(0, 0), sticky="w")
+        ).grid(row=row, column=1, padx=(0, 8), pady=1, sticky="ew")
 
-        indicator = ctk.CTkLabel(
+        value = ctk.CTkLabel(
             parent,
-            text="●",
-            text_color=self.COLOR_RED,
-            width=22,
-            height=18,
-            font=ctk.CTkFont(family=FONT_FAMILY, size=22, weight="bold"),
+            text="-",
+            text_color=self.COLOR_MUTED,
+            anchor="e",
+            height=20,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
         )
-        indicator.grid(row=row, column=1, padx=(0, 10), pady=(0, 0), sticky="e")
+        value.grid(row=row, column=2, padx=0, pady=1, sticky="e")
 
         self.status_indicators[key] = indicator
+        self.status_text_labels[key] = value
+
+    def _add_live_section_label(self, parent: tk.Frame, row: int, text: str) -> None:
+        ctk.CTkLabel(
+            parent,
+            text=text,
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+        ).grid(row=row, column=0, columnspan=3, padx=0, pady=(7 if row else 0, 2), sticky="ew")
+
+    def _add_live_value_row(self, parent: tk.Frame, row: int, key: str, label: str) -> None:
+        ctk.CTkLabel(
+            parent,
+            text=label,
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            height=19,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+        ).grid(row=row, column=0, padx=(0, 8), pady=0, sticky="w")
+
+        value = ctk.CTkLabel(
+            parent,
+            text="-",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            height=19,
+            font=ctk.CTkFont(family="Consolas", size=12),
+        )
+        value.grid(row=row, column=1, columnspan=2, padx=0, pady=0, sticky="ew")
+        self.live_value_labels[key] = value
+
+    def _add_tracker_live_table(self, parent: tk.Frame, start_row: int) -> None:
+        parent.grid_columnconfigure(1, weight=1)
+        parent.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkLabel(
+            parent,
+            text="",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            height=19,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+        ).grid(row=start_row, column=0, padx=(0, 8), pady=0, sticky="w")
+
+        ctk.CTkLabel(
+            parent,
+            text="Messung",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            height=19,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+        ).grid(row=start_row, column=1, padx=(0, 12), pady=0, sticky="ew")
+
+        ctk.CTkLabel(
+            parent,
+            text="Station",
+            text_color=self.COLOR_TEXT,
+            anchor="w",
+            height=19,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+        ).grid(row=start_row, column=2, padx=0, pady=0, sticky="ew")
+
+        for offset, axis in enumerate(("X", "Y", "Z"), start=1):
+            ctk.CTkLabel(
+                parent,
+                text=axis,
+                text_color=self.COLOR_TEXT,
+                anchor="w",
+                height=19,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            ).grid(row=start_row + offset, column=0, padx=(0, 8), pady=0, sticky="w")
+
+            measurement_value = ctk.CTkLabel(
+                parent,
+                text="-",
+                text_color=self.COLOR_TEXT,
+                anchor="w",
+                height=19,
+                font=ctk.CTkFont(family="Consolas", size=12),
+            )
+            measurement_value.grid(row=start_row + offset, column=1, padx=(0, 12), pady=0, sticky="ew")
+            self.live_value_labels[f"tracker_measurement_{axis.lower()}"] = measurement_value
+
+            station_value = ctk.CTkLabel(
+                parent,
+                text="-",
+                text_color=self.COLOR_TEXT,
+                anchor="w",
+                height=19,
+                font=ctk.CTkFont(family="Consolas", size=12),
+            )
+            station_value.grid(row=start_row + offset, column=2, padx=0, pady=0, sticky="ew")
+            self.live_value_labels[f"tracker_station_{axis.lower()}"] = station_value
 
     def _build_action_bar(self) -> None:
         bar = ctk.CTkFrame(
@@ -2488,30 +2490,164 @@ class MowerOperatorApp(ctk.CTk):
         self.lbl_current_action.configure(text=text)
 
     def update_status(self) -> None:
-        self._set_indicator("xyz", self.xyz_ready, "bereit", "nicht bereit")
-        self._set_indicator("tracker", self.tracker_ready, "bereit", "nicht bereit")
-        self._set_indicator("drehmotor", self.drehmotor_ready, "bereit", "nicht bereit")
-        self._set_indicator("gyro", self.gyro_ready, "bereit", "nicht bereit")
+        xyz_error = self._state_error_text(self.xyz_state)
+        gyro_error = self._state_error_text(self.gyro_state)
 
-        self._set_indicator("homing", self.homing_done, "referenziert", "nicht referenziert")
-        self._set_indicator("trafo", self.trafo_valid, "gueltig", "ungueltig")
-        self._set_indicator("arn", self.arn_active, "aktiv", "inaktiv")
-        self._set_indicator("trackerdaten", self.tracker_data_current, "aktuell", "keine aktuellen Daten")
+        if xyz_error:
+            self._set_status_row("xyz", "Fehler", "error")
+        else:
+            self._set_status_row("xyz", "verbunden" if self.xyz_ready else "getrennt", "ok" if self.xyz_ready else "error")
 
-        station_x, station_y, station_z = self._format_xyz_components(self.tracker_station_xyz)
-        measurement_x, measurement_y, measurement_z = self._format_xyz_components(self.current_lt_measurement_xyz)
+        if self.tracker_ready:
+            self._set_status_row("tracker", "UDP aktiv", "ok")
+        else:
+            self._set_status_row("tracker", "UDP aus", "error")
 
-        self.lbl_tracker_station_x.configure(text=station_x)
-        self.lbl_tracker_station_y.configure(text=station_y)
-        self.lbl_tracker_station_z.configure(text=station_z)
+        if gyro_error:
+            self._set_status_row("gyro", "Fehler", "error")
+        else:
+            self._set_status_row("gyro", "verbunden" if self.gyro_ready else "getrennt", "ok" if self.gyro_ready else "neutral")
 
-        self.lbl_tracker_measurement_x.configure(text=measurement_x)
-        self.lbl_tracker_measurement_y.configure(text=measurement_y)
-        self.lbl_tracker_measurement_z.configure(text=measurement_z)
+        self._set_status_row(
+            "drehmotor",
+            "verbunden" if self.drehmotor_ready else "getrennt",
+            "ok" if self.drehmotor_ready else "neutral",
+        )
 
-    def _set_indicator(self, key: str, active: bool, active_text: str, inactive_text: str) -> None:
-        indicator = self.status_indicators[key]
-        indicator.configure(text_color=self.COLOR_GREEN if active else self.COLOR_RED)
+        self._set_status_row(
+            "homing",
+            "erledigt" if self.homing_done else "offen",
+            "ok" if self.homing_done else "neutral",
+        )
+        self._set_status_row(
+            "trafo",
+            "gültig" if self.trafo_valid else "ungültig",
+            "ok" if self.trafo_valid else "error",
+        )
+
+        if self.tracker_data_current:
+            tracker_data_text = "aktuell"
+            tracker_data_state = "ok"
+        elif self.tracker_ready:
+            tracker_data_text = "wartet"
+            tracker_data_state = "warning"
+        else:
+            tracker_data_text = "keine Daten"
+            tracker_data_state = "error"
+        self._set_status_row("trackerdaten", tracker_data_text, tracker_data_state)
+
+        self._set_status_row(
+            "arn",
+            "aktiv" if self.arn_active else "inaktiv",
+            "ok" if self.arn_active else "neutral",
+        )
+
+        self._update_live_values()
+
+    def _set_status_row(self, key: str, text: str, state: str) -> None:
+        colors = {
+            "ok": self.COLOR_GREEN,
+            "warning": self.COLOR_YELLOW,
+            "error": self.COLOR_RED,
+            "neutral": "#8a8a8a",
+        }
+        text_colors = {
+            "ok": self.COLOR_TEXT,
+            "warning": self.COLOR_TEXT,
+            "error": self.COLOR_TEXT,
+            "neutral": self.COLOR_MUTED,
+        }
+
+        indicator = self.status_indicators.get(key)
+        if indicator is not None:
+            indicator.configure(text_color=colors.get(state, "#8a8a8a"))
+
+        label = self.status_text_labels.get(key)
+        if label is not None:
+            label.configure(text=text, text_color=text_colors.get(state, self.COLOR_TEXT))
+
+    def _update_live_values(self) -> None:
+        state = self.xyz_state
+        self._set_live_value("xyz_x", self._format_mm_component(getattr(state, "x", None)))
+        self._set_live_value("xyz_y", self._format_mm_component(getattr(state, "y", None)))
+        self._set_live_value("xyz_z", self._format_mm_component(getattr(state, "z", None)))
+
+        self._set_tracker_live_values(
+            prefix="tracker_station",
+            values=self.tracker_station_xyz,
+        )
+        self._set_tracker_live_values(
+            prefix="tracker_measurement",
+            values=self.current_lt_measurement_xyz,
+        )
+
+        gyro = self.gyro_state
+        self._set_live_value("gyro_angle", self._format_unsigned_positive_value(getattr(gyro, "angle_deg", None), precision=3, suffix=" °"))
+        self._set_live_value("gyro_drift", self._format_unsigned_positive_value(getattr(gyro, "drift_dps", None), precision=7, suffix=" °/s"))
+
+    def _set_live_value(self, key: str, text: str) -> None:
+        label = self.live_value_labels.get(key)
+        if label is not None:
+            label.configure(text=text)
+
+    def _set_tracker_live_values(
+            self,
+            *,
+            prefix: str,
+            values: tuple[float, float, float] | None,
+    ) -> None:
+        if values is None:
+            x_text = y_text = z_text = "-"
+        else:
+            x, y, z = values
+            x_text = self._format_coordinate_value(x)
+            y_text = self._format_coordinate_value(y)
+            z_text = self._format_coordinate_value(z)
+
+        self._set_live_value(f"{prefix}_x", x_text)
+        self._set_live_value(f"{prefix}_y", y_text)
+        self._set_live_value(f"{prefix}_z", z_text)
+
+    @staticmethod
+    def _state_error_text(state: Any | None) -> str:
+        if state is None:
+            return ""
+        error_text = getattr(state, "error_text", None)
+        return str(error_text).strip() if error_text else ""
+
+    @staticmethod
+    def _format_mm_component(value: Any) -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):10.3f} mm"
+        except Exception:
+            return "-"
+
+    @staticmethod
+    def _format_xyz_inline(values: tuple[float, float, float] | None) -> str:
+        if values is None:
+            return "X=-  Y=-  Z=-"
+        x, y, z = values
+        return f"X={x:.3f}  Y={y:.3f}  Z={z:.3f}"
+
+    @staticmethod
+    def _format_unsigned_positive_value(value: Any, *, precision: int, suffix: str = "") -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):.{precision}f}{suffix}"
+        except Exception:
+            return "-"
+
+    @staticmethod
+    def _format_coordinate_value(value: Any) -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):.3f}"
+        except Exception:
+            return "-"
 
     @staticmethod
     def _format_xyz(values: tuple[float, float, float] | None) -> str:
@@ -2526,6 +2662,15 @@ class MowerOperatorApp(ctk.CTk):
             return "X=-", "Y=-", "Z=-"
         x, y, z = values
         return f"X={x:.3f}", f"Y={y:.3f}", f"Z={z:.3f}"
+
+    @staticmethod
+    def _format_optional_float(value: Any, *, precision: int = 3, suffix: str = "") -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):.{precision}f}{suffix}"
+        except Exception:
+            return "-"
 
     def _format_config_text(self) -> str:
         if CONFIG is None:
@@ -2562,8 +2707,18 @@ class MowerOperatorApp(ctk.CTk):
     def log(self, text: str) -> None:
         timestamp = time.strftime("%H:%M:%S")
         line = f"[{timestamp}] {text}"
-        self.logbox.insert("end", line + "\n")
-        self.logbox.see("end")
+
+        # Das sichtbare Log wurde aus der rechten Statusspalte entfernt.
+        # Falls eine aeltere UI-Variante noch self.logbox besitzt, bleibt die
+        # Methode rueckwaertskompatibel.
+        logbox = getattr(self, "logbox", None)
+        if logbox is not None:
+            try:
+                logbox.insert("end", line + "\n")
+                logbox.see("end")
+            except Exception:
+                pass
+
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
@@ -2571,38 +2726,15 @@ class MowerOperatorApp(ctk.CTk):
             pass
 
     def clear_log(self) -> None:
-        self.logbox.delete("1.0", "end")
-        self.set_current_action("Log geleert.")
+        # Kein sichtbares Log mehr vorhanden. Die Logdatei bleibt als
+        # Protokoll erhalten und wird ueber Datei -> Log oeffnen eingesehen.
+        self.set_current_action("Log wird nur als Datei gefuehrt.")
 
     def save_log_dialog(self) -> None:
-        content = self.logbox.get("1.0", "end-1c")
-        if not content.strip():
-            messagebox.showinfo("Log speichern", "Das Log ist leer.", parent=self)
-            return
-
-        default_name = f"mower_operator_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        file_path = filedialog.asksaveasfilename(
-            title="Log speichern",
-            defaultextension=".txt",
-            initialfile=default_name,
-            filetypes=[
-                ("Textdateien", "*.txt"),
-                ("Logdateien", "*.log"),
-                ("Alle Dateien", "*.*"),
-            ],
-        )
-        if not file_path:
-            return
-
-        try:
-            Path(file_path).write_text(content + "\n", encoding="utf-8")
-        except Exception as exc:
-            messagebox.showerror("Log speichern", f"Log konnte nicht gespeichert werden:\n{exc}", parent=self)
-            self.set_current_action("Fehler beim Speichern des Logs.")
-            return
-
-        self.log(f"Log gespeichert: {file_path}")
-        self.set_current_action("Log gespeichert.")
+        # Log speichern ist in der reduzierten Oberflaeche nicht mehr als
+        # separater Bedienvorgang vorgesehen. Die aktuelle Logdatei wird
+        # laufend geschrieben.
+        self.open_log_file()
 
 
 if __name__ == "__main__":
