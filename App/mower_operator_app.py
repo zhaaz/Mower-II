@@ -427,6 +427,11 @@ class MowerOperatorApp(ctk.CTk):
         # Lasertrackerkoordinaten
         self.tracker_station_xyz: tuple[float, float, float] | None = None
         self.current_lt_measurement_xyz: tuple[float, float, float] | None = None
+        # Letzte gueltige Reflektormessung fuer die Live-Kartenpose.
+        # Wenn die Tracker-Messung kurzzeitig ausfaellt, darf die Karte nicht
+        # auf die statische Transformationspose zurueckspringen. Stattdessen
+        # bleibt die letzte bekannte Reflektorposition als Anker erhalten.
+        self.last_live_reflector_lt_xyz: tuple[float, float, float] | None = None
 
         # Kompatibilitaet zu bisherigen Namen aus der V3/V5-Oberflaeche
         self.xyz_connected = False
@@ -447,6 +452,12 @@ class MowerOperatorApp(ctk.CTk):
         # nur die relative Winkeländerung seit dem Nullsetzen.
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
+
+        # Live-Kartenupdate: Sensoren laufen schneller, die Anzeige wird
+        # bewusst auf ca. 5 Hz begrenzt.
+        self.map_update_interval_ms = 200
+        self._last_map_update_time_s = 0.0
+        self._pending_map_update_after_id: str | None = None
 
         if TrafoManager is not None:
             self.trafo_manager = TrafoManager()
@@ -1182,7 +1193,7 @@ class MowerOperatorApp(ctk.CTk):
             self.xyz_connected = self.xyz_ready
             self.homing_done = bool(getattr(state, "homed", False))
             self.update_status()
-            self.update_map_visualization(keep_view=True)
+            self.request_live_map_update()
 
         self.after(0, apply_state)
 
@@ -1394,6 +1405,7 @@ class MowerOperatorApp(ctk.CTk):
             self.tracker_started = False
             self.tracker_data_current = False
             self.current_lt_measurement_xyz = None
+            self.last_live_reflector_lt_xyz = None
             self.log(f"Tracker UDP-Empfang konnte nicht gestartet werden: {exc}")
             messagebox.showerror("Tracker", str(exc), parent=self)
             self.set_current_action("Tracker UDP-Empfang konnte nicht gestartet werden.")
@@ -1411,6 +1423,7 @@ class MowerOperatorApp(ctk.CTk):
             self.tracker_started = False
             self.tracker_data_current = False
             self.current_lt_measurement_xyz = None
+            self.last_live_reflector_lt_xyz = None
             self.set_current_action("Tracker UDP-Empfang nicht gestartet.")
 
         self.update_status()
@@ -1431,6 +1444,7 @@ class MowerOperatorApp(ctk.CTk):
         self.tracker_started = False
         self.tracker_data_current = False
         self.current_lt_measurement_xyz = None
+        self.last_live_reflector_lt_xyz = None
 
         self.log("Tracker UDP-Empfang gestoppt.")
         self.set_current_action("Tracker UDP-Empfang gestoppt.")
@@ -1458,11 +1472,17 @@ class MowerOperatorApp(ctk.CTk):
             z = getattr(state, "z", None)
 
             if self.tracker_data_current and x is not None and y is not None and z is not None:
-                self.current_lt_measurement_xyz = (float(x), float(y), float(z))
+                measurement = (float(x), float(y), float(z))
+                self.current_lt_measurement_xyz = measurement
+                self.last_live_reflector_lt_xyz = measurement
             elif not data_valid:
                 self.current_lt_measurement_xyz = None
+                # last_live_reflector_lt_xyz bewusst behalten: Bei kurzzeitigem
+                # Trackerverlust soll die Karte auf der letzten realen Pose
+                # stehen bleiben und nicht auf die Transformationspose springen.
 
             self.update_status()
+            self.request_live_map_update()
 
         self.after(0, apply_state)
 
@@ -1653,6 +1673,7 @@ class MowerOperatorApp(ctk.CTk):
             self.gyro_ready = bool(getattr(state, "connected", False))
             self.gyems_connected = self.gyro_ready
             self.update_status()
+            self.request_live_map_update()
 
         try:
             self.after(0, apply_state)
@@ -2440,6 +2461,42 @@ class MowerOperatorApp(ctk.CTk):
 
         self.update_map_visualization(keep_view=True)
 
+    def request_live_map_update(self) -> None:
+        """Fordert ein gedrosseltes Kartenupdate an.
+
+        Tracker und KVH koennen deutlich schneller Daten liefern als die GUI
+        sinnvoll zeichnen sollte. Die Karte wird daher auf die konfigurierte
+        Anzeige-Rate begrenzt.
+        """
+
+        if not hasattr(self, "map_view"):
+            return
+
+        now = time.monotonic()
+        interval_s = max(float(getattr(self, "map_update_interval_ms", 200)) / 1000.0, 0.05)
+        elapsed_s = now - float(getattr(self, "_last_map_update_time_s", 0.0))
+
+        if elapsed_s >= interval_s:
+            self._last_map_update_time_s = now
+            self._pending_map_update_after_id = None
+            self.update_map_visualization(keep_view=True)
+            return
+
+        if getattr(self, "_pending_map_update_after_id", None) is not None:
+            return
+
+        delay_ms = max(int((interval_s - elapsed_s) * 1000.0), 1)
+
+        def run_delayed_update() -> None:
+            self._pending_map_update_after_id = None
+            self._last_map_update_time_s = time.monotonic()
+            self.update_map_visualization(keep_view=True)
+
+        try:
+            self._pending_map_update_after_id = self.after(delay_ms, run_delayed_update)
+        except Exception:
+            self._pending_map_update_after_id = None
+
     def update_map_visualization(self, *, keep_view: bool = True) -> None:
         """Berechnet und zeichnet Arbeitsbereich, Frontpfeil, Reflektor und Marker."""
 
@@ -2464,10 +2521,18 @@ class MowerOperatorApp(ctk.CTk):
                 self.map_view.set_robot_workspace_polygon(None)
             return
 
+        live_reflector_lt_xyz = (
+            self.current_lt_measurement_xyz
+            if self.tracker_data_current
+            else self.last_live_reflector_lt_xyz
+        )
+
         state = build_map_visualization_state(
             trafo_manager=self.trafo_manager,
             config=CONFIG,
             xyz_state=self.xyz_state,
+            live_reflector_lt_xyz=live_reflector_lt_xyz,
+            live_orientation_lt_deg=self._current_gyro_orientation_lt_deg(),
         )
 
         if hasattr(self.map_view, "set_robot_visualization"):
@@ -2601,7 +2666,7 @@ class MowerOperatorApp(ctk.CTk):
         )
 
         gyro = self.gyro_state
-        self._set_live_value("gyro_angle", self._format_unsigned_positive_value(getattr(gyro, "angle_deg", None), precision=3, suffix=" °"))
+        self._set_live_value("gyro_angle", self._format_unsigned_positive_value(self._current_gyro_angle_deg(), precision=3, suffix=" °"))
         self._set_live_value("gyro_orientation_lt", self._format_unsigned_positive_value(self._current_gyro_orientation_lt_deg(), precision=3, suffix=" °"))
         self._set_live_value("gyro_drift", self._format_unsigned_positive_value(getattr(gyro, "drift_dps", None), precision=7, suffix=" °/s"))
 
@@ -2618,12 +2683,9 @@ class MowerOperatorApp(ctk.CTk):
             self.gyro_reference_angle_deg = None
             return
 
-        gyro_angle = 0.0
-        if self.gyro_state is not None:
-            try:
-                gyro_angle = float(getattr(self.gyro_state, "angle_deg", 0.0))
-            except Exception:
-                gyro_angle = 0.0
+        gyro_angle = self._current_gyro_angle_deg()
+        if gyro_angle is None:
+            gyro_angle = 0.0
 
         self.gyro_lt_reference_orientation_deg = orientation
         self.gyro_reference_angle_deg = gyro_angle
@@ -2664,13 +2726,26 @@ class MowerOperatorApp(ctk.CTk):
         if self.gyro_state is None:
             return None
 
-        try:
-            gyro_angle = float(getattr(self.gyro_state, "angle_deg", 0.0))
-        except Exception:
+        gyro_angle = self._current_gyro_angle_deg()
+        if gyro_angle is None:
             return None
 
         delta = gyro_angle - self.gyro_reference_angle_deg
         return self._normalize_angle_360(self.gyro_lt_reference_orientation_deg + delta)
+
+    def _current_gyro_angle_deg(self) -> float | None:
+        """Liefert den KVH-Winkel mit der im System gueltigen Vorzeichenkonvention.
+
+        Der physische Einbau des KVH liefert den positiven Winkel entgegengesetzt
+        zum gewuenschten Drehsinn im Lasertracker-/Kartensystem. Deshalb wird das
+        Vorzeichen hier zentral korrigiert, statt es in der Config zu fuehren.
+        """
+        if self.gyro_state is None:
+            return None
+        try:
+            return -float(getattr(self.gyro_state, "angle_deg", 0.0))
+        except Exception:
+            return None
 
     @staticmethod
     def _normalize_angle_360(angle_deg: float) -> float:
