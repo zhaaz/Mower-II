@@ -2288,11 +2288,7 @@ class MowerOperatorApp(ctk.CTk):
         self.update_map_visualization(keep_view=True)
         self.map_view.set_points(self.points, keep_view=keep_map_view)
         self._update_selected_label()
-        reachable_count = sum(1 for point in self.points if point.reachable)
-        marked_count = sum(1 for point in self.points if point.marked)
-        self.lbl_point_count.configure(
-            text=f"{len(self.points)} Punkte | {reachable_count} erreichbar | {marked_count} markiert"
-        )
+        self._update_point_count_label()
 
     def _update_point_list(self) -> None:
         if not hasattr(self, "point_tree"):
@@ -2442,10 +2438,10 @@ class MowerOperatorApp(ctk.CTk):
     @staticmethod
     def _point_status_display(point: StakeoutPoint) -> str:
         if bool(getattr(point, "marked", False)):
-            return "markiert"
+            return "abgesteckt"
         if bool(getattr(point, "reachable", False)):
             return "erreichbar"
-        return "offen"
+        return "nicht erreichbar"
 
     # --------------------------------------------------
     # Demo scene / reachability placeholder
@@ -2535,6 +2531,8 @@ class MowerOperatorApp(ctk.CTk):
             live_orientation_lt_deg=self._current_gyro_orientation_lt_deg(),
         )
 
+        self._update_live_reachability_from_visualization(state.workspace_polygon)
+
         if hasattr(self.map_view, "set_robot_visualization"):
             self.map_view.set_robot_visualization(
                 workspace_polygon=state.workspace_polygon,
@@ -2548,6 +2546,64 @@ class MowerOperatorApp(ctk.CTk):
 
         if not keep_view:
             self.map_view.zoom_all()
+
+    def _update_live_reachability_from_visualization(
+            self,
+            workspace_polygon: list[tuple[float, float]] | None,
+    ) -> None:
+        """Aktualisiert die Anzeige-Erreichbarkeit aus dem live dargestellten Markierbereich.
+
+        Diese Erreichbarkeit ist bewusst eine Bedien-/Visualisierungshilfe. Sie
+        aendert nicht die Transformations- oder Markierlogik, sondern sorgt nur
+        dafuer, dass Punktfarben, Punktliste und Zaehler zur aktuell angezeigten
+        Kartenpose passen.
+        """
+
+        if not self.points:
+            return
+
+        changed = False
+        for point in self.points:
+            marked = bool(getattr(point, "marked", False))
+
+            if marked:
+                reachable = False
+            elif workspace_polygon:
+                try:
+                    reachable = self._point_in_polygon(
+                        (float(getattr(point, "x")), float(getattr(point, "y"))),
+                        workspace_polygon,
+                    )
+                except Exception:
+                    reachable = False
+            else:
+                reachable = False
+
+            if bool(getattr(point, "reachable", False)) != reachable:
+                try:
+                    point.reachable = reachable
+                    changed = True
+                except Exception:
+                    pass
+
+        if changed:
+            self._update_point_list()
+            self._update_point_count_label()
+            self._update_selected_label()
+
+    def _update_point_count_label(self) -> None:
+        if not hasattr(self, "lbl_point_count"):
+            return
+
+        reachable_count = sum(
+            1
+            for point in self.points
+            if bool(getattr(point, "reachable", False)) and not bool(getattr(point, "marked", False))
+        )
+        marked_count = sum(1 for point in self.points if bool(getattr(point, "marked", False)))
+        self.lbl_point_count.configure(
+            text=f"{len(self.points)} Punkte | {reachable_count} erreichbar | {marked_count} abgesteckt"
+        )
 
     @staticmethod
     def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
