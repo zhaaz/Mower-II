@@ -94,6 +94,11 @@ except Exception:
     KVHDSPWorker = None
 
 try:
+    from GYEMS.gyems_worker import GyemsWorker
+except Exception:
+    GyemsWorker = None
+
+try:
     from Lasertracker.lasertracker_receiver import LasertrackerReceiver
 except Exception:
     LasertrackerReceiver = None
@@ -457,6 +462,8 @@ class MowerOperatorApp(ctk.CTk):
         self.tracker_state: Any | None = None
         self.gyro_worker: Any | None = None
         self.gyro_state: Any | None = None
+        self.gyems_worker: Any | None = None
+        self.gyems_state: Any | None = None
 
         # Orientierung der Wagen-/Roboter-X-Achse im Lasertracker-XY-System.
         # Referenz kommt aus der aktiven Transformation; der KVH liefert danach
@@ -572,6 +579,7 @@ class MowerOperatorApp(ctk.CTk):
         motor_menu.add_command(label="Trennen", command=self.disconnect_drehmotor)
         motor_menu.add_separator()
         motor_menu.add_command(label="Referenz setzen", command=self.drehmotor_set_reference)
+        motor_menu.add_command(label="Stop", command=self.drehmotor_stop)
         motor_menu.add_separator()
         motor_menu.add_command(label="Status anzeigen", command=self.show_drehmotor_status)
         menu_bar.add_cascade(label="Drehmotor", menu=motor_menu)
@@ -1173,6 +1181,12 @@ class MowerOperatorApp(ctk.CTk):
         except Exception:
             pass
 
+        try:
+            if self.gyems_worker is not None and hasattr(self.gyems_worker, "stop"):
+                self.gyems_worker.stop()
+        except Exception:
+            pass
+
         self.destroy()
 
     # --------------------------------------------------
@@ -1645,29 +1659,232 @@ class MowerOperatorApp(ctk.CTk):
     # Drehmotor / Gyro
     # --------------------------------------------------
 
+    def _ensure_gyems_worker(self) -> bool:
+        """Erzeugt den GYEMS-Worker bei Bedarf."""
+        if self.gyems_worker is not None:
+            return True
+
+        if GyemsWorker is None:
+            self.log("GyemsWorker konnte nicht importiert werden.")
+            messagebox.showerror(
+                "Drehmotor",
+                "GyemsWorker konnte nicht importiert werden.",
+                parent=self,
+            )
+            return False
+
+        try:
+            self.gyems_worker = GyemsWorker(
+                on_event=self.on_gyems_event,
+                on_state_changed=self.on_gyems_state_changed,
+                poll_interval_s=0.2,
+            )
+            self.gyems_worker.start()
+            self.log("GYEMS-Worker initialisiert.")
+            return True
+        except Exception as exc:
+            self.gyems_worker = None
+            self.log(f"GYEMS-Worker konnte nicht initialisiert werden: {exc}")
+            messagebox.showerror("Drehmotor", str(exc), parent=self)
+            return False
+
+    def on_gyems_state_changed(self, state: Any) -> None:
+        self.gyems_state = state
+
+        def apply_state() -> None:
+            self.drehmotor_ready = bool(getattr(state, "connected", False))
+            self.gyems_connected = self.drehmotor_ready
+            self.skr_connected = self.drehmotor_ready
+            self.update_status()
+
+        try:
+            self.after(0, apply_state)
+        except Exception:
+            pass
+
+    def on_gyems_event(self, event: Any) -> None:
+        message = str(getattr(event, "message", event))
+        level = str(getattr(getattr(event, "level", ""), "name", getattr(event, "level", "")))
+
+        def apply_event() -> None:
+            if level.upper() == "ERROR":
+                self.log(f"GYEMS FEHLER: {message}")
+                self.set_current_action(f"GYEMS Fehler: {message}")
+            elif level.upper() == "WARNING":
+                self.log(f"GYEMS WARNUNG: {message}")
+            else:
+                self.log(f"GYEMS: {message}")
+                lower_message = message.lower()
+                if "verbunden" in lower_message:
+                    self.set_current_action("Drehmotor verbunden.")
+                elif "getrennt" in lower_message:
+                    self.set_current_action("Drehmotor getrennt.")
+                elif "referenz gesetzt" in lower_message:
+                    self.set_current_action("Drehmotor-Referenz gesetzt.")
+                elif "gestoppt" in lower_message:
+                    self.set_current_action("Drehmotor gestoppt.")
+
+        try:
+            self.after(0, apply_event)
+        except Exception:
+            pass
+
     def connect_drehmotor(self) -> None:
         self.set_current_action("Drehmotor wird verbunden...")
-        self.drehmotor_ready = True
-        self.skr_connected = True
-        self.log("Drehmotor verbunden. Hinweis: In dieser Erstversion als Status gesetzt.")
-        self.set_current_action("Drehmotor verbunden.")
-        self.update_status()
+
+        default_port = str(getattr(getattr(CONFIG, "gyems", None), "port", "COM4")) if CONFIG is not None else "COM4"
+        default_baudrate = int(getattr(getattr(CONFIG, "gyems", None), "baudrate", 115200)) if CONFIG is not None else 115200
+        default_motor_id = int(getattr(getattr(CONFIG, "gyems", None), "motor_id", 1)) if CONFIG is not None else 1
+
+        port = simpledialog.askstring(
+            "Drehmotor verbinden",
+            "GYEMS COM-Port:",
+            initialvalue=default_port,
+            parent=self,
+        )
+        if not port:
+            self.set_current_action("Bereit.")
+            return
+
+        motor_id = simpledialog.askinteger(
+            "Drehmotor verbinden",
+            "Motor-ID:",
+            initialvalue=default_motor_id,
+            minvalue=0,
+            maxvalue=255,
+            parent=self,
+        )
+        if motor_id is None:
+            self.set_current_action("Bereit.")
+            return
+
+        baudrate = simpledialog.askinteger(
+            "Drehmotor verbinden",
+            "Baudrate:",
+            initialvalue=default_baudrate,
+            minvalue=1200,
+            maxvalue=4000000,
+            parent=self,
+        )
+        if baudrate is None:
+            self.set_current_action("Bereit.")
+            return
+
+        if not self._ensure_gyems_worker():
+            self.set_current_action("Drehmotor konnte nicht initialisiert werden.")
+            return
+
+        try:
+            self.gyems_worker.send_command(
+                "connect",
+                port=port.strip(),
+                baudrate=int(baudrate),
+                motor_id=int(motor_id),
+            )
+            self.log(f"GYEMS verbinden angefordert: {port.strip()} @ {int(baudrate)}, ID={int(motor_id)}.")
+            self.set_current_action("Drehmotor-Verbindung wird aufgebaut...")
+        except Exception as exc:
+            self.log(f"GYEMS verbinden fehlgeschlagen: {exc}")
+            messagebox.showerror("Drehmotor", str(exc), parent=self)
+            self.set_current_action("Drehmotor-Verbindung fehlgeschlagen.")
 
     def disconnect_drehmotor(self) -> None:
         self.set_current_action("Drehmotor wird getrennt...")
-        self.drehmotor_ready = False
-        self.skr_connected = False
-        self.log("Drehmotor getrennt.")
-        self.set_current_action("Drehmotor getrennt.")
-        self.update_status()
+
+        if self.gyems_worker is None:
+            self.drehmotor_ready = False
+            self.gyems_connected = False
+            self.skr_connected = False
+            self.update_status()
+            self.set_current_action("Drehmotor ist bereits getrennt.")
+            return
+
+        try:
+            self.gyems_worker.send_command("disconnect")
+            self.log("GYEMS trennen angefordert.")
+            self.set_current_action("Drehmotor-Trennung angefordert.")
+        except Exception as exc:
+            self.log(f"GYEMS trennen fehlgeschlagen: {exc}")
+            messagebox.showerror("Drehmotor", str(exc), parent=self)
+            self.set_current_action("Drehmotor-Trennung fehlgeschlagen.")
 
     def drehmotor_set_reference(self) -> None:
         self.set_current_action("Drehmotor-Referenz wird gesetzt...")
-        self.log("Drehmotor Referenz setzen: noch nicht implementiert.")
-        self.set_current_action("Drehmotor-Referenz angefordert.")
+
+        if not self._gyems_connected_for_command("Referenz setzen"):
+            return
+
+        try:
+            self.gyems_worker.send_command("set_reference_here")
+            self.log("GYEMS Referenz setzen angefordert.")
+            self.set_current_action("Drehmotor-Referenz angefordert.")
+        except Exception as exc:
+            self.log(f"GYEMS Referenz setzen fehlgeschlagen: {exc}")
+            messagebox.showerror("Drehmotor", str(exc), parent=self)
+            self.set_current_action("Drehmotor-Referenz fehlgeschlagen.")
+
+    def drehmotor_stop(self) -> None:
+        self.set_current_action("Drehmotor wird gestoppt...")
+
+        if self.gyems_worker is None:
+            self.set_current_action("Drehmotor nicht initialisiert.")
+            return
+
+        try:
+            self.gyems_worker.send_command("stop_motor")
+            self.log("GYEMS Stop angefordert.")
+            self.set_current_action("Drehmotor-Stop angefordert.")
+        except Exception as exc:
+            self.log(f"GYEMS Stop fehlgeschlagen: {exc}")
+            messagebox.showerror("Drehmotor", str(exc), parent=self)
+            self.set_current_action("Drehmotor-Stop fehlgeschlagen.")
 
     def show_drehmotor_status(self) -> None:
-        self.log(f"Drehmotor Status: {'bereit' if self.drehmotor_ready else 'nicht bereit'}")
+        state = self.gyems_state
+
+        if state is None:
+            message = "GYEMS Status: nicht initialisiert"
+            self.log(message)
+            messagebox.showinfo("Drehmotor Status", message, parent=self)
+            return
+
+        message = (
+            "GYEMS Status:\n"
+            f"  Verbunden: {'ja' if bool(getattr(state, 'connected', False)) else 'nein'}\n"
+            f"  Status: {getattr(state, 'status_text', '-') or '-'}\n"
+            f"  Port: {getattr(state, 'port', '-') or '-'}\n"
+            f"  Baudrate: {getattr(state, 'baudrate', '-') or '-'}\n"
+            f"  Motor-ID: {getattr(state, 'motor_id', '-') or '-'}\n"
+            f"  Winkel absolut: {self._format_optional_float(getattr(state, 'angle_deg', None), precision=3, suffix=' deg')}\n"
+            f"  Winkel relativ: {self._format_optional_float(getattr(state, 'relative_angle_deg', None), precision=3, suffix=' deg')}\n"
+            f"  Referenzoffset: {self._format_optional_float(getattr(state, 'reference_offset_deg', None), precision=3, suffix=' deg')}\n"
+            f"  Temperatur: {self._format_optional_float(getattr(state, 'temperature_C', None), precision=0, suffix=' °C')}\n"
+            f"  Speed raw: {getattr(state, 'speed_raw', '-') if getattr(state, 'speed_raw', None) is not None else '-'}\n"
+            f"  Encoder: {getattr(state, 'encoder_pos', '-') if getattr(state, 'encoder_pos', None) is not None else '-'}\n"
+            f"  OK-Zähler: {int(getattr(state, 'ok_count', 0))}\n"
+            f"  Fehler-Zähler: {int(getattr(state, 'error_count', 0))}\n"
+            f"  Fehler: {getattr(state, 'error_text', None) or '-'}"
+        )
+        self.log(
+            "GYEMS Status: "
+            f"connected={bool(getattr(state, 'connected', False))}, "
+            f"angle={self._format_optional_float(getattr(state, 'angle_deg', None), precision=3, suffix=' deg')}, "
+            f"relative={self._format_optional_float(getattr(state, 'relative_angle_deg', None), precision=3, suffix=' deg')}, "
+            f"error={getattr(state, 'error_text', None) or '-'}"
+        )
+        messagebox.showinfo("Drehmotor Status", message, parent=self)
+
+    def _gyems_connected_for_command(self, action_name: str) -> bool:
+        if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
+            self.log(f"GYEMS: {action_name} nicht möglich, Drehmotor ist nicht verbunden.")
+            messagebox.showwarning(
+                "Drehmotor",
+                "GYEMS-Drehmotor ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action(f"{action_name} nicht möglich: Drehmotor nicht verbunden.")
+            return False
+        return True
 
     def _ensure_gyro_worker(self) -> bool:
         """Erzeugt den KVH-DSP-Worker bei Bedarf."""
@@ -1702,7 +1919,6 @@ class MowerOperatorApp(ctk.CTk):
 
         def apply_state() -> None:
             self.gyro_ready = bool(getattr(state, "connected", False))
-            self.gyems_connected = self.gyro_ready
             self.update_status()
             self.request_live_map_update()
 
@@ -1771,7 +1987,6 @@ class MowerOperatorApp(ctk.CTk):
 
         if self.gyro_worker is None:
             self.gyro_ready = False
-            self.gyems_connected = False
             self.update_status()
             self.set_current_action("KVH DSP ist bereits getrennt.")
             return
@@ -2804,7 +3019,7 @@ class MowerOperatorApp(ctk.CTk):
                 tracker_station_lt=Point2D(float(station_xyz[0]), float(station_xyz[1])),
                 reflector_lt=Point2D(float(reflector_xyz[0]), float(reflector_xyz[1])),
                 orientation_lt_deg=float(orientation_lt_deg),
-                gyems_angle_deg=None,
+                gyems_angle_deg=self._current_gyems_angle_deg(),
             )
         except Exception:
             self.reflector_aim_result = None
@@ -2871,6 +3086,32 @@ class MowerOperatorApp(ctk.CTk):
 
         delta = gyro_angle - self.gyro_reference_angle_deg
         return self._normalize_angle_360(self.gyro_lt_reference_orientation_deg + delta)
+
+    def _current_gyems_angle_deg(self) -> float | None:
+        """Liefert den aktuell verwendeten GYEMS-Istwinkel fuer die Nachfuehranzeige.
+
+        Nach "Drehmotor -> Referenz setzen" wird der relative Winkel verwendet.
+        Falls noch keine Referenz verfuegbar ist, wird der absolute Singleturn-Winkel
+        angezeigt.
+        """
+        state = self.gyems_state
+        if state is None:
+            return None
+
+        relative = getattr(state, "relative_angle_deg", None)
+        if relative is not None:
+            try:
+                return self._normalize_angle_360(float(relative))
+            except Exception:
+                pass
+
+        angle = getattr(state, "angle_deg", None)
+        if angle is None:
+            return None
+        try:
+            return self._normalize_angle_360(float(angle))
+        except Exception:
+            return None
 
     def _current_gyro_angle_deg(self) -> float | None:
         """Liefert den KVH-Winkel mit der im System gueltigen Vorzeichenkonvention.
