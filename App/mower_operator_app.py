@@ -144,6 +144,17 @@ try:
 except Exception:
     build_map_visualization_state = None
 
+try:
+    from App.services.reflector_aiming import (
+        Point2D,
+        ReflectorAimCalculator,
+        ReflectorAimConfig,
+    )
+except Exception:
+    Point2D = None
+    ReflectorAimCalculator = None
+    ReflectorAimConfig = None
+
 
 def project_path(relative_path: str | Path) -> Path:
     """
@@ -452,6 +463,19 @@ class MowerOperatorApp(ctk.CTk):
         # nur die relative Winkeländerung seit dem Nullsetzen.
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
+
+        # Reflektornachfuehrung Stufe 1: zunaechst nur Sollrichtung und
+        # GYEMS-Sollwinkel berechnen/anzeigen, noch ohne Motoransteuerung.
+        self.reflector_aim_calculator: Any | None = None
+        self.reflector_aim_result: Any | None = None
+        if ReflectorAimCalculator is not None and ReflectorAimConfig is not None and Point2D is not None:
+            self.reflector_aim_calculator = ReflectorAimCalculator(
+                ReflectorAimConfig(
+                    gyems_zero_offset_deg=0.0,
+                    gyems_direction_sign=1.0,
+                    pivot_from_reflector_robot_mm=Point2D(0.0, 0.0),
+                )
+            )
 
         # Live-Kartenupdate: Sensoren laufen schneller, die Anzeige wird
         # bewusst auf ca. 5 Hz begrenzt.
@@ -772,7 +796,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
         live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
-        live.grid_rowconfigure(14, weight=1)
+        live.grid_rowconfigure(20, weight=1)
         self._add_live_section_label(live, row=0, text="XYZ-Roboter")
         self._add_live_value_row(live, row=1, key="xyz_x", label="X")
         self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
@@ -785,6 +809,13 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_value_row(live, row=11, key="gyro_angle", label="Winkel")
         self._add_live_value_row(live, row=12, key="gyro_orientation_lt", label="Orientierung LT")
         self._add_live_value_row(live, row=13, key="gyro_drift", label="Drift")
+
+        self._add_live_section_label(live, row=14, text="Reflektornachführung")
+        self._add_live_value_row(live, row=15, key="arn_bearing_robot", label="Richtung")
+        self._add_live_value_row(live, row=16, key="arn_target_angle", label="Sollwinkel")
+        self._add_live_value_row(live, row=17, key="arn_gyems_angle", label="Istwinkel")
+        self._add_live_value_row(live, row=18, key="arn_error_angle", label="Fehler")
+        self._add_live_value_row(live, row=19, key="arn_distance", label="Distanz LT")
 
     def _status_card(
             self,
@@ -2726,6 +2757,58 @@ class MowerOperatorApp(ctk.CTk):
         self._set_live_value("gyro_orientation_lt", self._format_unsigned_positive_value(self._current_gyro_orientation_lt_deg(), precision=3, suffix=" °"))
         self._set_live_value("gyro_drift", self._format_unsigned_positive_value(getattr(gyro, "drift_dps", None), precision=7, suffix=" °/s"))
 
+        self._update_reflector_aiming()
+        aim = self.reflector_aim_result
+        if aim is None:
+            self._set_live_value("arn_bearing_robot", "-")
+            self._set_live_value("arn_target_angle", "-")
+            self._set_live_value("arn_gyems_angle", "-")
+            self._set_live_value("arn_error_angle", "-")
+            self._set_live_value("arn_distance", "-")
+        else:
+            self._set_live_value("arn_bearing_robot", self._format_unsigned_positive_value(getattr(aim, "bearing_robot_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_target_angle", self._format_unsigned_positive_value(getattr(aim, "gyems_target_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_gyems_angle", self._format_unsigned_positive_value(getattr(aim, "gyems_angle_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_error_angle", self._format_signed_value(getattr(aim, "gyems_error_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_distance", self._format_mm_component(getattr(aim, "distance_to_tracker_mm", None)))
+
+    def _update_reflector_aiming(self) -> None:
+        """Berechnet die reine Anzeige-Sollrichtung fuer die Reflektornachfuehrung.
+
+        Stufe 1 greift noch nicht in den Drehmotor ein. Die Berechnung nutzt
+        dieselbe Live-Pose-Grundlage wie die Karte: Trackerposition des
+        Reflektors und aktuelle Wagenorientierung aus Trafo-Referenz + KVH.
+        """
+
+        self.reflector_aim_result = None
+
+        if self.reflector_aim_calculator is None or Point2D is None:
+            return
+
+        orientation_lt_deg = self._current_gyro_orientation_lt_deg()
+        if orientation_lt_deg is None:
+            return
+
+        reflector_xyz = (
+            self.current_lt_measurement_xyz
+            if self.tracker_data_current
+            else self.last_live_reflector_lt_xyz
+        )
+        if reflector_xyz is None:
+            return
+
+        station_xyz = self.tracker_station_xyz or (0.0, 0.0, 0.0)
+
+        try:
+            self.reflector_aim_result = self.reflector_aim_calculator.calculate(
+                tracker_station_lt=Point2D(float(station_xyz[0]), float(station_xyz[1])),
+                reflector_lt=Point2D(float(reflector_xyz[0]), float(reflector_xyz[1])),
+                orientation_lt_deg=float(orientation_lt_deg),
+                gyems_angle_deg=None,
+            )
+        except Exception:
+            self.reflector_aim_result = None
+
     def _update_gyro_orientation_reference_from_trafo(self, *, log_result: bool = False) -> None:
         """Setzt die Orientierungsreferenz aus der aktiven Transformation.
 
@@ -2839,6 +2922,15 @@ class MowerOperatorApp(ctk.CTk):
             return ""
         error_text = getattr(state, "error_text", None)
         return str(error_text).strip() if error_text else ""
+
+    @staticmethod
+    def _format_signed_value(value: Any, *, precision: int, suffix: str = "") -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):+.{precision}f}{suffix}"
+        except Exception:
+            return "-"
 
     @staticmethod
     def _format_mm_component(value: Any) -> str:
