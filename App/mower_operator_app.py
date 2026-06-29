@@ -471,10 +471,16 @@ class MowerOperatorApp(ctk.CTk):
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
 
-        # Reflektornachfuehrung Stufe 1: zunaechst nur Sollrichtung und
-        # GYEMS-Sollwinkel berechnen/anzeigen, noch ohne Motoransteuerung.
+        # Reflektornachfuehrung: Der Reflektor wird bei der Initialisierung
+        # mechanisch auf den Tracker ausgerichtet. Die Nachfuehrung arbeitet
+        # daher relativ zu dieser Referenzausrichtung, nicht mit einem
+        # absoluten mechanischen Motorwinkel.
         self.reflector_aim_calculator: Any | None = None
         self.reflector_aim_result: Any | None = None
+        self.reflector_aim_reference_bearing_robot_deg: float | None = None
+        self.reflector_aim_relative_target_deg: float | None = None
+        self.reflector_aim_relative_error_deg: float | None = None
+        self.reflector_aim_direction_sign: float = 1.0
         if ReflectorAimCalculator is not None and ReflectorAimConfig is not None and Point2D is not None:
             self.reflector_aim_calculator = ReflectorAimCalculator(
                 ReflectorAimConfig(
@@ -804,7 +810,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
         live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
-        live.grid_rowconfigure(20, weight=1)
+        live.grid_rowconfigure(21, weight=1)
         self._add_live_section_label(live, row=0, text="XYZ-Roboter")
         self._add_live_value_row(live, row=1, key="xyz_x", label="X")
         self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
@@ -819,11 +825,12 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_value_row(live, row=13, key="gyro_drift", label="Drift")
 
         self._add_live_section_label(live, row=14, text="Reflektornachführung")
-        self._add_live_value_row(live, row=15, key="arn_bearing_robot", label="Richtung")
-        self._add_live_value_row(live, row=16, key="arn_target_angle", label="Sollwinkel")
-        self._add_live_value_row(live, row=17, key="arn_gyems_angle", label="Istwinkel")
-        self._add_live_value_row(live, row=18, key="arn_error_angle", label="Fehler")
-        self._add_live_value_row(live, row=19, key="arn_distance", label="Distanz LT")
+        self._add_live_value_row(live, row=15, key="arn_bearing_robot", label="Richtung akt.")
+        self._add_live_value_row(live, row=16, key="arn_reference_bearing", label="Richtung Ref.")
+        self._add_live_value_row(live, row=17, key="arn_target_angle", label="Soll rel.")
+        self._add_live_value_row(live, row=18, key="arn_gyems_angle", label="Ist rel.")
+        self._add_live_value_row(live, row=19, key="arn_error_angle", label="Fehler")
+        self._add_live_value_row(live, row=20, key="arn_distance", label="Distanz LT")
 
     def _status_card(
             self,
@@ -1814,10 +1821,38 @@ class MowerOperatorApp(ctk.CTk):
         if not self._gyems_connected_for_command("Referenz setzen"):
             return
 
+        # Fachliches Referenzmodell:
+        # Beim Initialisieren wird der Reflektor mechanisch exakt auf den
+        # Lasertracker ausgerichtet. Diese aktuelle geometrische Richtung wird
+        # daher als Nullrichtung fuer die Nachfuehrung gespeichert. Ab dann
+        # wird nur noch die relative Richtungsänderung verfolgt.
+        self._update_reflector_aiming()
+        aim = self.reflector_aim_result
+        if aim is None or getattr(aim, "bearing_robot_deg", None) is None:
+            self.log("GYEMS Referenz setzen nicht moeglich: keine gueltige Reflektor-Sollrichtung vorhanden.")
+            messagebox.showwarning(
+                "Drehmotor Referenz",
+                "Keine gueltige Reflektor-Sollrichtung vorhanden.\n"
+                "Bitte Tracker, KVH und Transformation pruefen.",
+                parent=self,
+            )
+            self.set_current_action("Drehmotor-Referenz nicht möglich: keine Sollrichtung.")
+            return
+
         try:
+            self.reflector_aim_reference_bearing_robot_deg = self._normalize_angle_360(
+                float(getattr(aim, "bearing_robot_deg"))
+            )
+            self.reflector_aim_relative_target_deg = 0.0
+            self.reflector_aim_relative_error_deg = None
+
             self.gyems_worker.send_command("set_reference_here")
-            self.log("GYEMS Referenz setzen angefordert.")
+            self.log(
+                "GYEMS Referenz setzen angefordert: "
+                f"Richtung Referenz={self.reflector_aim_reference_bearing_robot_deg:.3f} deg."
+            )
             self.set_current_action("Drehmotor-Referenz angefordert.")
+            self.update_status()
         except Exception as exc:
             self.log(f"GYEMS Referenz setzen fehlgeschlagen: {exc}")
             messagebox.showerror("Drehmotor", str(exc), parent=self)
@@ -2976,26 +3011,31 @@ class MowerOperatorApp(ctk.CTk):
         aim = self.reflector_aim_result
         if aim is None:
             self._set_live_value("arn_bearing_robot", "-")
+            self._set_live_value("arn_reference_bearing", "-")
             self._set_live_value("arn_target_angle", "-")
             self._set_live_value("arn_gyems_angle", "-")
             self._set_live_value("arn_error_angle", "-")
             self._set_live_value("arn_distance", "-")
         else:
             self._set_live_value("arn_bearing_robot", self._format_unsigned_positive_value(getattr(aim, "bearing_robot_deg", None), precision=3, suffix=" °"))
-            self._set_live_value("arn_target_angle", self._format_unsigned_positive_value(getattr(aim, "gyems_target_deg", None), precision=3, suffix=" °"))
-            self._set_live_value("arn_gyems_angle", self._format_unsigned_positive_value(getattr(aim, "gyems_angle_deg", None), precision=3, suffix=" °"))
-            self._set_live_value("arn_error_angle", self._format_signed_value(getattr(aim, "gyems_error_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_reference_bearing", self._format_unsigned_positive_value(self.reflector_aim_reference_bearing_robot_deg, precision=3, suffix=" °"))
+            self._set_live_value("arn_target_angle", self._format_signed_value(self.reflector_aim_relative_target_deg, precision=3, suffix=" °"))
+            self._set_live_value("arn_gyems_angle", self._format_signed_value(getattr(aim, "gyems_angle_deg", None), precision=3, suffix=" °"))
+            self._set_live_value("arn_error_angle", self._format_signed_value(self.reflector_aim_relative_error_deg, precision=3, suffix=" °"))
             self._set_live_value("arn_distance", self._format_mm_component(getattr(aim, "distance_to_tracker_mm", None)))
 
     def _update_reflector_aiming(self) -> None:
-        """Berechnet die reine Anzeige-Sollrichtung fuer die Reflektornachfuehrung.
+        """Berechnet die Anzeige der relativen Reflektornachfuehrung.
 
-        Stufe 1 greift noch nicht in den Drehmotor ein. Die Berechnung nutzt
-        dieselbe Live-Pose-Grundlage wie die Karte: Trackerposition des
-        Reflektors und aktuelle Wagenorientierung aus Trafo-Referenz + KVH.
+        Die absolute Richtung zum Tracker ist nur eine geometrische
+        Zwischengroesse. Fuer die Nachfuehrung zaehlt die Differenz zur
+        Referenzausrichtung, die mit "Drehmotor -> Referenz setzen" gespeichert
+        wird. Dadurch ist keine mechanische Winkelkalibrierung erforderlich.
         """
 
         self.reflector_aim_result = None
+        self.reflector_aim_relative_target_deg = None
+        self.reflector_aim_relative_error_deg = None
 
         if self.reflector_aim_calculator is None or Point2D is None:
             return
@@ -3015,14 +3055,35 @@ class MowerOperatorApp(ctk.CTk):
         station_xyz = self.tracker_station_xyz or (0.0, 0.0, 0.0)
 
         try:
-            self.reflector_aim_result = self.reflector_aim_calculator.calculate(
+            aim = self.reflector_aim_calculator.calculate(
                 tracker_station_lt=Point2D(float(station_xyz[0]), float(station_xyz[1])),
                 reflector_lt=Point2D(float(reflector_xyz[0]), float(reflector_xyz[1])),
                 orientation_lt_deg=float(orientation_lt_deg),
                 gyems_angle_deg=self._current_gyems_angle_deg(),
             )
+            self.reflector_aim_result = aim
+
+            reference_bearing = self.reflector_aim_reference_bearing_robot_deg
+            if reference_bearing is None:
+                return
+
+            delta_bearing = self._normalize_angle_180(
+                float(getattr(aim, "bearing_robot_deg")) - float(reference_bearing)
+            )
+            target_relative = self._normalize_angle_180(
+                self.reflector_aim_direction_sign * delta_bearing
+            )
+            self.reflector_aim_relative_target_deg = target_relative
+
+            gyems_angle = getattr(aim, "gyems_angle_deg", None)
+            if gyems_angle is not None:
+                self.reflector_aim_relative_error_deg = self._normalize_angle_180(
+                    target_relative - float(gyems_angle)
+                )
         except Exception:
             self.reflector_aim_result = None
+            self.reflector_aim_relative_target_deg = None
+            self.reflector_aim_relative_error_deg = None
 
     def _update_gyro_orientation_reference_from_trafo(self, *, log_result: bool = False) -> None:
         """Setzt die Orientierungsreferenz aus der aktiven Transformation.
@@ -3101,7 +3162,7 @@ class MowerOperatorApp(ctk.CTk):
         relative = getattr(state, "relative_angle_deg", None)
         if relative is not None:
             try:
-                return self._normalize_angle_360(float(relative))
+                return self._normalize_angle_180(float(relative))
             except Exception:
                 pass
 
@@ -3109,7 +3170,7 @@ class MowerOperatorApp(ctk.CTk):
         if angle is None:
             return None
         try:
-            return self._normalize_angle_360(float(angle))
+            return self._normalize_angle_180(float(angle))
         except Exception:
             return None
 
@@ -3133,6 +3194,10 @@ class MowerOperatorApp(ctk.CTk):
         if value < 0.0:
             value += 360.0
         return value
+
+    @staticmethod
+    def _normalize_angle_180(angle_deg: float) -> float:
+        return (float(angle_deg) + 180.0) % 360.0 - 180.0
 
     def _set_live_value(self, key: str, text: str) -> None:
         label = self.live_value_labels.get(key)
