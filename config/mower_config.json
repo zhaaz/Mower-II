@@ -21,14 +21,17 @@
         "shape": "plus",
         "size_mm": 40.0,
         "angle_deg": 0.0,
-        "z_mark_mm": 166.0
+        "z_mark_mm": 166.0,
+        "z_clear_mm": 171.0,
+        "z_travel_mm": 176.0
     },
     "transformation": {
         "marker_to_reflector_robot": [
-            -35.1369970118144,
-            -1.9534549855845955,
-            300.10525912081835
-        ]
+            -34.815,
+            -2.515,
+            314.349
+        ],
+        "gyro_invalid_threshold_deg": 0.03
     },
     "paths": {
         "tracker_station_file": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/data/tracker_station.txt",

@@ -303,15 +303,33 @@ class XYZRobotWorker:
             marker_shape: str,
             label: str | None = None,
             angle_deg: float = 0.0,
+            z_mark_mm: float | None = None,
+            z_clear_mm: float | None = None,
+            z_travel_mm: float | None = None,
     ) -> None:
         robot = self._require_robot()
 
         self.state.status_text = "Marking"
         self._notify_state_changed()
 
+        if hasattr(robot, "set_marker_heights"):
+            robot.set_marker_heights(
+                z_mark_mm=z_mark_mm,
+                z_clear_mm=z_clear_mm,
+                z_travel_mm=z_travel_mm,
+            )
+
+        marker_heights = ""
+        if z_mark_mm is not None:
+            marker_heights = (
+                f", Z_MARK={float(z_mark_mm):.3f} mm"
+                f", Z_CLEAR={float(z_clear_mm) if z_clear_mm is not None else float(z_mark_mm) + 5.0:.3f} mm"
+                f", Z_TRAVEL={float(z_travel_mm) if z_travel_mm is not None else float(z_mark_mm) + 10.0:.3f} mm"
+            )
+
         label_text = str(label).strip() if label is not None else ""
         if label_text:
-            self._emit_info(f"Markiere Punkt {label_text}: X={x:.3f}, Y={y:.3f}")
+            self._emit_info(f"Markiere Punkt {label_text}: X={x:.3f}, Y={y:.3f}{marker_heights}")
             robot.mark_point_with_label(
                 x=x,
                 y=y,
@@ -322,7 +340,7 @@ class XYZRobotWorker:
             )
             done_text = f"Punkt {label_text} markiert"
         else:
-            self._emit_info(f"Markiere Punkt ohne Beschriftung: X={x:.3f}, Y={y:.3f}")
+            self._emit_info(f"Markiere Punkt ohne Beschriftung: X={x:.3f}, Y={y:.3f}{marker_heights}")
             robot.mark_point(
                 x=x,
                 y=y,

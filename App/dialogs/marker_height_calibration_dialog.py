@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any, Callable
 
-from config.mower_config import CONFIG, update_marker_z_mark_mm
+from config.mower_config import CONFIG, update_marker_z_heights_mm
 
 
 StateGetter = Callable[[], Any]
@@ -22,10 +22,6 @@ FONT_NORMAL = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")
 FONT_SECTION = ("Segoe UI", 11, "bold")
 FONT_MONO = ("Consolas", 10)
-
-
-Z_CLEAR_OFFSET_MM = 5.0
-Z_TRAVEL_OFFSET_MM = 10.0
 
 
 def show_marker_height_calibration_dialog(
@@ -78,6 +74,8 @@ class MarkerHeightCalibrationDialog:
 
         self.saved = False
         self.current_z_mark = float(getattr(config.marker, "z_mark_mm", 166.0))
+        self.current_z_clear = float(getattr(config.marker, "z_clear_mm", self.current_z_mark + 5.0))
+        self.current_z_travel = float(getattr(config.marker, "z_travel_mm", self.current_z_mark + 10.0))
         self.proposed_z_mark: float | None = None
 
         self.window = tk.Toplevel(parent)
@@ -141,8 +139,8 @@ class MarkerHeightCalibrationDialog:
 
         self.current_mark_var = tk.StringVar()
         self.proposed_mark_var = tk.StringVar()
-        self.clear_var = tk.StringVar()
-        self.travel_var = tk.StringVar()
+        self.clear_var = tk.StringVar(value=f"{self.current_z_clear:.3f}")
+        self.travel_var = tk.StringVar(value=f"{self.current_z_travel:.3f}")
 
         ttk.Label(value_frame, text="Aktuell gespeichertes Z_MARK:", style="MarkerHeight.TLabel").grid(row=0, column=0, padx=(0, 8), pady=3, sticky="w")
         ttk.Label(value_frame, textvariable=self.current_mark_var, style="MarkerHeight.TLabel").grid(row=0, column=1, pady=3, sticky="ew")
@@ -150,11 +148,11 @@ class MarkerHeightCalibrationDialog:
         ttk.Label(value_frame, text="Neues Z_MARK:", style="MarkerHeight.TLabel").grid(row=1, column=0, padx=(0, 8), pady=3, sticky="w")
         ttk.Label(value_frame, textvariable=self.proposed_mark_var, style="MarkerHeightBold.TLabel").grid(row=1, column=1, pady=3, sticky="ew")
 
-        ttk.Label(value_frame, text="Daraus Z_CLEAR:", style="MarkerHeight.TLabel").grid(row=2, column=0, padx=(0, 8), pady=3, sticky="w")
-        ttk.Label(value_frame, textvariable=self.clear_var, style="MarkerHeight.TLabel").grid(row=2, column=1, pady=3, sticky="ew")
+        ttk.Label(value_frame, text="Z_CLEAR:", style="MarkerHeight.TLabel").grid(row=2, column=0, padx=(0, 8), pady=3, sticky="w")
+        ttk.Entry(value_frame, textvariable=self.clear_var, width=14).grid(row=2, column=1, pady=3, sticky="w")
 
-        ttk.Label(value_frame, text="Daraus Z_TRAVEL:", style="MarkerHeight.TLabel").grid(row=3, column=0, padx=(0, 8), pady=3, sticky="w")
-        ttk.Label(value_frame, textvariable=self.travel_var, style="MarkerHeight.TLabel").grid(row=3, column=1, pady=3, sticky="ew")
+        ttk.Label(value_frame, text="Z_TRAVEL:", style="MarkerHeight.TLabel").grid(row=3, column=0, padx=(0, 8), pady=3, sticky="w")
+        ttk.Entry(value_frame, textvariable=self.travel_var, width=14).grid(row=3, column=1, pady=3, sticky="w")
 
         control_frame = ttk.LabelFrame(root, text="Z-Achse verfahren", padding=10, style="MarkerHeight.TLabelframe")
         control_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
@@ -180,7 +178,7 @@ class MarkerHeightCalibrationDialog:
             text=(
                 "Fahre die Z-Achse vorsichtig auf die gewuenschte Markierhoehe. "
                 "Mit 'Aktuelle Z als Z_MARK' wird die aktuelle Z-Position als neue Markierhoehe vorgemerkt. "
-                "Gespeichert wird nur Z_MARK; Z_CLEAR und Z_TRAVEL werden automatisch daraus abgeleitet."
+                "Z_CLEAR und Z_TRAVEL werden als eigene Config-Werte gespeichert und koennen hier angepasst werden."
             ),
             wraplength=620,
             justify="left",
@@ -233,6 +231,10 @@ class MarkerHeightCalibrationDialog:
             return
 
         self.proposed_z_mark = float(z)
+        # Vorschlagswerte bleiben editierbar. Beim Uebernehmen einer neuen
+        # Markierhoehe werden Z_CLEAR/Z_TRAVEL zunaechst plausibel mitgefuehrt.
+        self.clear_var.set(f"{self.proposed_z_mark + 5.0:.3f}")
+        self.travel_var.set(f"{self.proposed_z_mark + 10.0:.3f}")
         self.log(f"Neues Z_MARK vorgemerkt: {self.proposed_z_mark:.3f} mm")
         self.update_display()
 
@@ -245,30 +247,51 @@ class MarkerHeightCalibrationDialog:
             self.proposed_z_mark = float(z)
 
         z_mark = float(self.proposed_z_mark)
+        z_clear = self._parse_float(self.clear_var.get(), "Z_CLEAR")
+        z_travel = self._parse_float(self.travel_var.get(), "Z_TRAVEL")
+        if z_clear is None or z_travel is None:
+            return
 
-        if not (float(CONFIG.xyz.z_min) <= z_mark <= float(CONFIG.xyz.z_max)):
+        for name, value in (("Z_MARK", z_mark), ("Z_CLEAR", z_clear), ("Z_TRAVEL", z_travel)):
+            if not (float(CONFIG.xyz.z_min) <= float(value) <= float(CONFIG.xyz.z_max)):
+                messagebox.showerror(
+                    "Markerhoehe",
+                    f"{name}={float(value):.3f} liegt ausserhalb des Arbeitsraums "
+                    f"[{CONFIG.xyz.z_min:.3f}, {CONFIG.xyz.z_max:.3f}].",
+                    parent=self.window,
+                )
+                return
+
+        if not (z_mark <= z_clear <= z_travel):
             messagebox.showerror(
                 "Markerhoehe",
-                f"Z_MARK={z_mark:.3f} liegt ausserhalb des Arbeitsraums "
-                f"[{CONFIG.xyz.z_min:.3f}, {CONFIG.xyz.z_max:.3f}].",
+                "Die Hoehen muessen Z_MARK <= Z_CLEAR <= Z_TRAVEL erfuellen.",
                 parent=self.window,
             )
             return
 
         try:
-            update_marker_z_mark_mm(z_mark)
+            update_marker_z_heights_mm(
+                z_mark_mm=z_mark,
+                z_clear_mm=z_clear,
+                z_travel_mm=z_travel,
+            )
             CONFIG.marker.z_mark_mm = z_mark
+            CONFIG.marker.z_clear_mm = z_clear
+            CONFIG.marker.z_travel_mm = z_travel
         except Exception as exc:
             self.log(f"FEHLER beim Speichern von Z_MARK: {exc}")
             messagebox.showerror("Markerhoehe", str(exc), parent=self.window)
             return
 
         self.current_z_mark = z_mark
+        self.current_z_clear = z_clear
+        self.current_z_travel = z_travel
         self.saved = True
         self.log(
-            f"Z_MARK gespeichert: {z_mark:.3f} mm | "
-            f"Z_CLEAR={z_mark + Z_CLEAR_OFFSET_MM:.3f} mm | "
-            f"Z_TRAVEL={z_mark + Z_TRAVEL_OFFSET_MM:.3f} mm"
+            f"Markerhoehen gespeichert: Z_MARK={z_mark:.3f} mm | "
+            f"Z_CLEAR={z_clear:.3f} mm | "
+            f"Z_TRAVEL={z_travel:.3f} mm"
         )
         if self.set_current_action:
             self.set_current_action("Markerhoehe gespeichert.")
@@ -298,8 +321,8 @@ class MarkerHeightCalibrationDialog:
         z_mark = self.proposed_z_mark if self.proposed_z_mark is not None else self.current_z_mark
         self.current_mark_var.set(f"{self.current_z_mark:.3f} mm")
         self.proposed_mark_var.set(f"{z_mark:.3f} mm")
-        self.clear_var.set(f"{z_mark + Z_CLEAR_OFFSET_MM:.3f} mm")
-        self.travel_var.set(f"{z_mark + Z_TRAVEL_OFFSET_MM:.3f} mm")
+        # Z_CLEAR und Z_TRAVEL sind editierbare Config-Werte und werden
+        # hier nicht automatisch aus Z_MARK abgeleitet.
 
     def _current_xyz(self) -> tuple[float | None, float | None, float | None]:
         state = self.xyz_state_getter()

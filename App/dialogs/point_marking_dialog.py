@@ -426,6 +426,13 @@ class PointMarkingDialog:
                 label_text = self.get_label_for_point(result.point)
                 label_info = label_text if label_text else "ohne Beschriftung"
                 self.log(f"{index}/{total}: markiere {result.name} ({label_info}).")
+                z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
+                z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
+                z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", z_mark_mm + 10.0))
+                self.log(
+                    f"Markierhoehen: Z_MARK={z_mark_mm:.3f} mm, "
+                    f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
+                )
                 self.send_robot_command(
                     "mark_point",
                     timeout_s=240.0,
@@ -435,6 +442,9 @@ class PointMarkingDialog:
                     marker_size=CONFIG.marker.size_mm,
                     marker_shape=self.marker_shape_for_point(result.point),
                     angle_deg=CONFIG.marker.angle_deg,
+                    z_mark_mm=z_mark_mm,
+                    z_clear_mm=z_clear_mm,
+                    z_travel_mm=z_travel_mm,
                 )
 
                 try:
@@ -640,12 +650,41 @@ class PointMarkingDialog:
         if self.closed:
             return
 
+        self.move_robot_to_z_travel_on_close()
+
         self.closed = True
         try:
             self.window.grab_release()
         except Exception:
             pass
         self.window.destroy()
+
+    def move_robot_to_z_travel_on_close(self) -> None:
+        """Faehrt beim Schliessen des Markierdialogs defensiv auf Z_TRAVEL.
+
+        Der Befehl wird asynchron in die XYZ-Worker-Queue gelegt. Dadurch bleibt
+        das Schliessen des Dialogs reaktionsschnell und der Roboter faehrt nach
+        Abschluss eventuell bereits gepufferter Befehle auf sichere Fahrhoehe.
+        """
+
+        try:
+            state = self.xyz_state_getter()
+            if self.xyz_worker is None or state is None:
+                return
+            if not bool(getattr(state, "connected", False)):
+                return
+            if not bool(getattr(state, "homed", False)):
+                return
+
+            z_travel = float(getattr(CONFIG.marker, "z_travel_mm", 176.0))
+            self.xyz_worker.send_command(
+                "move_absolute",
+                z=z_travel,
+                feedrate=900.0,
+            )
+            self.log(f"Dialog geschlossen: fahre Z_TRAVEL={z_travel:.3f} mm an.")
+        except Exception as exc:
+            self.log(f"Z_TRAVEL beim Schliessen konnte nicht angefordert werden: {exc}")
 
 
 def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int) -> None:

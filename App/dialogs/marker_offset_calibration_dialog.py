@@ -400,6 +400,13 @@ class MarkerOffsetCalibrationDialog:
             self.log(
                 f"Markiere {label}: {CONFIG.marker.shape}, Größe={CONFIG.marker.size_mm:.3f} mm"
             )
+            z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
+            z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
+            z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", z_mark_mm + 10.0))
+            self.log(
+                f"Markierhoehen: Z_MARK={z_mark_mm:.3f} mm, "
+                f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
+            )
             self.send_robot_command(
                 "mark_point",
                 timeout_s=180.0,
@@ -409,6 +416,9 @@ class MarkerOffsetCalibrationDialog:
                 marker_size=CONFIG.marker.size_mm,
                 marker_shape=CONFIG.marker.shape,
                 angle_deg=CONFIG.marker.angle_deg,
+                z_mark_mm=z_mark_mm,
+                z_clear_mm=z_clear_mm,
+                z_travel_mm=z_travel_mm,
             )
 
             self.check_abort()

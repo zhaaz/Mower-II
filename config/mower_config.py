@@ -76,19 +76,14 @@ class MarkerConfig:
 
     angle_deg: float = 0.0
 
-    # Kalibrierte Markierhoehe der Z-Achse [mm].
-    # Nur dieser Wert wird gespeichert. Z_CLEAR und Z_TRAVEL
-    # werden daraus abgeleitet, damit keine widerspruechlichen
-    # Z-Hoehen in der Config entstehen.
+    # Markierhoehen der Z-Achse [mm].
+    # Alle drei Werte sind echte Config-Parameter.
+    # Z_MARK = Stift unten / Markierkontakt.
+    # Z_CLEAR = kurze Abhebehoehe zwischen Linien.
+    # Z_TRAVEL = sichere Fahrhoehe fuer laengere XY-Bewegungen.
     z_mark_mm: float = 166.0
-
-    @property
-    def z_clear_mm(self) -> float:
-        return self.z_mark_mm + 5.0
-
-    @property
-    def z_travel_mm(self) -> float:
-        return self.z_mark_mm + 10.0
+    z_clear_mm: float = 171.0
+    z_travel_mm: float = 176.0
 
 
 @dataclass
@@ -98,6 +93,11 @@ class TransformationConfig:
         -2.728703,
         300.037719,
     )
+
+    # Maximale zulaessige KVH-Winkelaenderung nach einer gueltigen
+    # Transformation. Wird der Betrag ueberschritten, wird die
+    # Transformation invalidiert.
+    gyro_invalid_threshold_deg: float = 0.03
 
 
 @dataclass
@@ -244,8 +244,23 @@ def update_marker_to_reflector_robot(
     save_config(config)
 
 
+def update_marker_z_heights_mm(
+    *,
+    z_mark_mm: float,
+    z_clear_mm: float,
+    z_travel_mm: float,
+) -> None:
+    """Speichert die Markierhoehen Z_MARK, Z_CLEAR und Z_TRAVEL in mower_config.json."""
+
+    config = load_config()
+    config.marker.z_mark_mm = float(z_mark_mm)
+    config.marker.z_clear_mm = float(z_clear_mm)
+    config.marker.z_travel_mm = float(z_travel_mm)
+    save_config(config)
+
+
 def update_marker_z_mark_mm(z_mark_mm: float) -> None:
-    """Speichert die kalibrierte Markierhoehe Z_MARK in mower_config.json."""
+    """Kompatibilitaetsfunktion: speichert Z_MARK und behaelt Z_CLEAR/Z_TRAVEL bei."""
 
     config = load_config()
     config.marker.z_mark_mm = float(z_mark_mm)

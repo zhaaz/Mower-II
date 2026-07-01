@@ -45,6 +45,9 @@ class XYZRobot:
         self.timeout = timeout
         self._serial: Optional[serial.Serial] = None
         self._is_homed = False
+        self._z_mark_override_mm: float | None = None
+        self._z_clear_override_mm: float | None = None
+        self._z_travel_override_mm: float | None = None
 
 
     # --------------------------------------------------
@@ -178,17 +181,57 @@ class XYZRobot:
         command = self._build_move_command(x=dx, y=dy, z=dz, feedrate=feedrate)
         return self.send_gcode(command, command_timeout=command_timeout)
 
+    def set_marker_heights(
+            self,
+            *,
+            z_mark_mm: float | None = None,
+            z_clear_mm: float | None = None,
+            z_travel_mm: float | None = None,
+    ) -> None:
+        """Setzt die fuer den naechsten Markierbetrieb verwendeten Z-Hoehen.
+
+        Die Dialoge uebergeben diese Werte explizit aus CONFIG.marker. Dadurch
+        haengen Kalibrierung und Markierung nicht von versteckten Defaults im
+        Roboterobjekt ab. Fehlende CLEAR/TRAVEL-Werte werden aus Z_MARK abgeleitet.
+        """
+
+        if z_mark_mm is not None:
+            z_mark = float(z_mark_mm)
+            self._validate_absolute_position(z=z_mark)
+            self._z_mark_override_mm = z_mark
+
+            if z_clear_mm is None:
+                z_clear_mm = z_mark + 5.0
+            if z_travel_mm is None:
+                z_travel_mm = z_mark + 10.0
+
+        if z_clear_mm is not None:
+            z_clear = float(z_clear_mm)
+            self._validate_absolute_position(z=z_clear)
+            self._z_clear_override_mm = z_clear
+
+        if z_travel_mm is not None:
+            z_travel = float(z_travel_mm)
+            self._validate_absolute_position(z=z_travel)
+            self._z_travel_override_mm = z_travel
+
     def _configured_z_mark(self) -> float:
+        if self._z_mark_override_mm is not None:
+            return float(self._z_mark_override_mm)
         if CONFIG is not None and hasattr(CONFIG, "marker"):
             return float(getattr(CONFIG.marker, "z_mark_mm", self.Z_MARK))
         return self.Z_MARK
 
     def _configured_z_clear(self) -> float:
+        if self._z_clear_override_mm is not None:
+            return float(self._z_clear_override_mm)
         if CONFIG is not None and hasattr(CONFIG, "marker") and hasattr(CONFIG.marker, "z_clear_mm"):
             return float(CONFIG.marker.z_clear_mm)
         return self._configured_z_mark() + 5.0
 
     def _configured_z_travel(self) -> float:
+        if self._z_travel_override_mm is not None:
+            return float(self._z_travel_override_mm)
         if CONFIG is not None and hasattr(CONFIG, "marker") and hasattr(CONFIG.marker, "z_travel_mm"):
             return float(CONFIG.marker.z_travel_mm)
         return self._configured_z_mark() + 10.0
