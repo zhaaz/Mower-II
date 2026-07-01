@@ -402,6 +402,13 @@ class PointMarkingDialog:
             messagebox.showinfo("Punkte markieren", "Keine nicht markierten Punkte ausgewaehlt.", parent=self.window)
             return
 
+        try:
+            z_mark_mm, z_clear_mm, z_travel_mm = self._validated_marker_z_heights()
+        except ValueError as exc:
+            messagebox.showerror("Punkte markieren", str(exc), parent=self.window)
+            self.log(f"Markierung nicht gestartet: {exc}")
+            return
+
         self.workflow_running = True
         self.abort_event.clear()
         self.update_buttons()
@@ -411,6 +418,10 @@ class PointMarkingDialog:
             self.log("Markierausrichtung: LT-X-Achse + Marker-Winkeloffset.")
         else:
             self.log("Markierausrichtung: Roboter-XY / fester Marker-Winkel.")
+        self.log(
+            f"Markierhoehen geprueft: Z_MARK={z_mark_mm:.3f} mm, "
+            f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
+        )
 
         self.workflow_thread = threading.Thread(
             target=self._marking_thread_main,
@@ -443,9 +454,7 @@ class PointMarkingDialog:
                 marker_angle_deg = self._marker_angle_deg()
                 self.log(f"{index}/{total}: markiere {result.name} ({label_info}).")
                 self.log(f"Markierwinkel: {marker_angle_deg:.3f} deg")
-                z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
-                z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
-                z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", z_mark_mm + 10.0))
+                z_mark_mm, z_clear_mm, z_travel_mm = self._validated_marker_z_heights()
                 self.log(
                     f"Markierhoehen: Z_MARK={z_mark_mm:.3f} mm, "
                     f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
@@ -573,6 +582,24 @@ class PointMarkingDialog:
     @staticmethod
     def remark_for_point(point: Any) -> str:
         return str(getattr(point, "remark", "")).strip()
+
+    def _validated_marker_z_heights(self) -> tuple[float, float, float]:
+        z_min = float(getattr(CONFIG.xyz, "z_min", 150.0))
+        z_max = float(getattr(CONFIG.xyz, "z_max", 200.0))
+
+        z_mark = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
+        z_clear = float(getattr(CONFIG.marker, "z_clear_mm", z_mark + 5.0))
+        z_travel = float(getattr(CONFIG.marker, "z_travel_mm", z_mark + 10.0))
+
+        if not (z_min <= z_mark <= z_clear <= z_travel <= z_max):
+            raise ValueError(
+                "Ungueltige Marker-Z-Hoehen. Erwartet: "
+                f"{z_min:.3f} <= Z_MARK <= Z_CLEAR <= Z_TRAVEL <= {z_max:.3f} mm. "
+                f"Aktuell: Z_MARK={z_mark:.3f}, "
+                f"Z_CLEAR={z_clear:.3f}, Z_TRAVEL={z_travel:.3f}."
+            )
+
+        return z_mark, z_clear, z_travel
 
     def _validate_runtime_state(self) -> None:
         if self.xyz_worker is None:
