@@ -525,6 +525,7 @@ class MowerOperatorApp(ctk.CTk):
         self.status_indicators: dict[str, ctk.CTkLabel] = {}
 
         self._build_ui()
+        self._bind_hotkeys()
         self._apply_demo_scene()
         self.refresh_points()
         self.set_current_action("Bereit.")
@@ -622,12 +623,12 @@ class MowerOperatorApp(ctk.CTk):
         menu_bar.add_cascade(label="Gyro", menu=gyro_menu)
 
         system_menu = Menu(menu_bar, tearoff=False)
-        system_menu.add_command(label="Initialisieren", command=self.initialize_system)
+        system_menu.add_command(label="Initialisieren [Ctrl+I]", command=self.initialize_system)
         system_menu.add_separator()
-        system_menu.add_command(label="Transformation starten", command=self.start_transformation)
-        system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren", command=self.offset_calibration)
-        system_menu.add_command(label="Markerhoehe kalibrieren", command=self.calibrate_marker_height)
-        system_menu.add_command(label="Punkte markieren", command=self.mark_points_dialog)
+        system_menu.add_command(label="Transformation starten [Ctrl+T]", command=self.start_transformation)
+        system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren [Ctrl+K]", command=self.offset_calibration)
+        system_menu.add_command(label="Markerhoehe kalibrieren [Ctrl+H]", command=self.calibrate_marker_height)
+        system_menu.add_command(label="Punkte markieren [Ctrl+M]", command=self.mark_points_dialog)
         system_menu.add_separator()
         system_menu.add_command(label="ARN aktivieren", command=self.activate_arn)
         system_menu.add_command(label="ARN deaktivieren", command=self.deactivate_arn)
@@ -641,6 +642,69 @@ class MowerOperatorApp(ctk.CTk):
         menu_bar.add_cascade(label="Ansicht", menu=view_menu)
 
         self.configure(menu=menu_bar)
+
+    def _bind_hotkeys(self) -> None:
+        """Registriert globale Tastenkombinationen fuer haeufige Systembefehle."""
+        self.bind_all("<Control-i>", lambda event: self._run_hotkey(event, self.initialize_system))
+        self.bind_all("<Control-I>", lambda event: self._run_hotkey(event, self.initialize_system))
+        self.bind_all("<Control-t>", lambda event: self._run_hotkey(event, self.start_transformation))
+        self.bind_all("<Control-T>", lambda event: self._run_hotkey(event, self.start_transformation))
+        self.bind_all("<Control-k>", lambda event: self._run_hotkey(event, self.offset_calibration))
+        self.bind_all("<Control-K>", lambda event: self._run_hotkey(event, self.offset_calibration))
+        self.bind_all("<Control-h>", lambda event: self._run_hotkey(event, self.calibrate_marker_height))
+        self.bind_all("<Control-H>", lambda event: self._run_hotkey(event, self.calibrate_marker_height))
+        self.bind_all("<Control-m>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
+        self.bind_all("<Control-M>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
+
+    def _run_hotkey(self, event: tk.Event | None, command: Any) -> str:
+        if self._hotkeys_should_ignore(event):
+            return "break"
+        try:
+            command()
+        except Exception as exc:
+            self.log(f"Hotkey-Befehl fehlgeschlagen: {exc}")
+            messagebox.showerror("Hotkey", str(exc), parent=self)
+        return "break"
+
+    def _hotkeys_should_ignore(self, event: tk.Event | None) -> bool:
+        """Verhindert Hotkeys in Eingabefeldern und waehrend modaler Dialoge."""
+        if self._has_open_child_toplevel():
+            return True
+
+        widget = getattr(event, "widget", None) if event is not None else None
+        if widget is None:
+            try:
+                widget = self.focus_get()
+            except Exception:
+                widget = None
+
+        if widget is None:
+            return False
+
+        try:
+            widget_class = str(widget.winfo_class())
+        except Exception:
+            widget_class = ""
+
+        ignored_classes = {
+            "Entry",
+            "TEntry",
+            "Text",
+            "Spinbox",
+            "TSpinbox",
+            "Combobox",
+            "TCombobox",
+        }
+        return widget_class in ignored_classes
+
+    def _has_open_child_toplevel(self) -> bool:
+        for child in self.winfo_children():
+            try:
+                if isinstance(child, tk.Toplevel) and child.winfo_exists():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _build_main_area(self) -> None:
         main = ctk.CTkFrame(
