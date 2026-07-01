@@ -19,6 +19,8 @@ SendXYZCommand = Callable[..., bool]
 StartTrackerFunction = Callable[[], None]
 ShowTrafoDialogFunction = Callable[..., None]
 SendGyroCommand = Callable[..., Any]
+SendGyemsCommand = Callable[..., Any]
+ArnInitCallback = Callable[[], bool]
 
 DialogRequestKind = Literal["trafo"]
 
@@ -43,6 +45,15 @@ class DialogRequest:
     error_text: str = ""
 
 
+@dataclass
+class AppCallRequest:
+    callback: Callable[[], Any]
+    event: threading.Event
+    success: bool = False
+    result: Any = None
+    error_text: str = ""
+
+
 def show_system_initialization_dialog(
         *,
         parent: tk.Misc,
@@ -58,6 +69,13 @@ def show_system_initialization_dialog(
         ensure_gyro_worker: Callable[[], bool] | None = None,
         gyro_state_getter: StateGetter | None = None,
         send_gyro_command: SendGyroCommand | None = None,
+        gyems_worker_getter: Callable[[], Any] | None = None,
+        ensure_gyems_worker: Callable[[], bool] | None = None,
+        gyems_state_getter: StateGetter | None = None,
+        send_gyems_command: SendGyemsCommand | None = None,
+        set_arn_reference: ArnInitCallback | None = None,
+        activate_arn: ArnInitCallback | None = None,
+        arn_active_getter: Callable[[], bool] | None = None,
         trafo_manager: Any = None,
         show_trafo_dialog: ShowTrafoDialogFunction | None,
         on_trafo_finished: FinishedCallback | None = None,
@@ -78,6 +96,13 @@ def show_system_initialization_dialog(
         ensure_gyro_worker=ensure_gyro_worker,
         gyro_state_getter=gyro_state_getter,
         send_gyro_command=send_gyro_command,
+        gyems_worker_getter=gyems_worker_getter,
+        ensure_gyems_worker=ensure_gyems_worker,
+        gyems_state_getter=gyems_state_getter,
+        send_gyems_command=send_gyems_command,
+        set_arn_reference=set_arn_reference,
+        activate_arn=activate_arn,
+        arn_active_getter=arn_active_getter,
         trafo_manager=trafo_manager,
         show_trafo_dialog=show_trafo_dialog,
         on_trafo_finished=on_trafo_finished,
@@ -98,6 +123,9 @@ class SystemInitializationDialog:
         5. KVH/Gyro Drift bestimmen und setzen
         6. KVH/Gyro Winkel auf 0 setzen
         7. Transformationsdialog starten
+        8. GYEMS/Drehmotor verbinden
+        9. ARN-Referenz setzen
+       10. ARN aktivieren
     """
 
     def __init__(
@@ -116,6 +144,13 @@ class SystemInitializationDialog:
             ensure_gyro_worker: Callable[[], bool] | None,
             gyro_state_getter: StateGetter | None,
             send_gyro_command: SendGyroCommand | None,
+            gyems_worker_getter: Callable[[], Any] | None,
+            ensure_gyems_worker: Callable[[], bool] | None,
+            gyems_state_getter: StateGetter | None,
+            send_gyems_command: SendGyemsCommand | None,
+            set_arn_reference: ArnInitCallback | None,
+            activate_arn: ArnInitCallback | None,
+            arn_active_getter: Callable[[], bool] | None,
             trafo_manager: Any,
             show_trafo_dialog: ShowTrafoDialogFunction | None,
             on_trafo_finished: FinishedCallback | None = None,
@@ -135,6 +170,13 @@ class SystemInitializationDialog:
         self.ensure_gyro_worker = ensure_gyro_worker
         self.gyro_state_getter = gyro_state_getter
         self.send_gyro_command = send_gyro_command
+        self.gyems_worker_getter = gyems_worker_getter
+        self.ensure_gyems_worker = ensure_gyems_worker
+        self.gyems_state_getter = gyems_state_getter
+        self.send_gyems_command = send_gyems_command
+        self.set_arn_reference = set_arn_reference
+        self.activate_arn = activate_arn
+        self.arn_active_getter = arn_active_getter
         self.trafo_manager = trafo_manager
         self.show_trafo_dialog = show_trafo_dialog
         self.on_trafo_finished = on_trafo_finished
@@ -156,6 +198,9 @@ class SystemInitializationDialog:
             StepState("gyro_drift", "Gyro / KVH Drift bestimmen"),
             StepState("gyro_zero", "Gyro / KVH Winkel nullsetzen"),
             StepState("trafo", "Transformation durchführen"),
+            StepState("gyems_connect", "Drehmotor / GYEMS verbinden"),
+            StepState("arn_reference", "ARN-Referenz setzen"),
+            StepState("arn_activate", "ARN aktivieren"),
         ]
         self.step_vars: dict[str, tk.StringVar] = {}
 
@@ -343,6 +388,15 @@ class SystemInitializationDialog:
 
         self.run_transformation()
         self.set_progress(7, len(self.steps))
+
+        self.connect_gyems_default()
+        self.set_progress(8, len(self.steps))
+
+        self.set_arn_reference_step()
+        self.set_progress(9, len(self.steps))
+
+        self.activate_arn_step()
+        self.set_progress(10, len(self.steps))
 
     def connect_xyz_default(self) -> None:
         self.check_abort()
@@ -564,6 +618,102 @@ class SystemInitializationDialog:
         self.log("Transformation gültig abgeschlossen.")
         self.set_step("trafo", "OK")
 
+    def connect_gyems_default(self) -> None:
+        self.check_abort()
+        self.set_step("gyems_connect", "läuft")
+        self.set_status("Drehmotor / GYEMS wird verbunden.")
+
+        if self.ensure_gyems_worker is None or self.gyems_state_getter is None or self.send_gyems_command is None:
+            raise RuntimeError("GYEMS-Schnittstelle ist nicht verfügbar.")
+
+        port = str(getattr(getattr(self.config, "gyems", None), "port", "COM4"))
+        baudrate = int(getattr(getattr(self.config, "gyems", None), "baudrate", 115200))
+        motor_id = int(getattr(getattr(self.config, "gyems", None), "motor_id", 1))
+        self.log(f"Drehmotor / GYEMS verbinden: Port={port}, Baudrate={baudrate}, ID={motor_id}")
+
+        state = self.gyems_state_getter()
+        if state is not None and bool(getattr(state, "connected", False)):
+            current_port = getattr(state, "port", "")
+            self.log(f"Drehmotor / GYEMS ist bereits verbunden. Port={current_port or '-'}")
+            self.set_step("gyems_connect", "bereits verbunden")
+            return
+
+        ok = self.ensure_gyems_worker()
+        if not ok:
+            raise RuntimeError("GYEMS-Worker konnte nicht initialisiert werden.")
+
+        self.send_gyems_command("connect", port=port, baudrate=baudrate, motor_id=motor_id)
+
+        self.wait_for_gyems_state(
+            predicate=lambda state: bool(getattr(state, "connected", False)),
+            timeout_s=20.0,
+            error_text="Timeout beim Verbinden mit Drehmotor / GYEMS.",
+        )
+
+        self.log("Drehmotor / GYEMS verbunden.")
+        self.set_step("gyems_connect", "OK")
+
+    def set_arn_reference_step(self) -> None:
+        self.check_abort()
+        self.set_step("arn_reference", "läuft")
+        self.set_status("ARN-Referenz wird gesetzt.")
+
+        if self.set_arn_reference is None:
+            raise RuntimeError("ARN-Referenzfunktion ist nicht verfügbar.")
+
+        self.log("ARN-Referenz setzen: aktuelle Reflektorausrichtung wird als Referenz übernommen.")
+        ok = bool(self.call_in_gui_thread(self.set_arn_reference))
+        if not ok:
+            raise RuntimeError("ARN-Referenz konnte nicht gesetzt werden.")
+
+        self.wait_for_gyems_state(
+            predicate=lambda state: (
+                getattr(state, "relative_angle_deg", None) is not None
+                and abs(float(getattr(state, "relative_angle_deg", 999.0))) <= 1.0
+            ),
+            timeout_s=5.0,
+            error_text="GYEMS-Referenz wurde nicht bestätigt.",
+        )
+
+        self.log("ARN-Referenz gesetzt.")
+        self.set_step("arn_reference", "OK")
+
+    def activate_arn_step(self) -> None:
+        self.check_abort()
+        self.set_step("arn_activate", "läuft")
+        self.set_status("ARN wird aktiviert.")
+
+        if self.activate_arn is None:
+            raise RuntimeError("ARN-Aktivierungsfunktion ist nicht verfügbar.")
+
+        ok = bool(self.call_in_gui_thread(self.activate_arn))
+        if not ok:
+            raise RuntimeError("ARN konnte nicht aktiviert werden.")
+
+        if self.arn_active_getter is not None:
+            start = time.time()
+            while time.time() - start < 2.0:
+                self.check_abort()
+                if bool(self.arn_active_getter()):
+                    break
+                time.sleep(0.05)
+            else:
+                raise TimeoutError("ARN wurde nicht aktiv.")
+
+        self.log("ARN aktiviert.")
+        self.set_step("arn_activate", "OK")
+
+    def call_in_gui_thread(self, callback: Callable[[], Any]) -> Any:
+        request = AppCallRequest(callback=callback, event=threading.Event())
+        self.gui_queue.put(("app_call", request))
+
+        while not request.event.wait(timeout=0.1):
+            self.check_abort()
+
+        if not request.success:
+            raise RuntimeError(request.error_text or "GUI-Aktion fehlgeschlagen.")
+        return request.result
+
     # --------------------------------------------------
     # Wait helpers
     # --------------------------------------------------
@@ -618,6 +768,23 @@ class SystemInitializationDialog:
             time.sleep(0.05)
         raise TimeoutError(error_text)
 
+    def wait_for_gyems_state(self, *, predicate: Callable[[Any], bool], timeout_s: float, error_text: str) -> None:
+        if self.gyems_state_getter is None:
+            raise RuntimeError("GYEMS-Schnittstelle ist nicht verfügbar.")
+
+        start = time.time()
+        while time.time() - start < timeout_s:
+            self.check_abort()
+            state = self.gyems_state_getter()
+            if state is not None:
+                error = getattr(state, "error_text", None)
+                if error:
+                    raise RuntimeError(str(error))
+                if predicate(state):
+                    return
+            time.sleep(0.05)
+        raise TimeoutError(error_text)
+
     # --------------------------------------------------
     # GUI queue
     # --------------------------------------------------
@@ -650,6 +817,9 @@ class SystemInitializationDialog:
                     request: DialogRequest = payload
                     if request.kind == "trafo":
                         self.create_trafo_dialog(request)
+                elif kind == "app_call":
+                    request: AppCallRequest = payload
+                    self.execute_app_call(request)
                 elif kind == "workflow_finished":
                     success = bool(payload)
                     self.workflow_running = False
@@ -664,6 +834,16 @@ class SystemInitializationDialog:
 
         if not self.closed:
             self.window.after(100, self.process_gui_queue)
+
+    def execute_app_call(self, request: AppCallRequest) -> None:
+        try:
+            request.result = request.callback()
+            request.success = True
+        except Exception as exc:
+            request.success = False
+            request.error_text = str(exc)
+        finally:
+            request.event.set()
 
     def create_trafo_dialog(self, request: DialogRequest) -> None:
         try:

@@ -489,6 +489,14 @@ class MowerOperatorApp(ctk.CTk):
         self.arn_control_kp: float = 2.0
         self.arn_control_deadband_deg: float = 0.5
         self.arn_control_max_speed_dps: float = 20.0
+        self.arn_command_interval_s: float = 0.15
+        if CONFIG is not None and getattr(CONFIG, "arn", None) is not None:
+            arn_config = getattr(CONFIG, "arn")
+            self.arn_control_kp = float(getattr(arn_config, "kp", self.arn_control_kp))
+            self.arn_control_deadband_deg = float(getattr(arn_config, "deadband_deg", self.arn_control_deadband_deg))
+            self.arn_control_max_speed_dps = float(getattr(arn_config, "max_speed_deg_s", self.arn_control_max_speed_dps))
+            self.arn_command_interval_s = max(0.01, float(getattr(arn_config, "command_interval_ms", 150)) / 1000.0)
+            self.reflector_aim_direction_sign = float(getattr(arn_config, "direction_sign", self.reflector_aim_direction_sign))
         self.arn_speed_cmd_dps: float | None = None
         self._arn_last_sent_speed_dps: float | None = None
         self._arn_last_log_state: str | None = None
@@ -838,13 +846,8 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_value_row(live, row=13, key="gyro_drift", label="Drift")
 
         self._add_live_section_label(live, row=14, text="Reflektornachführung")
-        self._add_live_value_row(live, row=15, key="arn_bearing_robot", label="Richtung akt.")
-        self._add_live_value_row(live, row=16, key="arn_reference_bearing", label="Richtung Ref.")
-        self._add_live_value_row(live, row=17, key="arn_target_angle", label="Soll rel.")
-        self._add_live_value_row(live, row=18, key="arn_gyems_angle", label="Ist rel.")
-        self._add_live_value_row(live, row=19, key="arn_error_angle", label="Fehler")
-        self._add_live_value_row(live, row=20, key="arn_distance", label="Distanz LT")
-        self._add_live_value_row(live, row=21, key="arn_speed_cmd", label="Speed cmd")
+        self._add_live_value_row(live, row=15, key="arn_distance", label="Distanz LT")
+        self._add_live_value_row(live, row=16, key="arn_speed_cmd", label="Speed")
 
     def _status_card(
             self,
@@ -1753,6 +1756,74 @@ class MowerOperatorApp(ctk.CTk):
         except Exception:
             pass
 
+    def _send_gyems_command(self, command: str, **kwargs: Any) -> bool:
+        if not self._ensure_gyems_worker():
+            return False
+        if self.gyems_worker is None or not hasattr(self.gyems_worker, "send_command"):
+            self.log("GYEMS-Worker besitzt keine send_command(...)-Schnittstelle.")
+            return False
+        try:
+            self.gyems_worker.send_command(command, **kwargs)
+            return True
+        except Exception as exc:
+            self.log(f"GYEMS-Befehl '{command}' konnte nicht gesendet werden: {exc}")
+            return False
+
+    def set_drehmotor_reference_for_initialization(self) -> bool:
+        if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
+            self.log("Initialisierung: ARN-Referenz nicht möglich, GYEMS ist nicht verbunden.")
+            self.set_current_action("ARN-Referenz nicht möglich: GYEMS nicht verbunden.")
+            return False
+
+        self._update_reflector_aiming()
+        aim = self.reflector_aim_result
+        if aim is None or getattr(aim, "bearing_robot_deg", None) is None:
+            self.log("Initialisierung: ARN-Referenz nicht möglich, keine gültige Reflektor-Sollrichtung vorhanden.")
+            self.set_current_action("ARN-Referenz nicht möglich: keine Sollrichtung.")
+            return False
+
+        try:
+            self.reflector_aim_reference_bearing_robot_deg = self._normalize_angle_360(
+                float(getattr(aim, "bearing_robot_deg"))
+            )
+            self.reflector_aim_relative_target_deg = 0.0
+            self.reflector_aim_relative_error_deg = None
+            self.gyems_worker.send_command("set_reference_here")
+            self.log(
+                "Initialisierung: ARN-Referenz angefordert: "
+                f"Richtung Referenz={self.reflector_aim_reference_bearing_robot_deg:.3f} deg."
+            )
+            self.set_current_action("ARN-Referenz gesetzt.")
+            self.update_status()
+            return True
+        except Exception as exc:
+            self.log(f"Initialisierung: ARN-Referenz fehlgeschlagen: {exc}")
+            self.set_current_action("ARN-Referenz fehlgeschlagen.")
+            return False
+
+    def activate_arn_for_initialization(self) -> bool:
+        if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
+            self.log("Initialisierung: ARN nicht aktiviert, GYEMS ist nicht verbunden.")
+            self.set_current_action("ARN nicht möglich: GYEMS nicht verbunden.")
+            return False
+        if self.reflector_aim_reference_bearing_robot_deg is None:
+            self.log("Initialisierung: ARN nicht aktiviert, Referenz fehlt.")
+            self.set_current_action("ARN nicht möglich: Referenz fehlt.")
+            return False
+
+        self.arn_active = True
+        self.arn_speed_cmd_dps = 0.0
+        self._arn_last_log_state = None
+        self._arn_last_sent_speed_dps = None
+        self.log(
+            "Initialisierung: ARN aktiviert "
+            f"(kp={self.arn_control_kp:.2f}, Deadband={self.arn_control_deadband_deg:.2f} deg, "
+            f"MaxSpeed={self.arn_control_max_speed_dps:.1f} deg/s)."
+        )
+        self.set_current_action("Reflektornachfuehrung aktiv.")
+        self.update_status()
+        return True
+
     def connect_drehmotor(self) -> None:
         self.set_current_action("Drehmotor wird verbunden...")
 
@@ -2216,6 +2287,13 @@ class MowerOperatorApp(ctk.CTk):
                 ensure_gyro_worker=self._ensure_gyro_worker,
                 gyro_state_getter=lambda: self.gyro_state,
                 send_gyro_command=lambda command, **kwargs: self.gyro_worker.send_command(command, **kwargs) if self.gyro_worker is not None else None,
+                gyems_worker_getter=lambda: self.gyems_worker,
+                ensure_gyems_worker=self._ensure_gyems_worker,
+                gyems_state_getter=lambda: self.gyems_state,
+                send_gyems_command=lambda command, **kwargs: self.gyems_worker.send_command(command, **kwargs) if self.gyems_worker is not None else None,
+                set_arn_reference=self.set_drehmotor_reference_for_initialization,
+                activate_arn=self.activate_arn_for_initialization,
+                arn_active_getter=lambda: self.arn_active,
                 trafo_manager=self.trafo_manager,
                 show_trafo_dialog=show_trafo_dialog,
                 on_trafo_finished=self.on_trafo_finished,
@@ -3054,18 +3132,8 @@ class MowerOperatorApp(ctk.CTk):
         self._update_reflector_aiming()
         aim = self.reflector_aim_result
         if aim is None:
-            self._set_live_value("arn_bearing_robot", "-")
-            self._set_live_value("arn_reference_bearing", "-")
-            self._set_live_value("arn_target_angle", "-")
-            self._set_live_value("arn_gyems_angle", "-")
-            self._set_live_value("arn_error_angle", "-")
             self._set_live_value("arn_distance", "-")
         else:
-            self._set_live_value("arn_bearing_robot", self._format_unsigned_positive_value(getattr(aim, "bearing_robot_deg", None), precision=3, suffix=" °"))
-            self._set_live_value("arn_reference_bearing", self._format_unsigned_positive_value(self.reflector_aim_reference_bearing_robot_deg, precision=3, suffix=" °"))
-            self._set_live_value("arn_target_angle", self._format_signed_value(self.reflector_aim_relative_target_deg, precision=3, suffix=" °"))
-            self._set_live_value("arn_gyems_angle", self._format_signed_value(getattr(aim, "gyems_angle_deg", None), precision=3, suffix=" °"))
-            self._set_live_value("arn_error_angle", self._format_signed_value(self.reflector_aim_relative_error_deg, precision=3, suffix=" °"))
             self._set_live_value("arn_distance", self._format_mm_component(getattr(aim, "distance_to_tracker_mm", None)))
 
         self._update_arn_control()
@@ -3138,7 +3206,7 @@ class MowerOperatorApp(ctk.CTk):
 
         last = self._arn_last_sent_speed_dps
         now = time.monotonic()
-        min_interval_s = 0.15
+        min_interval_s = float(getattr(self, "arn_command_interval_s", 0.15))
         min_delta_dps = 0.25
 
         if not force and last is not None:
@@ -3444,6 +3512,10 @@ class MowerOperatorApp(ctk.CTk):
             f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
             f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"
             f"    Z {CONFIG.xyz.z_min:.0f}..{CONFIG.xyz.z_max:.0f}\n"
+            f"  ARN:\n"
+            f"    kp={self.arn_control_kp:.3f}, MaxSpeed={self.arn_control_max_speed_dps:.1f} deg/s, "
+            f"Deadband={self.arn_control_deadband_deg:.3f} deg, CmdInterval={self.arn_command_interval_s * 1000.0:.0f} ms, "
+            f"DirectionSign={self.reflector_aim_direction_sign:.1f}\n"
             f"  Marker:\n"
             f"    Shape={CONFIG.marker.shape}, Size={CONFIG.marker.size_mm:.3f} mm\n"
             f"    Z_MARK={getattr(CONFIG.marker, 'z_mark_mm', 166.0):.3f} mm\n"
