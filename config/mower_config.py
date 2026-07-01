@@ -76,6 +76,11 @@ class MarkerConfig:
 
     angle_deg: float = 0.0
 
+    # Wenn aktiv, werden Markerformen und Beschriftungen an der
+    # X-Achse des Lasertracker-Koordinatensystems ausgerichtet.
+    # CONFIG.marker.angle_deg bleibt ein zusaetzlicher Winkeloffset.
+    align_to_tracker_axes: bool = False
+
     # Markierhoehen der Z-Achse [mm].
     # Alle drei Werte sind echte Config-Parameter.
     # Z_MARK = Stift unten / Markierkontakt.
@@ -264,6 +269,14 @@ def update_marker_z_mark_mm(z_mark_mm: float) -> None:
 
     config = load_config()
     config.marker.z_mark_mm = float(z_mark_mm)
+    save_config(config)
+
+
+def update_marker_align_to_tracker_axes(enabled: bool) -> None:
+    """Speichert, ob Markierungen an der LT-X-Achse ausgerichtet werden."""
+
+    config = load_config()
+    config.marker.align_to_tracker_axes = bool(enabled)
     save_config(config)
 
 

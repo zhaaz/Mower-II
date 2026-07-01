@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import queue
 import threading
 import time
@@ -10,7 +11,7 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Callable
 
-from config.mower_config import CONFIG
+from config.mower_config import CONFIG, update_marker_align_to_tracker_axes
 from App.services.point_reachability import (
     PointReachability,
     apply_reachability_to_points,
@@ -112,6 +113,9 @@ class PointMarkingDialog:
         self.result_by_iid: dict[str, PointReachability] = {}
         self.selected_iids: set[str] = set()
         self.label_mode_var = tk.StringVar(value=LABEL_POINT_NAME)
+        self.align_to_tracker_axes_var = tk.BooleanVar(
+            value=bool(getattr(CONFIG.marker, "align_to_tracker_axes", False))
+        )
 
         self.window = tk.Toplevel(parent)
         self.window.title("Punkte markieren")
@@ -194,6 +198,13 @@ class PointMarkingDialog:
             text="Bemerkung wird nur verwendet, wenn sie in der Punktdatei vorhanden ist.",
             style="PointMarking.TLabel",
         ).grid(row=1, column=0, columnspan=2, pady=(6, 0), sticky="w")
+
+        ttk.Checkbutton(
+            label_frame,
+            text="Markierungen an LT-X-Achse ausrichten",
+            variable=self.align_to_tracker_axes_var,
+            command=self.on_align_to_tracker_axes_changed,
+        ).grid(row=2, column=0, columnspan=2, pady=(8, 0), sticky="w")
 
         table_frame = ttk.LabelFrame(root, text="Markierbare Punkte", padding=8, style="PointMarking.TLabelframe")
         table_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
@@ -396,6 +407,10 @@ class PointMarkingDialog:
         self.update_buttons()
         self.log(f"Markierung gestartet: {len(selected_results)} Punkt(e).")
         self.log(f"Beschriftung: {self.label_mode_var.get()}")
+        if self.align_to_tracker_axes_var.get():
+            self.log("Markierausrichtung: LT-X-Achse + Marker-Winkeloffset.")
+        else:
+            self.log("Markierausrichtung: Roboter-XY / fester Marker-Winkel.")
 
         self.workflow_thread = threading.Thread(
             target=self._marking_thread_main,
@@ -425,7 +440,9 @@ class PointMarkingDialog:
 
                 label_text = self.get_label_for_point(result.point)
                 label_info = label_text if label_text else "ohne Beschriftung"
+                marker_angle_deg = self._marker_angle_deg()
                 self.log(f"{index}/{total}: markiere {result.name} ({label_info}).")
+                self.log(f"Markierwinkel: {marker_angle_deg:.3f} deg")
                 z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
                 z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
                 z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", z_mark_mm + 10.0))
@@ -441,7 +458,7 @@ class PointMarkingDialog:
                     label=label_text,
                     marker_size=CONFIG.marker.size_mm,
                     marker_shape=self.marker_shape_for_point(result.point),
-                    angle_deg=CONFIG.marker.angle_deg,
+                    angle_deg=marker_angle_deg,
                     z_mark_mm=z_mark_mm,
                     z_clear_mm=z_clear_mm,
                     z_travel_mm=z_travel_mm,
@@ -464,6 +481,65 @@ class PointMarkingDialog:
             self.gui_queue.put(("error", str(exc)))
         finally:
             self.gui_queue.put(("workflow_finished", None))
+
+    def on_align_to_tracker_axes_changed(self) -> None:
+        enabled = bool(self.align_to_tracker_axes_var.get())
+        CONFIG.marker.align_to_tracker_axes = enabled
+        try:
+            update_marker_align_to_tracker_axes(enabled)
+            self.log(
+                "Markierausrichtung gespeichert: "
+                + ("LT-X-Achse" if enabled else "Roboter-XY / fester Winkel")
+            )
+        except Exception as exc:
+            self.log(f"FEHLER beim Speichern der Markierausrichtung: {exc}")
+            messagebox.showerror("Punkte markieren", str(exc), parent=self.window)
+
+    def _marker_angle_deg(self) -> float:
+        base_angle = float(getattr(CONFIG.marker, "angle_deg", 0.0))
+
+        if not bool(self.align_to_tracker_axes_var.get()):
+            return self._normalize_angle_360(base_angle)
+
+        tracker_x_angle_robot_deg = self._tracker_x_axis_angle_robot_deg()
+        if tracker_x_angle_robot_deg is None:
+            raise RuntimeError(
+                "Markierausrichtung an LT-X-Achse ist aktiv, "
+                "aber aus der Transformation konnte kein Rotationswinkel bestimmt werden."
+            )
+
+        return self._normalize_angle_360(tracker_x_angle_robot_deg + base_angle)
+
+    def _tracker_x_axis_angle_robot_deg(self) -> float | None:
+        if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
+            return None
+
+        trafo = getattr(self.trafo_manager, "active_trafo", None)
+        rotation = getattr(trafo, "rotation", None)
+        if rotation is None:
+            return None
+
+        try:
+            # Annahme analog zur Haupt-App:
+            # rotation bildet Roboterachsen ins Lasertracker-System ab.
+            # Die LT-X-Achse im Robotersystem ergibt sich aus R^T * [1, 0].
+            vx_robot = float(rotation[0, 0])
+            vy_robot = float(rotation[0, 1])
+        except Exception:
+            try:
+                vx_robot = float(rotation[0][0])
+                vy_robot = float(rotation[0][1])
+            except Exception:
+                return None
+
+        if abs(vx_robot) < 1e-12 and abs(vy_robot) < 1e-12:
+            return None
+
+        return math.degrees(math.atan2(vy_robot, vx_robot))
+
+    @staticmethod
+    def _normalize_angle_360(angle_deg: float) -> float:
+        return float(angle_deg) % 360.0
 
     def get_label_for_point(self, point: Any) -> str:
         mode = self.label_mode_var.get()

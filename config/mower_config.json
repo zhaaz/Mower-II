@@ -17,10 +17,23 @@
         "capture_timeout_s": 30.0,
         "ccr_radius_mm": 19.05
     },
+    "gyro": {
+        "port": "COM3",
+        "baudrate": 375000,
+        "default_drift_seconds": 30.0
+    },
+    "arn": {
+        "kp": 4.0,
+        "max_speed_deg_s": 35.0,
+        "deadband_deg": 0.5,
+        "command_interval_ms": 200,
+        "direction_sign": 1.0
+    },
     "marker": {
         "shape": "plus",
         "size_mm": 40.0,
         "angle_deg": 0.0,
+        "align_to_tracker_axes": true,
         "z_mark_mm": 166.0,
         "z_clear_mm": 171.0,
         "z_travel_mm": 176.0
@@ -37,17 +50,5 @@
         "tracker_station_file": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/data/tracker_station.txt",
         "log_dir": "logs",
         "measurement_plans_dir": "measurement_plans"
-    },
-    "gyro": {
-        "port": "COM3",
-        "baudrate": 375000,
-        "default_drift_seconds": 30.0
-    },
-    "arn": {
-        "kp": 4.0,
-        "max_speed_deg_s": 35.0,
-        "deadband_deg": 0.5,
-        "command_interval_ms": 200,
-        "direction_sign": 1.0
     }
 }
