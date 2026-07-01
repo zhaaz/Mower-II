@@ -49,6 +49,26 @@ class GyroConfig:
 
 
 @dataclass
+class ArnConfig:
+    # Proportionalfaktor fuer die aktive Reflektornachfuehrung.
+    # speed_cmd_deg_s = kp * error_deg
+    kp: float = 5.0
+
+    # Maximale GYEMS-Geschwindigkeit im ARN-Betrieb [deg/s].
+    max_speed_deg_s: float = 45.0
+
+    # Totband gegen Zittern um die Sollrichtung [deg].
+    deadband_deg: float = 0.5
+
+    # Mindestabstand zwischen Speed-Kommandos [ms].
+    command_interval_ms: int = 200
+
+    # Vorzeichen fuer die Umrechnung der geometrischen Sollrichtung in
+    # GYEMS-Motorwinkel. Bei umgekehrter Mechanik auf -1.0 setzen.
+    direction_sign: float = 1.0
+
+
+@dataclass
 class MarkerConfig:
     shape: str = "plus"
 
@@ -99,6 +119,7 @@ class MowerConfig:
     xyz: XYZConfig
     tracker: TrackerConfig
     gyro: GyroConfig
+    arn: ArnConfig
     marker: MarkerConfig
     transformation: TransformationConfig
     paths: PathsConfig
@@ -112,6 +133,7 @@ DEFAULT_CONFIG = MowerConfig(
     xyz=XYZConfig(),
     tracker=TrackerConfig(),
     gyro=GyroConfig(),
+    arn=ArnConfig(),
     marker=MarkerConfig(),
     transformation=TransformationConfig(),
     paths=PathsConfig(),
@@ -165,6 +187,7 @@ def load_config() -> MowerConfig:
     xyz_data = _section(data, "xyz")
     tracker_data = _section(data, "tracker")
     gyro_data = _section(data, "gyro")
+    arn_data = _section(data, "arn")
     marker_data = _section(data, "marker")
     transformation_data = _section(data, "transformation")
     paths_data = _section(data, "paths")
@@ -185,6 +208,7 @@ def load_config() -> MowerConfig:
         xyz=XYZConfig(**xyz_data),
         tracker=TrackerConfig(**tracker_data),
         gyro=GyroConfig(**gyro_data),
+        arn=ArnConfig(**arn_data),
         marker=MarkerConfig(**marker_data),
         transformation=transformation,
         paths=PathsConfig(**paths_data),

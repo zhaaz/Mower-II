@@ -481,6 +481,19 @@ class MowerOperatorApp(ctk.CTk):
         self.reflector_aim_relative_target_deg: float | None = None
         self.reflector_aim_relative_error_deg: float | None = None
         self.reflector_aim_direction_sign: float = 1.0
+
+        # ARN-Regelung Stufe 1: defensiver P-Regler auf GYEMS-Speed.
+        # Die Nachfuehrung arbeitet nur, wenn ARN aktiv ist und alle
+        # benoetigten Live-Daten gueltig sind. Bei ungueltigem Zustand wird
+        # der Motor per Speed=0 gestoppt.
+        self.arn_control_kp: float = 2.0
+        self.arn_control_deadband_deg: float = 0.5
+        self.arn_control_max_speed_dps: float = 20.0
+        self.arn_speed_cmd_dps: float | None = None
+        self._arn_last_sent_speed_dps: float | None = None
+        self._arn_last_log_state: str | None = None
+        self._arn_last_command_time_s: float = 0.0
+
         if ReflectorAimCalculator is not None and ReflectorAimConfig is not None and Point2D is not None:
             self.reflector_aim_calculator = ReflectorAimCalculator(
                 ReflectorAimConfig(
@@ -810,7 +823,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
         live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
-        live.grid_rowconfigure(21, weight=1)
+        live.grid_rowconfigure(22, weight=1)
         self._add_live_section_label(live, row=0, text="XYZ-Roboter")
         self._add_live_value_row(live, row=1, key="xyz_x", label="X")
         self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
@@ -831,6 +844,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_value_row(live, row=18, key="arn_gyems_angle", label="Ist rel.")
         self._add_live_value_row(live, row=19, key="arn_error_angle", label="Fehler")
         self._add_live_value_row(live, row=20, key="arn_distance", label="Distanz LT")
+        self._add_live_value_row(live, row=21, key="arn_speed_cmd", label="Speed cmd")
 
     def _status_card(
             self,
@@ -1189,8 +1203,11 @@ class MowerOperatorApp(ctk.CTk):
             pass
 
         try:
-            if self.gyems_worker is not None and hasattr(self.gyems_worker, "stop"):
-                self.gyems_worker.stop()
+            if self.gyems_worker is not None:
+                self.arn_active = False
+                self._send_arn_speed_command(0.0, force=True)
+                if hasattr(self.gyems_worker, "stop"):
+                    self.gyems_worker.stop()
         except Exception:
             pass
 
@@ -1797,6 +1814,8 @@ class MowerOperatorApp(ctk.CTk):
 
     def disconnect_drehmotor(self) -> None:
         self.set_current_action("Drehmotor wird getrennt...")
+        self.arn_active = False
+        self._send_arn_speed_command(0.0, force=True)
 
         if self.gyems_worker is None:
             self.drehmotor_ready = False
@@ -2529,15 +2548,40 @@ class MowerOperatorApp(ctk.CTk):
 
     def activate_arn(self) -> None:
         self.set_current_action("Reflektornachfuehrung wird aktiviert...")
+
+        if not self._gyems_connected_for_command("Reflektornachfuehrung aktivieren"):
+            return
+
+        if self.reflector_aim_reference_bearing_robot_deg is None:
+            self.log("Reflektornachfuehrung nicht aktiviert: Drehmotor-Referenz fehlt.")
+            messagebox.showwarning(
+                "Reflektornachfuehrung",
+                "Bitte zuerst den Reflektor mechanisch auf den Tracker ausrichten\n"
+                "und dann Drehmotor -> Referenz setzen.",
+                parent=self,
+            )
+            self.set_current_action("Reflektornachfuehrung nicht moeglich: Referenz fehlt.")
+            return
+
         self.arn_active = True
-        self.log("Reflektornachfuehrung aktiviert.")
+        self.arn_speed_cmd_dps = 0.0
+        self._arn_last_log_state = None
+        self._arn_last_sent_speed_dps = None
+        self.log(
+            "Reflektornachfuehrung aktiviert "
+            f"(kp={self.arn_control_kp:.2f}, Deadband={self.arn_control_deadband_deg:.2f} deg, "
+            f"MaxSpeed={self.arn_control_max_speed_dps:.1f} deg/s)."
+        )
         self.set_current_action("Reflektornachfuehrung aktiv.")
         self.update_status()
 
     def deactivate_arn(self) -> None:
         self.set_current_action("Reflektornachfuehrung wird deaktiviert...")
         self.arn_active = False
-        self.log("Reflektornachfuehrung deaktiviert.")
+        self._send_arn_speed_command(0.0, force=True)
+        self.arn_speed_cmd_dps = 0.0
+        self._arn_last_log_state = None
+        self.log("Reflektornachfuehrung deaktiviert. GYEMS-Speed auf 0 gesetzt.")
         self.set_current_action("Reflektornachfuehrung inaktiv.")
         self.update_status()
 
@@ -3023,6 +3067,98 @@ class MowerOperatorApp(ctk.CTk):
             self._set_live_value("arn_gyems_angle", self._format_signed_value(getattr(aim, "gyems_angle_deg", None), precision=3, suffix=" °"))
             self._set_live_value("arn_error_angle", self._format_signed_value(self.reflector_aim_relative_error_deg, precision=3, suffix=" °"))
             self._set_live_value("arn_distance", self._format_mm_component(getattr(aim, "distance_to_tracker_mm", None)))
+
+        self._update_arn_control()
+        self._set_live_value("arn_speed_cmd", self._format_signed_value(self.arn_speed_cmd_dps, precision=2, suffix=" °/s"))
+
+    def _update_arn_control(self) -> None:
+        """Fuehrt die erste defensive ARN-Regelstufe aus.
+
+        Der Regler gibt nur ein begrenztes GYEMS-Speed-Kommando aus. Sobald
+        ARN inaktiv ist oder eine benoetigte Bedingung fehlt, wird Speed=0
+        gesendet. Dadurch bleibt die Nachfuehrung fuer den ersten Praxistest
+        kontrollierbar.
+        """
+
+        if not bool(getattr(self, "arn_active", False)):
+            self.arn_speed_cmd_dps = 0.0
+            if self._arn_last_sent_speed_dps not in (None, 0.0):
+                self._send_arn_speed_command(0.0, force=True)
+            return
+
+        ready, reason = self._arn_control_ready()
+        if not ready:
+            self.arn_speed_cmd_dps = 0.0
+            self._send_arn_speed_command(0.0)
+            self._log_arn_state_once(f"paused:{reason}", f"Reflektornachfuehrung pausiert: {reason}.")
+            return
+
+        error_deg = self.reflector_aim_relative_error_deg
+        if error_deg is None:
+            self.arn_speed_cmd_dps = 0.0
+            self._send_arn_speed_command(0.0)
+            self._log_arn_state_once("paused:no_error", "Reflektornachfuehrung pausiert: kein Winkelfehler berechenbar.")
+            return
+
+        error = float(error_deg)
+        if abs(error) <= self.arn_control_deadband_deg:
+            speed = 0.0
+        else:
+            speed = self.arn_control_kp * error
+            speed = max(-self.arn_control_max_speed_dps, min(self.arn_control_max_speed_dps, speed))
+
+        self.arn_speed_cmd_dps = speed
+        self._send_arn_speed_command(speed)
+        self._log_arn_state_once("active", "Reflektornachfuehrung regelt.")
+
+    def _arn_control_ready(self) -> tuple[bool, str]:
+        if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
+            return False, "GYEMS nicht verbunden"
+        if not self.tracker_ready:
+            return False, "Tracker UDP nicht aktiv"
+        if not self.tracker_data_current:
+            return False, "Trackerdaten nicht aktuell"
+        if self._current_gyro_orientation_lt_deg() is None:
+            return False, "KVH-Orientierung nicht verfuegbar"
+        if self.reflector_aim_reference_bearing_robot_deg is None:
+            return False, "Reflektor-Referenz fehlt"
+        if self.reflector_aim_result is None:
+            return False, "Sollrichtung nicht berechenbar"
+        if self._current_gyems_angle_deg() is None:
+            return False, "GYEMS-Istwinkel nicht verfuegbar"
+        return True, "ok"
+
+    def _send_arn_speed_command(self, speed_dps: float, *, force: bool = False) -> None:
+        if self.gyems_worker is None:
+            return
+
+        speed = float(speed_dps)
+        if abs(speed) < 1e-9:
+            speed = 0.0
+
+        last = self._arn_last_sent_speed_dps
+        now = time.monotonic()
+        min_interval_s = 0.15
+        min_delta_dps = 0.25
+
+        if not force and last is not None:
+            if abs(speed - float(last)) < min_delta_dps and (now - self._arn_last_command_time_s) < 1.0:
+                return
+            if (now - self._arn_last_command_time_s) < min_interval_s:
+                return
+
+        try:
+            self.gyems_worker.send_command("set_speed", speed_dps=speed)
+            self._arn_last_sent_speed_dps = speed
+            self._arn_last_command_time_s = now
+        except Exception as exc:
+            self.log(f"ARN-Speed-Kommando fehlgeschlagen: {exc}")
+
+    def _log_arn_state_once(self, state_key: str, message: str) -> None:
+        if self._arn_last_log_state == state_key:
+            return
+        self._arn_last_log_state = state_key
+        self.log(message)
 
     def _update_reflector_aiming(self) -> None:
         """Berechnet die Anzeige der relativen Reflektornachfuehrung.
