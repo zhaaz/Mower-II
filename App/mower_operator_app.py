@@ -134,6 +134,11 @@ except Exception:
     show_kvh_drift_dialog = None
 
 try:
+    from App.dialogs.gyems_diagnostic_dialog import show_gyems_diagnostic_dialog
+except Exception:
+    show_gyems_diagnostic_dialog = None
+
+try:
     from Transformation.trafo_manager import TrafoManager
 except Exception:
     TrafoManager = None
@@ -471,6 +476,16 @@ class MowerOperatorApp(ctk.CTk):
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
 
+        # Sicherheitsueberwachung nach gueltiger Transformation:
+        # Wenn sich der KVH-Winkel danach merklich aendert, ist die
+        # Transformation fuer den aktuellen Wagenzustand nicht mehr gueltig.
+        try:
+            self.trafo_gyro_invalid_threshold_deg: float = float(
+                getattr(getattr(CONFIG, "transformation", None), "gyro_invalid_threshold_deg", 0.03)
+            )
+        except Exception:
+            self.trafo_gyro_invalid_threshold_deg = 0.03
+
         # Reflektornachfuehrung: Der Reflektor wird bei der Initialisierung
         # mechanisch auf den Tracker ausgerichtet. Die Nachfuehrung arbeitet
         # daher relativ zu dieser Referenzausrichtung, nicht mit einem
@@ -610,6 +625,7 @@ class MowerOperatorApp(ctk.CTk):
         motor_menu.add_command(label="Stop", command=self.drehmotor_stop)
         motor_menu.add_separator()
         motor_menu.add_command(label="Status anzeigen", command=self.show_drehmotor_status)
+        motor_menu.add_command(label="GYEMS Diagnose...", command=self.show_gyems_diagnostic_dialog)
         menu_bar.add_cascade(label="Drehmotor", menu=motor_menu)
 
         gyro_menu = Menu(menu_bar, tearoff=False)
@@ -628,7 +644,7 @@ class MowerOperatorApp(ctk.CTk):
         system_menu.add_command(label="Transformation starten [Ctrl+T]", command=self.start_transformation)
         system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren [Ctrl+K]", command=self.offset_calibration)
         system_menu.add_command(label="Markerhoehe kalibrieren [Ctrl+H]", command=self.calibrate_marker_height)
-        system_menu.add_command(label="Punkte markieren [Ctrl+M]", command=self.mark_points_dialog)
+        system_menu.add_command(label="Punkte markieren [Ctrl+A]", command=self.mark_points_dialog)
         system_menu.add_separator()
         system_menu.add_command(label="ARN aktivieren", command=self.activate_arn)
         system_menu.add_command(label="ARN deaktivieren", command=self.deactivate_arn)
@@ -653,12 +669,12 @@ class MowerOperatorApp(ctk.CTk):
         self.bind_all("<Control-K>", lambda event: self._run_hotkey(event, self.offset_calibration))
         self.bind_all("<Control-h>", lambda event: self._run_hotkey(event, self.calibrate_marker_height))
         self.bind_all("<Control-H>", lambda event: self._run_hotkey(event, self.calibrate_marker_height))
-        self.bind_all("<Control-m>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
-        self.bind_all("<Control-M>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
+        self.bind_all("<Control-a>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
+        self.bind_all("<Control-A>", lambda event: self._run_hotkey(event, self.mark_points_dialog))
 
     def _run_hotkey(self, event: tk.Event | None, command: Any) -> str:
         if self._hotkeys_should_ignore(event):
-            return "break"
+            return ""
         try:
             command()
         except Exception as exc:
@@ -2063,6 +2079,45 @@ class MowerOperatorApp(ctk.CTk):
         )
         messagebox.showinfo("Drehmotor Status", message, parent=self)
 
+    def show_gyems_diagnostic_dialog(self) -> None:
+        self.set_current_action("GYEMS Diagnose wird geoeffnet...")
+
+        if show_gyems_diagnostic_dialog is None:
+            self.log("GYEMS-Diagnosedialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "GYEMS Diagnose",
+                "GYEMS-Diagnosedialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: GYEMS-Diagnosedialog nicht verfuegbar.")
+            return
+
+        if bool(getattr(self, "arn_active", False)):
+            messagebox.showinfo(
+                "GYEMS Diagnose",
+                "Die Reflektornachfuehrung ist aktiv.\n"
+                "Fuer die manuelle GYEMS-Diagnose wird ARN deaktiviert und Speed=0 gesendet.",
+                parent=self,
+            )
+            self.log("GYEMS Diagnose: ARN war aktiv und wird fuer die Diagnose deaktiviert.")
+            self.deactivate_arn()
+
+        try:
+            show_gyems_diagnostic_dialog(
+                parent=self,
+                config=CONFIG,
+                ensure_worker=self._ensure_gyems_worker,
+                state_getter=lambda: self.gyems_state,
+                send_command=lambda command, **kwargs: self.gyems_worker.send_command(command, **kwargs) if self.gyems_worker is not None else None,
+                log=self.log,
+                set_current_action=self.set_current_action,
+            )
+            self.set_current_action("GYEMS Diagnose geoeffnet.")
+        except Exception as exc:
+            self.log(f"GYEMS-Diagnosedialog konnte nicht geoeffnet werden: {exc}")
+            messagebox.showerror("GYEMS Diagnose", str(exc), parent=self)
+            self.set_current_action("GYEMS Diagnose konnte nicht geoeffnet werden.")
+
     def _gyems_connected_for_command(self, action_name: str) -> bool:
         if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
             self.log(f"GYEMS: {action_name} nicht möglich, Drehmotor ist nicht verbunden.")
@@ -2108,6 +2163,7 @@ class MowerOperatorApp(ctk.CTk):
 
         def apply_state() -> None:
             self.gyro_ready = bool(getattr(state, "connected", False))
+            self._check_trafo_validity_from_gyro()
             self.update_status()
             self.request_live_map_update()
 
@@ -3379,6 +3435,63 @@ class MowerOperatorApp(ctk.CTk):
                 f"Orientierung LT={orientation:.3f} deg, KVH-Winkel={gyro_angle:.3f} deg."
             )
 
+    def _check_trafo_validity_from_gyro(self) -> None:
+        """Invalidiert die Transformation, sobald der KVH-Winkel nach der Trafo driftet/dreht."""
+        if not bool(getattr(self, "trafo_valid", False)):
+            return
+        if self.gyro_reference_angle_deg is None:
+            return
+
+        current_angle = self._current_gyro_angle_deg()
+        if current_angle is None:
+            return
+
+        delta_deg = self._normalize_angle_180(float(current_angle) - float(self.gyro_reference_angle_deg))
+        threshold_deg = max(float(getattr(self, "trafo_gyro_invalid_threshold_deg", 0.03)), 0.0)
+
+        if abs(delta_deg) <= threshold_deg:
+            return
+
+        reason = (
+            "Transformation ungueltig: "
+            f"KVH-Winkelaenderung {delta_deg:+.4f} deg "
+            f"> {threshold_deg:.4f} deg seit der Transformation."
+        )
+        self._invalidate_transformation(reason)
+
+    def _invalidate_transformation(self, reason: str) -> None:
+        """Setzt nur die aktive Absteck-Transformation ungueltig.
+
+        Wichtig: Die Reflektornachfuehrung (ARN) darf dadurch nicht deaktiviert
+        werden. Gerade eine Wagenbewegung macht die Transformation ungueltig,
+        aber die ARN soll den Reflektor waehrend dieser Bewegung weiter zum
+        Lasertracker ausrichten.
+        """
+        reason_text = str(reason).strip() or "Transformation ungueltig."
+
+        if self.trafo_manager is not None and hasattr(self.trafo_manager, "invalidate"):
+            try:
+                self.trafo_manager.invalidate(reason_text)
+            except Exception:
+                pass
+
+        was_valid = bool(getattr(self, "trafo_valid", False))
+        self.trafo_valid = False
+
+        # Gyro-/ARN-Referenzen bewusst erhalten:
+        # - gyro_lt_reference_orientation_deg und gyro_reference_angle_deg werden
+        #   weiter benoetigt, um die aktuelle Roboterorientierung aus KVH-Delta
+        #   zu bestimmen.
+        # - reflector_aim_reference_bearing_robot_deg bleibt die mechanische
+        #   Reflektor-Referenz fuer die ARN.
+        # Nur die Absteck-Transformation wird ungueltig gesetzt.
+
+        if was_valid:
+            self.log(reason_text)
+            if bool(getattr(self, "arn_active", False)):
+                self.log("Reflektornachfuehrung bleibt aktiv; nur die Absteck-Transformation wurde ungueltig.")
+        self.set_current_action(reason_text)
+
     def _orientation_lt_from_active_trafo(self) -> float | None:
         if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
             return None
@@ -3588,7 +3701,9 @@ class MowerOperatorApp(ctk.CTk):
             f"  Offset:\n"
             f"    X={CONFIG.transformation.marker_to_reflector_robot[0]:.3f}\n"
             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
-            f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}"
+            f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}\n"
+            f"  Trafo-Schutz:\n"
+            f"    Gyro-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg"
         )
 
     def _config_float(self, section: str, name: str, fallback: float) -> float:
