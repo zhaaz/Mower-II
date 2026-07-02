@@ -131,6 +131,7 @@ class PointMarkingDialog:
         self.measure_after_marking_var = tk.BooleanVar(
             value=bool(getattr(CONFIG.marker, "measure_after_marking", False))
         )
+        self.allow_remark_marked_var = tk.BooleanVar(value=False)
 
         self.window = tk.Toplevel(parent)
         self.window.title("Punkte markieren")
@@ -229,6 +230,14 @@ class PointMarkingDialog:
         )
         self.measure_after_marking_check.grid(row=3, column=0, columnspan=2, pady=(4, 0), sticky="w")
 
+        self.allow_remark_marked_check = ttk.Checkbutton(
+            label_frame,
+            text="Bereits markierte Punkte erneut markieren",
+            variable=self.allow_remark_marked_var,
+            command=self.on_allow_remark_marked_changed,
+        )
+        self.allow_remark_marked_check.grid(row=4, column=0, columnspan=2, pady=(4, 0), sticky="w")
+
         table_frame = ttk.LabelFrame(root, text="Markierbare Punkte", padding=8, style="PointMarking.TLabelframe")
         table_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
         table_frame.grid_rowconfigure(0, weight=1)
@@ -313,7 +322,7 @@ class PointMarkingDialog:
 
         for index, result in enumerate(self.reachable_results):
             iid = str(index)
-            is_selected = not result.marked
+            is_selected = self._result_can_be_marked(result)
             self.result_by_iid[iid] = result
 
             if is_selected:
@@ -336,14 +345,14 @@ class PointMarkingDialog:
         self.log("Punktmarkierdialog geoeffnet.")
 
     def update_buttons(self) -> None:
-        has_selected_unmarked = any(
-            iid in self.selected_iids and not self.result_by_iid[iid].marked
+        has_selected_markable = any(
+            iid in self.selected_iids and self._result_can_be_marked(self.result_by_iid[iid])
             for iid in self.result_by_iid
         )
-        has_unmarked = any(not result.marked for result in self.reachable_results)
+        has_markable = any(self._result_can_be_marked(result) for result in self.reachable_results)
 
-        state_selected = "normal" if has_selected_unmarked and not self.workflow_running else "disabled"
-        state_all = "normal" if has_unmarked and not self.workflow_running else "disabled"
+        state_selected = "normal" if has_selected_markable and not self.workflow_running else "disabled"
+        state_all = "normal" if has_markable and not self.workflow_running else "disabled"
         state_close = "normal"
         close_text = "Abbrechen" if self.workflow_running else "Schliessen"
 
@@ -353,8 +362,22 @@ class PointMarkingDialog:
         try:
             self.label_mode_combo.configure(state="disabled" if self.workflow_running else "readonly")
             self.measure_after_marking_check.configure(state="disabled" if self.workflow_running else "normal")
+            self.allow_remark_marked_check.configure(state="disabled" if self.workflow_running else "normal")
         except Exception:
             pass
+
+    def _result_can_be_marked(self, result: PointReachability) -> bool:
+        if not bool(getattr(result, "marked", False)):
+            return True
+        return bool(self.allow_remark_marked_var.get())
+
+    def on_allow_remark_marked_changed(self) -> None:
+        enabled = bool(self.allow_remark_marked_var.get())
+        self.log(
+            "Erneutes Markieren bereits markierter Punkte: "
+            + ("aktiv" if enabled else "inaktiv")
+        )
+        self.refresh_after_point_change()
 
     def on_table_click(self, event: tk.Event) -> None:
         if self.workflow_running:
@@ -407,14 +430,14 @@ class PointMarkingDialog:
         selected_results = [
             self.result_by_iid[iid]
             for iid in self.result_by_iid
-            if iid in self.selected_iids and not self.result_by_iid[iid].marked
+            if iid in self.selected_iids and self._result_can_be_marked(self.result_by_iid[iid])
         ]
         self.start_marking(selected_results)
 
     def mark_all_markable_points(self) -> None:
         selected_results = [
             result for result in self.reachable_results
-            if not result.marked
+            if self._result_can_be_marked(result)
         ]
         self.start_marking(selected_results)
 
@@ -423,7 +446,11 @@ class PointMarkingDialog:
             return
 
         if not selected_results:
-            messagebox.showinfo("Punkte markieren", "Keine nicht markierten Punkte ausgewaehlt.", parent=self.window)
+            messagebox.showinfo("Punkte markieren", "Keine markierbaren Punkte ausgewaehlt.", parent=self.window)
+            return
+
+        if not self._confirm_remarking_if_needed(selected_results):
+            self.log("Markierung abgebrochen: erneutes Markieren nicht bestaetigt.")
             return
 
         try:
@@ -460,6 +487,25 @@ class PointMarkingDialog:
         )
         self.workflow_thread.start()
 
+    def _confirm_remarking_if_needed(self, selected_results: list[PointReachability]) -> bool:
+        marked_results = [result for result in selected_results if bool(getattr(result, "marked", False))]
+        if not marked_results:
+            return True
+
+        names = ", ".join(result.name for result in marked_results[:10])
+        if len(marked_results) > 10:
+            names += f", ... ({len(marked_results)} Punkte)"
+
+        return bool(messagebox.askyesno(
+            "Punkte erneut markieren",
+            "Es sind bereits markierte Punkte ausgewaehlt.\n\n"
+            f"Diese Punkte werden erneut markiert:\n{names}\n\n"
+            "Vorhandene automatische Kontrollmesswerte werden ersetzt. "
+            "Wenn die automatische Kontrollmessung deaktiviert ist, werden alte Kontrollmesswerte am Punkt geloescht.\n\n"
+            "Fortfahren?",
+            parent=self.window,
+        ))
+
     def _marking_thread_main(self, selected_results: list[PointReachability]) -> None:
         try:
             total = len(selected_results)
@@ -479,6 +525,7 @@ class PointMarkingDialog:
                     self.log(f"{result.name}: wird uebersprungen, nicht mehr erreichbar ({refreshed.reason}).")
                     continue
 
+                was_marked = bool(getattr(result.point, "marked", False))
                 label_text = self.get_label_for_point(result.point)
                 label_info = label_text if label_text else "ohne Beschriftung"
                 marker_angle_deg = self._marker_angle_deg()
@@ -508,6 +555,10 @@ class PointMarkingDialog:
                 except Exception:
                     pass
 
+                self._increment_marking_count(result.point)
+                if was_marked:
+                    self.log(f"{result.name}: bereits markierter Punkt wurde erneut markiert.")
+
                 if self.measure_after_marking_var.get():
                     measure_z_mm = self.move_to_measurement_position(
                         x=float(refreshed.robot_x),
@@ -518,6 +569,9 @@ class PointMarkingDialog:
                         self.measure_marked_point(result.point, result.name, measure_z_mm=measure_z_mm)
                     finally:
                         self.move_to_z_travel_after_measurement(result.name)
+                elif was_marked:
+                    self._clear_mark_measurement(result.point)
+                    self.log(f"{result.name}: alte Kontrollmesswerte geloescht, da automatische Messung inaktiv ist.")
 
                 self.log(f"{result.name}: markiert.")
                 self.gui_queue.put(("points_changed", None))
@@ -719,6 +773,48 @@ class PointMarkingDialog:
             "d2d": d2d,
             "d3d": d3d,
         }
+
+    def _increment_marking_count(self, point: Any) -> None:
+        try:
+            current = int(getattr(point, "marking_count", 0) or 0)
+        except Exception:
+            current = 0
+        try:
+            setattr(point, "marking_count", current + 1)
+        except Exception:
+            pass
+
+    def _clear_mark_measurement(self, point: Any) -> None:
+        measurement_fields = (
+            "measured_after_marking",
+            "measurement_method",
+            "measured_at",
+            "measured_reflector_lt_x",
+            "measured_reflector_lt_y",
+            "measured_reflector_lt_z",
+            "measured_marker_lt_x",
+            "measured_marker_lt_y",
+            "measured_marker_lt_z",
+            "measurement_dx",
+            "measurement_dy",
+            "measurement_dz",
+            "measurement_d2d",
+            "measurement_d3d",
+            "measurement_robot_z_mm",
+            "measurement_z_correction_mm",
+            "measurement_attempts",
+            "measurement_retry_threshold_mm",
+            "measurement_valid",
+            "measurement_warning",
+        )
+        for field in measurement_fields:
+            try:
+                if field == "measured_after_marking":
+                    setattr(point, field, False)
+                else:
+                    setattr(point, field, None)
+            except Exception:
+                pass
 
     def _store_mark_measurement(
             self,
@@ -1005,7 +1101,7 @@ class PointMarkingDialog:
         for index, result in enumerate(self.reachable_results):
             iid = str(index)
             self.result_by_iid[iid] = result
-            is_selected = result.name in previously_selected_names and not result.marked
+            is_selected = result.name in previously_selected_names and self._result_can_be_marked(result)
             if is_selected:
                 self.selected_iids.add(iid)
             self.tree.insert(

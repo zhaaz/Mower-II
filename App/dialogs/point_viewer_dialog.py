@@ -22,6 +22,7 @@ POINT_VIEW_FIELDS: list[tuple[str, str]] = [
     ("y", "Y Soll"),
     ("z", "Z Soll"),
     ("marked", "Markiert"),
+    ("marking_count", "Markierungen"),
     ("reachable", "Erreichbar"),
     ("last_robot_x", "Robot X"),
     ("last_robot_y", "Robot Y"),
@@ -144,7 +145,7 @@ class PointViewerDialog:
             if key in {"name", "measurement_method", "measured_at", "marker_shape", "marker_code", "remark", "measurement_warning"}:
                 width = 150
                 anchor = "w"
-            if key in {"marked", "reachable", "measured_after_marking"}:
+            if key in {"marked", "reachable", "measured_after_marking", "measurement_valid"}:
                 width = 85
                 anchor = "center"
             self.tree.column(key, width=width, minwidth=70, stretch=False, anchor=anchor)
