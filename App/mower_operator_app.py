@@ -130,6 +130,11 @@ except Exception:
     show_point_marking_dialog = None
 
 try:
+    from App.dialogs.point_viewer_dialog import show_point_viewer_dialog
+except Exception:
+    show_point_viewer_dialog = None
+
+try:
     from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
 except Exception:
     show_system_initialization_dialog = None
@@ -601,6 +606,7 @@ class MowerOperatorApp(ctk.CTk):
         file_menu.add_command(label="Projekt speichern unter...", command=self.save_project_as)
         file_menu.add_separator()
         file_menu.add_command(label="Daten exportieren...", command=self.export_project_txt_dialog)
+        file_menu.add_command(label="Punktviewer öffnen...", command=self.show_point_viewer)
         file_menu.add_separator()
         file_menu.add_command(label="Punktdatei importieren...", command=self.load_points_dialog)
         file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
@@ -1196,6 +1202,30 @@ class MowerOperatorApp(ctk.CTk):
         suffix = f" ({saved_at})" if saved_at else ""
         self.log(f"Projekt geladen: {file_path}{suffix}")
         self.set_current_action("Projekt geladen. Transformation neu bestimmen.")
+
+
+    def show_point_viewer(self) -> None:
+        if show_point_viewer_dialog is None:
+            self.log("Punktviewer ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Punktviewer",
+                "Der Punktviewer ist nicht verfuegbar.",
+                parent=self,
+            )
+            return
+
+        try:
+            show_point_viewer_dialog(
+                parent=self,
+                points=self.points,
+                on_refresh=lambda: self.refresh_points(keep_map_view=True),
+            )
+            self.log("Punktviewer geoeffnet.")
+            self.set_current_action("Punktviewer geoeffnet.")
+        except Exception as exc:
+            self.log(f"Punktviewer konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Punktviewer", str(exc), parent=self)
+            self.set_current_action("Punktviewer konnte nicht gestartet werden.")
 
     def load_points_dialog(self) -> None:
         self.set_current_action("Punktdatei wird geladen...")

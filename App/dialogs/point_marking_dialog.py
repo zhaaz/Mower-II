@@ -506,7 +506,15 @@ class PointMarkingDialog:
                     pass
 
                 if self.measure_after_marking_var.get():
-                    self.measure_marked_point(result.point, result.name)
+                    measure_z_mm = self.move_to_measurement_position(
+                        x=float(refreshed.robot_x),
+                        y=float(refreshed.robot_y),
+                        name=result.name,
+                    )
+                    try:
+                        self.measure_marked_point(result.point, result.name, measure_z_mm=measure_z_mm)
+                    finally:
+                        self.move_to_z_travel_after_measurement(result.name)
 
                 self.log(f"{result.name}: markiert.")
                 self.gui_queue.put(("points_changed", None))
@@ -557,7 +565,49 @@ class PointMarkingDialog:
             raise RuntimeError("Automatische Messung ist aktiv, aber capture_stable_point ist nicht verfuegbar.")
         self._marker_to_reflector_lt_vector()
 
-    def measure_marked_point(self, point: Any, name: str) -> None:
+    def move_to_measurement_position(self, *, x: float, y: float, name: str) -> float:
+        """Faehrt vor der automatischen Messung auf Punktmitte, ohne den Stift erneut abzusenken.
+
+        Gemessen wird auf Z_CLEAR. Die spaetere Berechnung korrigiert den
+        Hoehenunterschied zu Z_MARK rechnerisch ueber die aktive Transformation.
+        """
+
+        z_mark_mm, z_clear_mm, _z_travel_mm = self._validated_marker_z_heights()
+        z_measure_mm = z_clear_mm
+        feedrate = float(getattr(CONFIG.xyz, "default_feedrate", 6000.0))
+        tolerance_mm = float(getattr(CONFIG.xyz, "tolerance_mm", 0.05))
+
+        self.log(
+            f"{name}: fahre fuer Kontrollmessung auf Punktmitte "
+            f"X={x:.3f}, Y={y:.3f}, Z_CLEAR={z_measure_mm:.3f} mm "
+            f"(ohne erneutes Absenken auf Z_MARK={z_mark_mm:.3f} mm)."
+        )
+        self.send_robot_command(
+            "move_absolute_verified",
+            timeout_s=180.0,
+            x=x,
+            y=y,
+            z=z_measure_mm,
+            feedrate=feedrate,
+            tolerance_mm=tolerance_mm,
+        )
+        return z_measure_mm
+
+    def move_to_z_travel_after_measurement(self, name: str) -> None:
+        try:
+            z_travel = float(getattr(CONFIG.marker, "z_travel_mm", 176.0))
+            feedrate = float(getattr(CONFIG.xyz, "default_feedrate", 6000.0))
+            self.send_robot_command(
+                "move_absolute",
+                timeout_s=120.0,
+                z=z_travel,
+                feedrate=feedrate,
+            )
+            self.log(f"{name}: Kontrollmessung abgeschlossen, fahre Z_TRAVEL={z_travel:.3f} mm an.")
+        except Exception as exc:
+            self.log(f"{name}: Z_TRAVEL nach Kontrollmessung konnte nicht angefahren werden: {exc}")
+
+    def measure_marked_point(self, point: Any, name: str, *, measure_z_mm: float) -> None:
         self._validate_tracker_measurement_ready()
         self.log(f"{name}: automatische Kontrollmessung des oberen Reflektors...")
 
@@ -567,8 +617,11 @@ class PointMarkingDialog:
         )
         reflector_lt = (float(measurement.x), float(measurement.y), float(measurement.z))
         marker_to_reflector_lt = self._marker_to_reflector_lt_vector()
+        z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
+        z_delta_mm = float(measure_z_mm) - z_mark_mm
+        z_delta_lt = self._robot_vector_to_lt((0.0, 0.0, z_delta_mm))
         marker_lt = tuple(
-            reflector_lt[i] - marker_to_reflector_lt[i]
+            reflector_lt[i] - marker_to_reflector_lt[i] - z_delta_lt[i]
             for i in range(3)
         )
 
@@ -588,11 +641,14 @@ class PointMarkingDialog:
             delta=delta,
             d2d=d2d,
             d3d=d3d,
+            measure_z_mm=measure_z_mm,
+            z_delta_mm=z_delta_mm,
         )
 
         self.log(
             f"{name}: Kontrollmessung Marker_LT "
             f"X={marker_lt[0]:.3f}, Y={marker_lt[1]:.3f}, Z={marker_lt[2]:.3f} mm | "
+            f"Messhoehe Z={measure_z_mm:.3f} mm, Z-Korrektur={z_delta_mm:.3f} mm | "
             f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, "
             f"d2D={d2d:.3f}, d3D={d3d:.3f} mm"
         )
@@ -606,6 +662,8 @@ class PointMarkingDialog:
             delta: tuple[float, float, float],
             d2d: float,
             d3d: float,
+            measure_z_mm: float,
+            z_delta_mm: float,
     ) -> None:
         values = {
             "measured_after_marking": True,
@@ -622,12 +680,21 @@ class PointMarkingDialog:
             "measurement_dz": delta[2],
             "measurement_d2d": d2d,
             "measurement_d3d": d3d,
+            "measurement_robot_z_mm": measure_z_mm,
+            "measurement_z_correction_mm": z_delta_mm,
         }
         for key, value in values.items():
             try:
                 setattr(point, key, value)
             except Exception:
                 pass
+
+    def _robot_vector_to_lt(self, vector_robot: tuple[float, float, float]) -> tuple[float, float, float]:
+        trafo = getattr(self.trafo_manager, "active_trafo", None)
+        rotation = getattr(trafo, "rotation", None)
+        if rotation is None:
+            raise RuntimeError("Automatische Messung ist aktiv, aber die Trafo-Rotation ist nicht verfuegbar.")
+        return self._apply_rotation_to_vector(rotation, vector_robot)
 
     def _marker_to_reflector_lt_vector(self) -> tuple[float, float, float]:
         vector = getattr(self.trafo_manager, "marker_to_reflector_lt", None)

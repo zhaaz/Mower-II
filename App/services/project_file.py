@@ -41,6 +41,8 @@ _POINT_FIELDS = (
     "measurement_dz",
     "measurement_d2d",
     "measurement_d3d",
+    "measurement_robot_z_mm",
+    "measurement_z_correction_mm",
 )
 
 
@@ -242,6 +244,8 @@ def export_project_txt(
         "measurement_dz",
         "measurement_d2d",
         "measurement_d3d",
+        "measurement_robot_z_mm",
+        "measurement_z_correction_mm",
         "marker_shape",
         "marker_code",
         "remark",
