@@ -45,6 +45,9 @@ LABEL_POINT_NAME = "Punktnummer"
 LABEL_REMARK = "Bemerkung"
 LABEL_OPTIONS = (LABEL_NONE, LABEL_POINT_NAME, LABEL_REMARK)
 
+AUTO_MEASURE_RETRY_D2D_THRESHOLD_MM = 2.0
+AUTO_MEASURE_MAX_ATTEMPTS = 2
+
 
 def show_point_marking_dialog(
         *,
@@ -568,8 +571,9 @@ class PointMarkingDialog:
     def move_to_measurement_position(self, *, x: float, y: float, name: str) -> float:
         """Faehrt vor der automatischen Messung auf Punktmitte, ohne den Stift erneut abzusenken.
 
-        Gemessen wird auf Z_CLEAR. Die spaetere Berechnung korrigiert den
-        Hoehenunterschied zu Z_MARK rechnerisch ueber die aktive Transformation.
+        Z_CLEAR dient hier nur als sichere Stift-Abhebehoehe. Die Reflektor-Messrechnung
+        verwendet ausschliesslich den kalibrierten marker_to_reflector-Vektor;
+        Z_MARK/Z_CLEAR/Z_TRAVEL duerfen die Reflektorhoehe rechnerisch nicht beeinflussen.
         """
 
         z_mark_mm, z_clear_mm, _z_travel_mm = self._validated_marker_z_heights()
@@ -609,19 +613,93 @@ class PointMarkingDialog:
 
     def measure_marked_point(self, point: Any, name: str, *, measure_z_mm: float) -> None:
         self._validate_tracker_measurement_ready()
-        self.log(f"{name}: automatische Kontrollmessung des oberen Reflektors...")
 
+        best_result: dict[str, Any] | None = None
+        threshold_mm = AUTO_MEASURE_RETRY_D2D_THRESHOLD_MM
+        max_attempts = AUTO_MEASURE_MAX_ATTEMPTS
+
+        for attempt in range(1, max_attempts + 1):
+            self.check_abort()
+            self.log(
+                f"{name}: automatische Kontrollmessung des oberen Reflektors "
+                f"(Versuch {attempt}/{max_attempts})..."
+            )
+
+            result = self._capture_mark_measurement(point)
+            result["attempt"] = attempt
+            best_result = result
+
+            d2d = float(result["d2d"])
+            if d2d <= threshold_mm:
+                if attempt > 1:
+                    self.log(
+                        f"{name}: Wiederholungsmessung plausibel: "
+                        f"d2D={d2d:.3f} mm <= {threshold_mm:.3f} mm."
+                    )
+                break
+
+            if attempt < max_attempts:
+                self.log(
+                    f"{name}: WARNUNG Kontrollmessung d2D={d2d:.3f} mm > "
+                    f"{threshold_mm:.3f} mm. Messung wird einmal wiederholt."
+                )
+                time.sleep(0.25)
+            else:
+                warning_text = (
+                    f"{name}: WARNUNG automatische Kontrollmessung weiterhin auffaellig: "
+                    f"d2D={d2d:.3f} mm > {threshold_mm:.3f} mm nach {max_attempts} Versuchen. "
+                    "Messwert wurde gespeichert, sollte aber geprueft werden."
+                )
+                self.log(warning_text)
+                self.gui_queue.put(("warning", warning_text))
+
+        if best_result is None:
+            raise RuntimeError(f"{name}: automatische Kontrollmessung lieferte kein Ergebnis.")
+
+        final_d2d = float(best_result["d2d"])
+        measurement_valid = final_d2d <= threshold_mm
+        warning_text = "" if measurement_valid else (
+            f"d2D={final_d2d:.3f} mm > {threshold_mm:.3f} mm nach {max_attempts} Versuchen"
+        )
+
+        self._store_mark_measurement(
+            point=point,
+            reflector_lt=best_result["reflector_lt"],
+            marker_lt=best_result["marker_lt"],
+            delta=best_result["delta"],
+            d2d=best_result["d2d"],
+            d3d=best_result["d3d"],
+            measure_z_mm=measure_z_mm,
+            z_delta_mm=0.0,
+            attempts=int(best_result["attempt"]),
+            threshold_mm=threshold_mm,
+            valid=measurement_valid,
+            warning=warning_text,
+        )
+
+        marker_lt = best_result["marker_lt"]
+        delta = best_result["delta"]
+        d2d = float(best_result["d2d"])
+        d3d = float(best_result["d3d"])
+        self.log(
+            f"{name}: Kontrollmessung Marker_LT "
+            f"X={marker_lt[0]:.3f}, Y={marker_lt[1]:.3f}, Z={marker_lt[2]:.3f} mm | "
+            f"Messhoehe Stift-Z={measure_z_mm:.3f} mm, Z-Korrektur=0.000 mm | "
+            f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, "
+            f"d2D={d2d:.3f}, d3D={d3d:.3f} mm | "
+            f"Versuche={int(best_result['attempt'])}, "
+            f"Status={'OK' if measurement_valid else 'WARNUNG'}"
+        )
+
+    def _capture_mark_measurement(self, point: Any) -> dict[str, Any]:
         measurement = self.tracker_receiver.capture_stable_point(
             timeout_s=float(getattr(CONFIG.tracker, "capture_timeout_s", 30.0)),
             min_age_after_start_s=0.1,
         )
         reflector_lt = (float(measurement.x), float(measurement.y), float(measurement.z))
         marker_to_reflector_lt = self._marker_to_reflector_lt_vector()
-        z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
-        z_delta_mm = float(measure_z_mm) - z_mark_mm
-        z_delta_lt = self._robot_vector_to_lt((0.0, 0.0, z_delta_mm))
         marker_lt = tuple(
-            reflector_lt[i] - marker_to_reflector_lt[i] - z_delta_lt[i]
+            reflector_lt[i] - marker_to_reflector_lt[i]
             for i in range(3)
         )
 
@@ -634,24 +712,13 @@ class PointMarkingDialog:
         d2d = math.hypot(delta[0], delta[1])
         d3d = math.sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2])
 
-        self._store_mark_measurement(
-            point=point,
-            reflector_lt=reflector_lt,
-            marker_lt=marker_lt,
-            delta=delta,
-            d2d=d2d,
-            d3d=d3d,
-            measure_z_mm=measure_z_mm,
-            z_delta_mm=z_delta_mm,
-        )
-
-        self.log(
-            f"{name}: Kontrollmessung Marker_LT "
-            f"X={marker_lt[0]:.3f}, Y={marker_lt[1]:.3f}, Z={marker_lt[2]:.3f} mm | "
-            f"Messhoehe Z={measure_z_mm:.3f} mm, Z-Korrektur={z_delta_mm:.3f} mm | "
-            f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, "
-            f"d2D={d2d:.3f}, d3D={d3d:.3f} mm"
-        )
+        return {
+            "reflector_lt": reflector_lt,
+            "marker_lt": marker_lt,
+            "delta": delta,
+            "d2d": d2d,
+            "d3d": d3d,
+        }
 
     def _store_mark_measurement(
             self,
@@ -664,6 +731,10 @@ class PointMarkingDialog:
             d3d: float,
             measure_z_mm: float,
             z_delta_mm: float,
+            attempts: int,
+            threshold_mm: float,
+            valid: bool,
+            warning: str,
     ) -> None:
         values = {
             "measured_after_marking": True,
@@ -682,19 +753,16 @@ class PointMarkingDialog:
             "measurement_d3d": d3d,
             "measurement_robot_z_mm": measure_z_mm,
             "measurement_z_correction_mm": z_delta_mm,
+            "measurement_attempts": attempts,
+            "measurement_retry_threshold_mm": threshold_mm,
+            "measurement_valid": valid,
+            "measurement_warning": warning,
         }
         for key, value in values.items():
             try:
                 setattr(point, key, value)
             except Exception:
                 pass
-
-    def _robot_vector_to_lt(self, vector_robot: tuple[float, float, float]) -> tuple[float, float, float]:
-        trafo = getattr(self.trafo_manager, "active_trafo", None)
-        rotation = getattr(trafo, "rotation", None)
-        if rotation is None:
-            raise RuntimeError("Automatische Messung ist aktiv, aber die Trafo-Rotation ist nicht verfuegbar.")
-        return self._apply_rotation_to_vector(rotation, vector_robot)
 
     def _marker_to_reflector_lt_vector(self) -> tuple[float, float, float]:
         vector = getattr(self.trafo_manager, "marker_to_reflector_lt", None)
@@ -901,6 +969,8 @@ class PointMarkingDialog:
                     self.update_buttons()
                     if self.on_finished:
                         self.on_finished()
+                elif kind == "warning":
+                    messagebox.showwarning("Punkte markieren", str(payload), parent=self.window)
                 elif kind == "error":
                     messagebox.showerror("Punkte markieren", str(payload), parent=self.window)
         except queue.Empty:

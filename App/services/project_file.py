@@ -43,6 +43,10 @@ _POINT_FIELDS = (
     "measurement_d3d",
     "measurement_robot_z_mm",
     "measurement_z_correction_mm",
+    "measurement_attempts",
+    "measurement_retry_threshold_mm",
+    "measurement_valid",
+    "measurement_warning",
 )
 
 
@@ -246,6 +250,10 @@ def export_project_txt(
         "measurement_d3d",
         "measurement_robot_z_mm",
         "measurement_z_correction_mm",
+        "measurement_attempts",
+        "measurement_retry_threshold_mm",
+        "measurement_valid",
+        "measurement_warning",
         "marker_shape",
         "marker_code",
         "remark",

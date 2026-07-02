@@ -37,6 +37,10 @@ POINT_VIEW_FIELDS: list[tuple[str, str]] = [
     ("measurement_d3d", "d3D"),
     ("measurement_robot_z_mm", "Mess-Z"),
     ("measurement_z_correction_mm", "Z-Korr."),
+    ("measurement_attempts", "Messversuche"),
+    ("measurement_retry_threshold_mm", "Grenze d2D"),
+    ("measurement_valid", "Messung OK"),
+    ("measurement_warning", "Messwarnung"),
     ("measurement_method", "Messmethode"),
     ("measured_at", "Gemessen am"),
     ("marker_shape", "Form"),
@@ -137,7 +141,7 @@ class PointViewerDialog:
             self.tree.heading(key, text=label)
             width = 100
             anchor = "e"
-            if key in {"name", "measurement_method", "measured_at", "marker_shape", "marker_code", "remark"}:
+            if key in {"name", "measurement_method", "measured_at", "marker_shape", "marker_code", "remark", "measurement_warning"}:
                 width = 150
                 anchor = "w"
             if key in {"marked", "reachable", "measured_after_marking"}:
