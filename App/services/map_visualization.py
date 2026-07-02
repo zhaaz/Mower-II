@@ -45,12 +45,24 @@ def build_map_visualization_state(
     if config is None:
         return MapVisualizationState(message="CONFIG fehlt.")
 
-    if trafo_manager is None or not bool(getattr(trafo_manager, "valid", False)):
-        return MapVisualizationState(message="Keine gueltige Transformation.")
+    # Die Kartenanzeige darf nach einer ungueltig gewordenen Absteck-
+    # Transformation weiter live laufen. Fuer die reine Anzeige reichen:
+    #   - aktuelle Reflektormessung im LT-System
+    #   - aktuelle KVH-orientierte Wagenrichtung
+    #   - aktuelle Roboterposition des Reflektors
+    # Die aktive Transformation wird nur noch fuer den statischen Fallback
+    # benoetigt, wenn keine Live-Pose verfuegbar ist.
+    trafo = getattr(trafo_manager, "active_trafo", None) if trafo_manager is not None else None
+    trafo_valid = bool(trafo_manager is not None and getattr(trafo_manager, "valid", False) and trafo is not None)
 
-    trafo = getattr(trafo_manager, "active_trafo", None)
-    if trafo is None:
-        return MapVisualizationState(message="Aktive Transformation fehlt.")
+    has_live_pose_inputs = (
+        live_reflector_lt_xyz is not None
+        and live_orientation_lt_deg is not None
+        and _current_reflector_robot(xyz_state) is not None
+    )
+
+    if not trafo_valid and not has_live_pose_inputs:
+        return MapVisualizationState(message="Keine gueltige Transformation und keine Live-Pose.")
 
     xyz = getattr(config, "xyz")
     x_min = float(getattr(xyz, "x_min"))
@@ -87,7 +99,12 @@ def build_map_visualization_state(
             live_orientation_lt_deg=live_orientation_lt_deg,
         )
 
-        to_tracker_xy = pose.robot_to_tracker_xy if pose is not None else lambda point: _robot_to_tracker_xy(trafo, point)
+        if pose is not None:
+            to_tracker_xy = pose.robot_to_tracker_xy
+        elif trafo_valid and trafo is not None:
+            to_tracker_xy = lambda point: _robot_to_tracker_xy(trafo, point)
+        else:
+            return MapVisualizationState(message="Keine Live-Pose fuer die Kartenanzeige.")
 
         workspace_polygon = [to_tracker_xy(corner) for corner in marker_corners]
         wagon_outline_polygon = [to_tracker_xy(corner) for corner in wagon_marker_corners]

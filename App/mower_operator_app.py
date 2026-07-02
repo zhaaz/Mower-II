@@ -543,6 +543,13 @@ class MowerOperatorApp(ctk.CTk):
         self._last_map_update_time_s = 0.0
         self._pending_map_update_after_id: str | None = None
 
+        # Letzte berechnete Wagenvisualisierung fuer die Karte.
+        # Diese Daten sind ausschliesslich Anzeigezustand. Wenn die
+        # Absteck-Transformation durch Bewegung ungueltig wird, bleibt der
+        # Wagen in der Karte sichtbar, wird aber nicht fuer Markierung oder
+        # Erreichbarkeit verwendet.
+        self._last_robot_map_visualization_state: Any | None = None
+
         if TrafoManager is not None:
             self.trafo_manager = TrafoManager()
         else:
@@ -3225,21 +3232,54 @@ class MowerOperatorApp(ctk.CTk):
             live_orientation_lt_deg=self._current_gyro_orientation_lt_deg(),
         )
 
-        self._update_live_reachability_from_visualization(state.workspace_polygon)
+        # Die Wagenanzeige darf auch nach einer ungueltig gewordenen
+        # Transformation mit Tracker/KVH weiter live aktualisiert werden.
+        # Die Live-Erreichbarkeit darf daraus aber NICHT abgeleitet werden,
+        # weil sie sonst wie eine gueltige Absteckfreigabe wirken wuerde.
+        reachability_workspace = state.workspace_polygon if self._map_visualization_valid_for_reachability() else None
+        self._update_live_reachability_from_visualization(reachability_workspace)
+
+        display_state = state
+        if self._map_visualization_has_robot_geometry(state):
+            self._last_robot_map_visualization_state = state
+        elif self._last_robot_map_visualization_state is not None:
+            display_state = self._last_robot_map_visualization_state
 
         if hasattr(self.map_view, "set_robot_visualization"):
             self.map_view.set_robot_visualization(
-                workspace_polygon=state.workspace_polygon,
-                wagon_outline_polygon=state.wagon_outline_polygon,
-                front_arrow=state.front_arrow,
-                reflector_position=state.reflector_position,
-                marker_position=state.marker_position,
+                workspace_polygon=display_state.workspace_polygon,
+                wagon_outline_polygon=display_state.wagon_outline_polygon,
+                front_arrow=display_state.front_arrow,
+                reflector_position=display_state.reflector_position,
+                marker_position=display_state.marker_position,
             )
         else:
-            self.map_view.set_robot_workspace_polygon(state.workspace_polygon)
+            self.map_view.set_robot_workspace_polygon(display_state.workspace_polygon)
 
         if not keep_view:
             self.map_view.zoom_all()
+
+    @staticmethod
+    def _map_visualization_has_robot_geometry(state: Any) -> bool:
+        if state is None:
+            return False
+        return any(
+            getattr(state, name, None) is not None
+            for name in (
+                "workspace_polygon",
+                "wagon_outline_polygon",
+                "front_arrow",
+                "reflector_position",
+                "marker_position",
+            )
+        )
+
+    def _map_visualization_valid_for_reachability(self) -> bool:
+        return bool(
+            getattr(self, "trafo_valid", False)
+            and self.trafo_manager is not None
+            and getattr(self.trafo_manager, "valid", False)
+        )
 
     def _update_live_reachability_from_visualization(
             self,
