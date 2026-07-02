@@ -79,9 +79,15 @@ except Exception:
     show_xyz_manual_move_dialog = None
 
 try:
-    from App.services.project_io import write_project_file
+    from App.services.project_file import (
+        export_project_txt,
+        load_project_file,
+        save_project_file,
+    )
 except Exception:
-    write_project_file = None
+    export_project_txt = None
+    load_project_file = None
+    save_project_file = None
 
 try:
     from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
@@ -589,11 +595,15 @@ class MowerOperatorApp(ctk.CTk):
         menu_bar = Menu(self)
 
         file_menu = Menu(menu_bar, tearoff=False)
-        file_menu.add_command(label="Punkte laden...", command=self.load_points_dialog)
-        file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
-        file_menu.add_separator()
+        file_menu.add_command(label="Projekt neu", command=self.new_project_dialog)
+        file_menu.add_command(label="Projekt laden...", command=self.load_project_dialog)
         file_menu.add_command(label="Projekt speichern", command=self.save_project)
         file_menu.add_command(label="Projekt speichern unter...", command=self.save_project_as)
+        file_menu.add_separator()
+        file_menu.add_command(label="Daten exportieren...", command=self.export_project_txt_dialog)
+        file_menu.add_separator()
+        file_menu.add_command(label="Punktdatei importieren...", command=self.load_points_dialog)
+        file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
         file_menu.add_separator()
         file_menu.add_command(label="Log oeffnen", command=self.open_log_file)
         file_menu.add_separator()
@@ -1121,10 +1131,76 @@ class MowerOperatorApp(ctk.CTk):
     # Datei
     # --------------------------------------------------
 
+    def new_project_dialog(self) -> None:
+        if not self._confirm_replace_current_project("Neues Projekt"):
+            self.set_current_action("Neues Projekt abgebrochen.")
+            return
+
+        count = len(self.points)
+        self.points = []
+        self.selected_point_name = None
+        self.project_path = None
+        self._invalidate_project_transformation("Neues Projekt angelegt.")
+        self._apply_demo_scene()
+        self.refresh_points()
+        self._update_window_title()
+        self.log(f"Neues Projekt angelegt: {count} Punkt(e) entfernt.")
+        self.set_current_action("Neues Projekt angelegt.")
+
+    def load_project_dialog(self) -> None:
+        if load_project_file is None:
+            messagebox.showerror(
+                "Projekt laden",
+                "Projekt-Ladefunktion ist nicht verfuegbar.",
+                parent=self,
+            )
+            return
+
+        if not self._confirm_replace_current_project("Projekt laden"):
+            self.set_current_action("Projekt laden abgebrochen.")
+            return
+
+        file_path = filedialog.askopenfilename(
+            title="Projekt laden",
+            filetypes=[
+                ("Mower-II-Projekt", "*.mower.json"),
+                ("JSON-Dateien", "*.json"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+
+        if not file_path:
+            self.set_current_action("Bereit.")
+            return
+
+        try:
+            points, project_data = load_project_file(
+                path=file_path,
+                point_class=StakeoutPoint,
+            )
+        except Exception as exc:
+            self.log(f"FEHLER beim Laden des Projekts: {exc}")
+            messagebox.showerror("Projekt laden", str(exc), parent=self)
+            self.set_current_action("Fehler beim Laden des Projekts.")
+            return
+
+        self.points = points
+        self.selected_point_name = self.points[0].name if self.points else None
+        self.project_path = Path(file_path)
+        self._invalidate_project_transformation("Projekt wurde geladen; Transformation muss neu bestimmt werden.")
+        self._apply_demo_scene()
+        self.refresh_points()
+        self._update_window_title()
+
+        saved_at = str(project_data.get("saved_at", ""))
+        suffix = f" ({saved_at})" if saved_at else ""
+        self.log(f"Projekt geladen: {file_path}{suffix}")
+        self.set_current_action("Projekt geladen. Transformation neu bestimmen.")
+
     def load_points_dialog(self) -> None:
         self.set_current_action("Punktdatei wird geladen...")
         file_path = filedialog.askopenfilename(
-            title="Punktdatei laden",
+            title="Punktdatei importieren",
             filetypes=[
                 ("Punktdateien", "*.txt *.csv"),
                 ("Textdateien", "*.txt"),
@@ -1146,10 +1222,13 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         self.selected_point_name = self.points[0].name if self.points else None
+        self.project_path = None
+        self._invalidate_project_transformation("Neue Punktdatei importiert; Transformation muss neu bestimmt werden.")
         self._apply_demo_scene()
         self.refresh_points()
-        self.log(f"Punktdatei geladen: {file_path}")
-        self.set_current_action("Punktdatei geladen.")
+        self._update_window_title()
+        self.log(f"Punktdatei importiert: {file_path}")
+        self.set_current_action("Punktdatei importiert. Transformation neu bestimmen.")
 
     def clear_points_dialog(self) -> None:
         if not self.points:
@@ -1159,7 +1238,7 @@ class MowerOperatorApp(ctk.CTk):
 
         confirmed = messagebox.askyesno(
             "Punkte löschen",
-            "Punkte wirklich löschen?",
+            "Punkte wirklich löschen?\n\nDie aktuelle Transformation wird dadurch ungueltig.",
             parent=self,
         )
 
@@ -1170,6 +1249,7 @@ class MowerOperatorApp(ctk.CTk):
         count = len(self.points)
         self.points = []
         self.selected_point_name = None
+        self._invalidate_project_transformation("Punkte geloescht; Transformation wurde ungueltig.")
         self._apply_demo_scene()
         self.refresh_points()
         self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt.")
@@ -1184,59 +1264,119 @@ class MowerOperatorApp(ctk.CTk):
     def save_project_as(self) -> None:
         file_path = filedialog.asksaveasfilename(
             title="Projekt speichern unter",
-            defaultextension=".json",
+            defaultextension=".mower.json",
             filetypes=[
-                ("Mower-Projekt", "*.json"),
+                ("Mower-II-Projekt", "*.mower.json"),
+                ("JSON-Dateien", "*.json"),
                 ("Alle Dateien", "*.*"),
             ],
         )
         if not file_path:
             return
-        self.project_path = Path(file_path)
+        path = Path(file_path)
+        if path.suffix.lower() == ".json" and not path.name.endswith(".mower.json"):
+            # Normale JSON-Dateien bleiben erlaubt, bevorzugt ist aber *.mower.json.
+            pass
+        self.project_path = path
         self._write_project_file(self.project_path)
+        self._update_window_title()
 
     def _write_project_file(self, path: Path) -> None:
         self.set_current_action("Projekt wird gespeichert...")
 
-        if write_project_file is not None:
-            try:
-                write_project_file(
-                    path=path,
-                    points=self.points,
-                    status=self._build_project_status(),
-                )
-                self.log(f"Projekt gespeichert: {path}")
-                self.set_current_action("Projekt gespeichert.")
-                return
-            except Exception as exc:
-                self.log(f"Projekt konnte nicht ueber project_io gespeichert werden: {exc}")
+        if save_project_file is None:
+            messagebox.showerror(
+                "Projekt speichern",
+                "Projekt-Speicherfunktion ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Projekt konnte nicht gespeichert werden.")
+            return
 
-        data = {
-            "version": 2,
-            "ui": "operator",
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
-            "points": [
-                {
-                    "name": p.name,
-                    "x": p.x,
-                    "y": p.y,
-                    "z": p.z,
-                    "marker_code": getattr(p, "marker_code", 1),
-                    "marker_shape": getattr(p, "marker_shape", "plus"),
-                    "remark": getattr(p, "remark", ""),
-                    "marked": p.marked,
-                    "reachable": p.reachable,
-                    "last_robot_x": p.last_robot_x,
-                    "last_robot_y": p.last_robot_y,
-                    "residual_mm": p.residual_mm,
-                }
-                for p in self.points
-            ],
-            "status": self._build_project_status(),
-        }
-        path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+        try:
+            save_project_file(
+                path=path,
+                points=self.points,
+                status=self._build_project_status(),
+                config=CONFIG,
+            )
+        except Exception as exc:
+            self.log(f"FEHLER beim Speichern des Projekts: {exc}")
+            messagebox.showerror("Projekt speichern", str(exc), parent=self)
+            self.set_current_action("Projekt konnte nicht gespeichert werden.")
+            return
+
         self.log(f"Projekt gespeichert: {path}")
         self.set_current_action("Projekt gespeichert.")
+
+    def export_project_txt_dialog(self) -> None:
+        if export_project_txt is None:
+            messagebox.showerror(
+                "Daten exportieren",
+                "TXT-Exportfunktion ist nicht verfuegbar.",
+                parent=self,
+            )
+            return
+
+        default_name = "mower_export.txt"
+        if self.project_path is not None:
+            default_name = f"{self.project_path.stem}_export.txt"
+
+        file_path = filedialog.asksaveasfilename(
+            title="Daten exportieren",
+            initialfile=default_name,
+            defaultextension=".txt",
+            filetypes=[
+                ("Textdatei", "*.txt"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+        if not file_path:
+            return
+
+        try:
+            export_project_txt(
+                path=file_path,
+                points=self.points,
+                status=self._build_project_status(),
+                config=CONFIG,
+                project_path=self.project_path,
+            )
+        except Exception as exc:
+            self.log(f"FEHLER beim Exportieren der Daten: {exc}")
+            messagebox.showerror("Daten exportieren", str(exc), parent=self)
+            self.set_current_action("Datenexport fehlgeschlagen.")
+            return
+
+        self.log(f"Daten exportiert: {file_path}")
+        self.set_current_action("Daten exportiert.")
+
+    def _confirm_replace_current_project(self, title: str) -> bool:
+        if not self.points and self.project_path is None:
+            return True
+
+        return messagebox.askyesno(
+            title,
+            "Das aktuelle Projekt wird ersetzt.\n\nVorher bei Bedarf speichern. Fortfahren?",
+            parent=self,
+        )
+
+    def _invalidate_project_transformation(self, reason: str) -> None:
+        try:
+            if self.trafo_manager is not None and hasattr(self.trafo_manager, "invalidate"):
+                self.trafo_manager.invalidate(reason)
+        except Exception as exc:
+            self.log(f"Transformation konnte nicht ueber TrafoManager invalidiert werden: {exc}")
+
+        self.trafo_valid = False
+        self.gyro_lt_reference_orientation_deg = None
+        self.gyro_reference_angle_deg = None
+
+    def _update_window_title(self) -> None:
+        if self.project_path is None:
+            self.title("Mower II - Abstecksystem")
+        else:
+            self.title(f"Mower II - Abstecksystem - {self.project_path.name}")
 
     def _build_project_status(self) -> dict[str, Any]:
         return {
