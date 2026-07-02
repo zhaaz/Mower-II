@@ -618,7 +618,7 @@ class MowerOperatorApp(ctk.CTk):
         file_menu.add_command(label="Punktdatei importieren...", command=self.load_points_dialog)
         file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
         file_menu.add_separator()
-        file_menu.add_command(label="Log oeffnen", command=self.open_log_file)
+        file_menu.add_command(label="Log öffnen", command=self.open_log_file)
         file_menu.add_separator()
         file_menu.add_command(label="Beenden", command=self.on_close)
         menu_bar.add_cascade(label="Datei", menu=file_menu)

@@ -222,7 +222,7 @@ class TrafoDialog:
 
         self.btn_accept = ttk.Button(
             button_frame,
-            text="Trafo Uebernehmen",
+            text="Trafo Übernehmen",
             command=self.accept_trafo,
             state="disabled",
             style="Trafo.TButton",
