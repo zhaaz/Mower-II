@@ -27,6 +27,20 @@ _POINT_FIELDS = (
     "last_robot_x",
     "last_robot_y",
     "residual_mm",
+    "measured_after_marking",
+    "measurement_method",
+    "measured_at",
+    "measured_reflector_lt_x",
+    "measured_reflector_lt_y",
+    "measured_reflector_lt_z",
+    "measured_marker_lt_x",
+    "measured_marker_lt_y",
+    "measured_marker_lt_z",
+    "measurement_dx",
+    "measurement_dy",
+    "measurement_dz",
+    "measurement_d2d",
+    "measurement_d3d",
 )
 
 
@@ -108,6 +122,7 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
                 "size_mm",
                 "angle_deg",
                 "align_to_tracker_axes",
+                "measure_after_marking",
                 "z_mark_mm",
                 "z_clear_mm",
                 "z_travel_mm",
@@ -212,7 +227,25 @@ def export_project_txt(
 
     lines.append("Punkte")
     lines.append("-" * 80)
-    header = ["name", "x", "y", "z", "marked", "marker_shape", "marker_code", "remark"]
+    header = [
+        "name",
+        "x",
+        "y",
+        "z",
+        "marked",
+        "measured_after_marking",
+        "measured_marker_lt_x",
+        "measured_marker_lt_y",
+        "measured_marker_lt_z",
+        "measurement_dx",
+        "measurement_dy",
+        "measurement_dz",
+        "measurement_d2d",
+        "measurement_d3d",
+        "marker_shape",
+        "marker_code",
+        "remark",
+    ]
     lines.append(";".join(header))
     for point in points:
         row = []

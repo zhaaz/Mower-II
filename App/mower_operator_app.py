@@ -2868,6 +2868,7 @@ class MowerOperatorApp(ctk.CTk):
                 xyz_worker=self.xyz_worker,
                 xyz_state_getter=lambda: self.xyz_state,
                 trafo_manager=self.trafo_manager,
+                tracker_receiver=self.tracker_receiver,
                 on_points_changed=lambda: self.refresh_points(keep_map_view=True),
                 on_finished=self.on_point_marking_finished,
                 log=self.log,

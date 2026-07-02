@@ -34,6 +34,7 @@
         "size_mm": 40.0,
         "angle_deg": 0.0,
         "align_to_tracker_axes": true,
+        "measure_after_marking": true,
         "z_mark_mm": 166.0,
         "z_clear_mm": 171.0,
         "z_travel_mm": 176.0

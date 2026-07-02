@@ -45,7 +45,7 @@ class TrackerConfig:
 class GyroConfig:
     port: str = "COM3"
     baudrate: int = 375000
-    default_drift_seconds: float = 30.0
+    default_drift_seconds: float = 10.0
 
 
 @dataclass
@@ -80,6 +80,10 @@ class MarkerConfig:
     # X-Achse des Lasertracker-Koordinatensystems ausgerichtet.
     # CONFIG.marker.angle_deg bleibt ein zusaetzlicher Winkeloffset.
     align_to_tracker_axes: bool = False
+
+    # Wenn aktiv, wird nach jeder Markierung automatisch der obere Reflektor
+    # gemessen und daraus die geschaetzte Markierpunktposition berechnet.
+    measure_after_marking: bool = False
 
     # Markierhoehen der Z-Achse [mm].
     # Alle drei Werte sind echte Config-Parameter.
@@ -277,6 +281,14 @@ def update_marker_align_to_tracker_axes(enabled: bool) -> None:
 
     config = load_config()
     config.marker.align_to_tracker_axes = bool(enabled)
+    save_config(config)
+
+
+def update_marker_measure_after_marking(enabled: bool) -> None:
+    """Speichert, ob nach dem Markieren automatisch gemessen wird."""
+
+    config = load_config()
+    config.marker.measure_after_marking = bool(enabled)
     save_config(config)
 
 

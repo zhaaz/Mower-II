@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 import queue
 import threading
 import time
@@ -11,7 +12,11 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Callable
 
-from config.mower_config import CONFIG, update_marker_align_to_tracker_axes
+from config.mower_config import (
+    CONFIG,
+    update_marker_align_to_tracker_axes,
+    update_marker_measure_after_marking,
+)
 from App.services.point_reachability import (
     PointReachability,
     apply_reachability_to_points,
@@ -48,6 +53,7 @@ def show_point_marking_dialog(
         xyz_worker: Any,
         xyz_state_getter: StateGetter,
         trafo_manager: Any,
+        tracker_receiver: Any | None = None,
         on_points_changed: PointsChangedCallback | None = None,
         on_finished: FinishedCallback | None = None,
         log: LogFunction | None = None,
@@ -60,6 +66,7 @@ def show_point_marking_dialog(
         xyz_worker=xyz_worker,
         xyz_state_getter=xyz_state_getter,
         trafo_manager=trafo_manager,
+        tracker_receiver=tracker_receiver,
         on_points_changed=on_points_changed,
         on_finished=on_finished,
         external_log=log,
@@ -76,6 +83,7 @@ class PointMarkingDialog:
             xyz_worker: Any,
             xyz_state_getter: StateGetter,
             trafo_manager: Any,
+            tracker_receiver: Any | None = None,
             on_points_changed: PointsChangedCallback | None = None,
             on_finished: FinishedCallback | None = None,
             external_log: LogFunction | None = None,
@@ -85,6 +93,7 @@ class PointMarkingDialog:
         self.xyz_worker = xyz_worker
         self.xyz_state_getter = xyz_state_getter
         self.trafo_manager = trafo_manager
+        self.tracker_receiver = tracker_receiver
         self.on_points_changed = on_points_changed
         self.on_finished = on_finished
         self.external_log = external_log
@@ -115,6 +124,9 @@ class PointMarkingDialog:
         self.label_mode_var = tk.StringVar(value=LABEL_POINT_NAME)
         self.align_to_tracker_axes_var = tk.BooleanVar(
             value=bool(getattr(CONFIG.marker, "align_to_tracker_axes", False))
+        )
+        self.measure_after_marking_var = tk.BooleanVar(
+            value=bool(getattr(CONFIG.marker, "measure_after_marking", False))
         )
 
         self.window = tk.Toplevel(parent)
@@ -205,6 +217,14 @@ class PointMarkingDialog:
             variable=self.align_to_tracker_axes_var,
             command=self.on_align_to_tracker_axes_changed,
         ).grid(row=2, column=0, columnspan=2, pady=(8, 0), sticky="w")
+
+        self.measure_after_marking_check = ttk.Checkbutton(
+            label_frame,
+            text="Nach dem Markieren automatisch messen",
+            variable=self.measure_after_marking_var,
+            command=self.on_measure_after_marking_changed,
+        )
+        self.measure_after_marking_check.grid(row=3, column=0, columnspan=2, pady=(4, 0), sticky="w")
 
         table_frame = ttk.LabelFrame(root, text="Markierbare Punkte", padding=8, style="PointMarking.TLabelframe")
         table_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
@@ -329,6 +349,7 @@ class PointMarkingDialog:
         self.btn_close.configure(state=state_close, text=close_text)
         try:
             self.label_mode_combo.configure(state="disabled" if self.workflow_running else "readonly")
+            self.measure_after_marking_check.configure(state="disabled" if self.workflow_running else "normal")
         except Exception:
             pass
 
@@ -404,7 +425,9 @@ class PointMarkingDialog:
 
         try:
             z_mark_mm, z_clear_mm, z_travel_mm = self._validated_marker_z_heights()
-        except ValueError as exc:
+            if self.measure_after_marking_var.get():
+                self._validate_tracker_measurement_ready()
+        except (ValueError, RuntimeError) as exc:
             messagebox.showerror("Punkte markieren", str(exc), parent=self.window)
             self.log(f"Markierung nicht gestartet: {exc}")
             return
@@ -422,6 +445,10 @@ class PointMarkingDialog:
             f"Markierhoehen geprueft: Z_MARK={z_mark_mm:.3f} mm, "
             f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
         )
+        if self.measure_after_marking_var.get():
+            self.log("Automatische Kontrollmessung: aktiv, Messung ueber oberen Reflektor.")
+        else:
+            self.log("Automatische Kontrollmessung: inaktiv.")
 
         self.workflow_thread = threading.Thread(
             target=self._marking_thread_main,
@@ -478,6 +505,9 @@ class PointMarkingDialog:
                 except Exception:
                     pass
 
+                if self.measure_after_marking_var.get():
+                    self.measure_marked_point(result.point, result.name)
+
                 self.log(f"{result.name}: markiert.")
                 self.gui_queue.put(("points_changed", None))
 
@@ -503,6 +533,145 @@ class PointMarkingDialog:
         except Exception as exc:
             self.log(f"FEHLER beim Speichern der Markierausrichtung: {exc}")
             messagebox.showerror("Punkte markieren", str(exc), parent=self.window)
+
+
+    def on_measure_after_marking_changed(self) -> None:
+        enabled = bool(self.measure_after_marking_var.get())
+        CONFIG.marker.measure_after_marking = enabled
+        try:
+            update_marker_measure_after_marking(enabled)
+            self.log(
+                "Automatische Kontrollmessung gespeichert: "
+                + ("aktiv" if enabled else "inaktiv")
+            )
+        except Exception as exc:
+            self.log(f"FEHLER beim Speichern der Kontrollmessung: {exc}")
+            messagebox.showerror("Punkte markieren", str(exc), parent=self.window)
+
+    def _validate_tracker_measurement_ready(self) -> None:
+        if self.tracker_receiver is None:
+            raise RuntimeError("Automatische Messung ist aktiv, aber kein LasertrackerReceiver ist verfuegbar.")
+        if not bool(getattr(self.tracker_receiver, "running", False)):
+            raise RuntimeError("Automatische Messung ist aktiv, aber der Lasertracker-Empfang laeuft nicht.")
+        if not hasattr(self.tracker_receiver, "capture_stable_point"):
+            raise RuntimeError("Automatische Messung ist aktiv, aber capture_stable_point ist nicht verfuegbar.")
+        self._marker_to_reflector_lt_vector()
+
+    def measure_marked_point(self, point: Any, name: str) -> None:
+        self._validate_tracker_measurement_ready()
+        self.log(f"{name}: automatische Kontrollmessung des oberen Reflektors...")
+
+        measurement = self.tracker_receiver.capture_stable_point(
+            timeout_s=float(getattr(CONFIG.tracker, "capture_timeout_s", 30.0)),
+            min_age_after_start_s=0.1,
+        )
+        reflector_lt = (float(measurement.x), float(measurement.y), float(measurement.z))
+        marker_to_reflector_lt = self._marker_to_reflector_lt_vector()
+        marker_lt = tuple(
+            reflector_lt[i] - marker_to_reflector_lt[i]
+            for i in range(3)
+        )
+
+        target_lt = (
+            float(getattr(point, "x", 0.0)),
+            float(getattr(point, "y", 0.0)),
+            float(getattr(point, "z", 0.0)),
+        )
+        delta = tuple(marker_lt[i] - target_lt[i] for i in range(3))
+        d2d = math.hypot(delta[0], delta[1])
+        d3d = math.sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2])
+
+        self._store_mark_measurement(
+            point=point,
+            reflector_lt=reflector_lt,
+            marker_lt=marker_lt,
+            delta=delta,
+            d2d=d2d,
+            d3d=d3d,
+        )
+
+        self.log(
+            f"{name}: Kontrollmessung Marker_LT "
+            f"X={marker_lt[0]:.3f}, Y={marker_lt[1]:.3f}, Z={marker_lt[2]:.3f} mm | "
+            f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, "
+            f"d2D={d2d:.3f}, d3D={d3d:.3f} mm"
+        )
+
+    def _store_mark_measurement(
+            self,
+            *,
+            point: Any,
+            reflector_lt: tuple[float, float, float],
+            marker_lt: tuple[float, float, float],
+            delta: tuple[float, float, float],
+            d2d: float,
+            d3d: float,
+    ) -> None:
+        values = {
+            "measured_after_marking": True,
+            "measurement_method": "upper_reflector_offset",
+            "measured_at": datetime.now().isoformat(timespec="seconds"),
+            "measured_reflector_lt_x": reflector_lt[0],
+            "measured_reflector_lt_y": reflector_lt[1],
+            "measured_reflector_lt_z": reflector_lt[2],
+            "measured_marker_lt_x": marker_lt[0],
+            "measured_marker_lt_y": marker_lt[1],
+            "measured_marker_lt_z": marker_lt[2],
+            "measurement_dx": delta[0],
+            "measurement_dy": delta[1],
+            "measurement_dz": delta[2],
+            "measurement_d2d": d2d,
+            "measurement_d3d": d3d,
+        }
+        for key, value in values.items():
+            try:
+                setattr(point, key, value)
+            except Exception:
+                pass
+
+    def _marker_to_reflector_lt_vector(self) -> tuple[float, float, float]:
+        vector = getattr(self.trafo_manager, "marker_to_reflector_lt", None)
+        if vector is not None:
+            try:
+                return (float(vector[0]), float(vector[1]), float(vector[2]))
+            except Exception:
+                pass
+
+        offset_robot = tuple(float(v) for v in CONFIG.transformation.marker_to_reflector_robot)
+        trafo = getattr(self.trafo_manager, "active_trafo", None)
+        rotation = getattr(trafo, "rotation", None)
+        if rotation is None:
+            raise RuntimeError(
+                "Automatische Messung ist aktiv, aber marker_to_reflector_lt/Rotation ist nicht verfuegbar."
+            )
+
+        return self._apply_rotation_to_vector(rotation, offset_robot)
+
+    @staticmethod
+    def _apply_rotation_to_vector(rotation: Any, vector: tuple[float, float, float]) -> tuple[float, float, float]:
+        values: list[float] = []
+        for row in range(3):
+            total = 0.0
+            row_available = False
+            for col in range(3):
+                try:
+                    coeff = float(rotation[row, col])
+                except Exception:
+                    try:
+                        coeff = float(rotation[row][col])
+                    except Exception:
+                        if row == 2 and col == 2:
+                            coeff = 1.0
+                        elif row == 2 or col == 2:
+                            coeff = 0.0
+                        else:
+                            raise RuntimeError("Rotationsmatrix fuer automatische Messung ist unvollstaendig.")
+                row_available = True
+                total += coeff * vector[col]
+            if not row_available:
+                raise RuntimeError("Rotationsmatrix fuer automatische Messung ist unvollstaendig.")
+            values.append(total)
+        return values[0], values[1], values[2]
 
     def _marker_angle_deg(self) -> float:
         base_angle = float(getattr(CONFIG.marker, "angle_deg", 0.0))
