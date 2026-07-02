@@ -1260,12 +1260,14 @@ class MowerOperatorApp(ctk.CTk):
 
         self.selected_point_name = self.points[0].name if self.points else None
         self.project_path = None
-        self._invalidate_project_transformation("Neue Punktdatei importiert; Transformation muss neu bestimmt werden.")
+        # Punktimport veraendert nur die Punktliste.
+        # Die Wagenpose/Transformation bleibt gueltig, da die Geometrie des
+        # Systems dadurch nicht veraendert wird.
         self._apply_demo_scene()
         self.refresh_points()
         self._update_window_title()
-        self.log(f"Punktdatei importiert: {file_path}")
-        self.set_current_action("Punktdatei importiert. Transformation neu bestimmen.")
+        self.log(f"Punktdatei importiert: {file_path}. Transformation unveraendert.")
+        self.set_current_action("Punktdatei importiert. Transformation unveraendert.")
 
     def clear_points_dialog(self) -> None:
         if not self.points:
@@ -1275,7 +1277,7 @@ class MowerOperatorApp(ctk.CTk):
 
         confirmed = messagebox.askyesno(
             "Punkte löschen",
-            "Punkte wirklich löschen?\n\nDie aktuelle Transformation wird dadurch ungueltig.",
+            "Punkte wirklich löschen?\n\nDie aktuelle Transformation bleibt unveraendert.",
             parent=self,
         )
 
@@ -1286,11 +1288,12 @@ class MowerOperatorApp(ctk.CTk):
         count = len(self.points)
         self.points = []
         self.selected_point_name = None
-        self._invalidate_project_transformation("Punkte geloescht; Transformation wurde ungueltig.")
+        # Das Loeschen der Punktliste veraendert nicht die Systemgeometrie.
+        # Transformation, Wagenanzeige und ARN-Zustand bleiben daher erhalten.
         self._apply_demo_scene()
         self.refresh_points()
-        self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt.")
-        self.set_current_action("Punktliste gelöscht.")
+        self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt. Transformation unveraendert.")
+        self.set_current_action("Punktliste gelöscht. Transformation unveraendert.")
 
     def save_project(self) -> None:
         if self.project_path is None:
