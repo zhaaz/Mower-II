@@ -35,9 +35,9 @@
         "angle_deg": 0.0,
         "align_to_tracker_axes": true,
         "measure_after_marking": true,
-        "z_mark_mm": 166.0,
-        "z_clear_mm": 171.0,
-        "z_travel_mm": 176.0
+        "z_mark_mm": 164.0,
+        "z_clear_mm": 169.0,
+        "z_travel_mm": 174.0
     },
     "transformation": {
         "marker_to_reflector_robot": [
