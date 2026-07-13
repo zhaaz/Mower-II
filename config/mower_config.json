@@ -24,9 +24,9 @@
     },
     "arn": {
         "kp": 4.0,
-        "max_speed_deg_s": 35.0,
+        "max_speed_deg_s": 90.0,
         "deadband_deg": 0.5,
-        "command_interval_ms": 200,
+        "command_interval_ms": 100,
         "direction_sign": 1.0
     },
     "marker": {
