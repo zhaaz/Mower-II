@@ -229,7 +229,7 @@ def run_hardware_test(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Murata SCH16T-K01 Hardwaretest")
-    parser.add_argument("--port", default="COM3", help="Serieller Port, z. B. COM3")
+    parser.add_argument("--port", default="COM9", help="Serieller Port, z. B. COM3")
     parser.add_argument(
         "--baudrate",
         type=int,

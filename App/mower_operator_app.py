@@ -95,9 +95,9 @@ except Exception:
     XYZRobotWorker = None
 
 try:
-    from KVH_DSP.kvh_dsp_worker import KVHDSPWorker
+    from Murata.murata_worker import MurataWorker
 except Exception:
-    KVHDSPWorker = None
+    MurataWorker = None
 
 try:
     from GYEMS.gyems_worker import GyemsWorker
@@ -140,9 +140,9 @@ except Exception:
     show_system_initialization_dialog = None
 
 try:
-    from App.dialogs.kvh_drift_dialog import show_kvh_drift_dialog
+    from App.dialogs.murata_drift_dialog import show_murata_drift_dialog
 except Exception:
-    show_kvh_drift_dialog = None
+    show_murata_drift_dialog = None
 
 try:
     from App.dialogs.gyems_diagnostic_dialog import show_gyems_diagnostic_dialog
@@ -482,13 +482,13 @@ class MowerOperatorApp(ctk.CTk):
         self.gyems_state: Any | None = None
 
         # Orientierung der Wagen-/Roboter-X-Achse im Lasertracker-XY-System.
-        # Referenz kommt aus der aktiven Transformation; der KVH liefert danach
+        # Referenz kommt aus der aktiven Transformation; der Murata liefert danach
         # nur die relative Winkeländerung seit dem Nullsetzen.
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
 
         # Sicherheitsueberwachung nach gueltiger Transformation:
-        # Wenn sich der KVH-Winkel danach merklich aendert, ist die
+        # Wenn sich der Murata-Winkel danach merklich aendert, ist die
         # Transformation fuer den aktuellen Wagenzustand nicht mehr gueltig.
         try:
             self.trafo_gyro_invalid_threshold_deg: float = float(
@@ -659,7 +659,7 @@ class MowerOperatorApp(ctk.CTk):
         gyro_menu.add_command(label="Drift bestimmen", command=self.determine_gyro_drift)
         gyro_menu.add_separator()
         gyro_menu.add_command(label="Status anzeigen", command=self.show_gyro_status)
-        menu_bar.add_cascade(label="Gyro", menu=gyro_menu)
+        menu_bar.add_cascade(label="Murata", menu=gyro_menu)
 
         system_menu = Menu(menu_bar, tearoff=False)
         system_menu.add_command(label="Initialisieren [Ctrl+I]", command=self.initialize_system)
@@ -924,7 +924,7 @@ class MowerOperatorApp(ctk.CTk):
         components = self._status_card(panel, title="Komponenten", row=0)
         self._add_status_row(components, row=0, key="xyz", label="XYZ-Roboter")
         self._add_status_row(components, row=1, key="tracker", label="Lasertracker")
-        self._add_status_row(components, row=2, key="gyro", label="Gyro / KVH")
+        self._add_status_row(components, row=2, key="gyro", label="Murata SCH16T")
         self._add_status_row(components, row=3, key="drehmotor", label="Drehmotor / GYEMS")
 
         system = self._status_card(panel, title="Systemzustände", row=1)
@@ -943,7 +943,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_section_label(live, row=4, text="Lasertracker")
         self._add_tracker_live_table(live, start_row=5)
 
-        self._add_live_section_label(live, row=10, text="Gyro / KVH")
+        self._add_live_section_label(live, row=10, text="Murata SCH16T")
         self._add_live_value_row(live, row=11, key="gyro_angle", label="Winkel")
         self._add_live_value_row(live, row=12, key="gyro_orientation_lt", label="Orientierung LT")
         self._add_live_value_row(live, row=13, key="gyro_drift", label="Drift")
@@ -1943,7 +1943,7 @@ class MowerOperatorApp(ctk.CTk):
         )
 
     # --------------------------------------------------
-    # Drehmotor / Gyro
+    # Drehmotor / Murata
     # --------------------------------------------------
 
     def _ensure_gyems_worker(self) -> bool:
@@ -2183,7 +2183,7 @@ class MowerOperatorApp(ctk.CTk):
             messagebox.showwarning(
                 "Drehmotor Referenz",
                 "Keine gueltige Reflektor-Sollrichtung vorhanden.\n"
-                "Bitte Tracker, KVH und Transformation pruefen.",
+                "Bitte Tracker, Murata und Transformation pruefen.",
                 parent=self,
             )
             self.set_current_action("Drehmotor-Referenz nicht möglich: keine Sollrichtung.")
@@ -2311,31 +2311,31 @@ class MowerOperatorApp(ctk.CTk):
         return True
 
     def _ensure_gyro_worker(self) -> bool:
-        """Erzeugt den KVH-DSP-Worker bei Bedarf."""
+        """Erzeugt den Murata SCH16T-Worker bei Bedarf."""
         if self.gyro_worker is not None:
             return True
 
-        if KVHDSPWorker is None:
-            self.log("KVHDSPWorker konnte nicht importiert werden.")
+        if MurataWorker is None:
+            self.log("MurataWorker konnte nicht importiert werden.")
             messagebox.showerror(
-                "Gyro",
-                "KVHDSPWorker konnte nicht importiert werden.",
+                "Murata",
+                "MurataWorker konnte nicht importiert werden.",
                 parent=self,
             )
             return False
 
         try:
-            self.gyro_worker = KVHDSPWorker(
+            self.gyro_worker = MurataWorker(
                 on_log=self.on_gyro_log,
                 on_state_changed=self.on_gyro_state_changed,
             )
             self.gyro_worker.start()
-            self.log("KVH-DSP-Worker initialisiert.")
+            self.log("Murata SCH16T-Worker initialisiert.")
             return True
         except Exception as exc:
             self.gyro_worker = None
-            self.log(f"KVH-DSP-Worker konnte nicht initialisiert werden: {exc}")
-            messagebox.showerror("Gyro", str(exc), parent=self)
+            self.log(f"Murata SCH16T-Worker konnte nicht initialisiert werden: {exc}")
+            messagebox.showerror("Murata", str(exc), parent=self)
             return False
 
     def on_gyro_state_changed(self, state: Any) -> None:
@@ -2354,14 +2354,14 @@ class MowerOperatorApp(ctk.CTk):
 
     def on_gyro_log(self, text: str) -> None:
         def apply_log() -> None:
-            self.log(f"Gyro: {text}")
+            self.log(f"Murata: {text}")
             lower_text = text.lower()
             if "driftmessung abgeschlossen" in lower_text:
-                self.set_current_action("KVH DSP Driftmessung abgeschlossen.")
+                self.set_current_action("Murata SCH16T Driftmessung abgeschlossen.")
             elif "drift gesetzt" in lower_text:
-                self.set_current_action("KVH DSP Driftwert gesetzt.")
+                self.set_current_action("Murata SCH16T Driftwert gesetzt.")
             elif "driftmessung gestoppt" in lower_text:
-                self.set_current_action("KVH DSP Driftmessung gestoppt.")
+                self.set_current_action("Murata SCH16T Driftmessung gestoppt.")
 
         try:
             self.after(0, apply_log)
@@ -2369,19 +2369,19 @@ class MowerOperatorApp(ctk.CTk):
             pass
 
     def connect_gyro(self) -> None:
-        self.set_current_action("KVH DSP wird verbunden...")
+        self.set_current_action("Murata SCH16T wird verbunden...")
 
         if CONFIG is None:
-            messagebox.showerror("Gyro", "CONFIG ist nicht geladen.", parent=self)
+            messagebox.showerror("Murata", "CONFIG ist nicht geladen.", parent=self)
             self.set_current_action("Fehler: CONFIG nicht geladen.")
             return
 
-        default_port = str(getattr(getattr(CONFIG, "gyro", None), "port", "COM3"))
-        baudrate = int(getattr(getattr(CONFIG, "gyro", None), "baudrate", 375000))
+        default_port = str(getattr(getattr(CONFIG, "murata", None), "port", "COM9"))
+        baudrate = int(getattr(getattr(CONFIG, "murata", None), "baudrate", 115200))
 
         port = simpledialog.askstring(
-            "Gyro verbinden",
-            "KVH-DSP COM-Port:",
+            "Murata verbinden",
+            "Murata SCH16T COM-Port:",
             initialvalue=default_port,
             parent=self,
         )
@@ -2391,7 +2391,7 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         if not self._ensure_gyro_worker():
-            self.set_current_action("KVH DSP konnte nicht initialisiert werden.")
+            self.set_current_action("Murata SCH16T konnte nicht initialisiert werden.")
             return
 
         try:
@@ -2400,33 +2400,33 @@ class MowerOperatorApp(ctk.CTk):
                 port=port.strip(),
                 baudrate=baudrate,
             )
-            self.log(f"KVH DSP verbinden angefordert: {port.strip()} @ {baudrate}.")
-            self.set_current_action("KVH DSP Verbindung wird aufgebaut...")
+            self.log(f"Murata SCH16T verbinden angefordert: {port.strip()} @ {baudrate}.")
+            self.set_current_action("Murata SCH16T Verbindung wird aufgebaut...")
         except Exception as exc:
-            self.log(f"KVH DSP verbinden fehlgeschlagen: {exc}")
-            messagebox.showerror("Gyro", str(exc), parent=self)
-            self.set_current_action("KVH DSP Verbindung fehlgeschlagen.")
+            self.log(f"Murata SCH16T verbinden fehlgeschlagen: {exc}")
+            messagebox.showerror("Murata", str(exc), parent=self)
+            self.set_current_action("Murata SCH16T Verbindung fehlgeschlagen.")
 
     def disconnect_gyro(self) -> None:
-        self.set_current_action("KVH DSP wird getrennt...")
+        self.set_current_action("Murata SCH16T wird getrennt...")
 
         if self.gyro_worker is None:
             self.gyro_ready = False
             self.update_status()
-            self.set_current_action("KVH DSP ist bereits getrennt.")
+            self.set_current_action("Murata SCH16T ist bereits getrennt.")
             return
 
         try:
             self.gyro_worker.send_command("disconnect")
-            self.log("KVH DSP trennen angefordert.")
-            self.set_current_action("KVH DSP Trennung angefordert.")
+            self.log("Murata SCH16T trennen angefordert.")
+            self.set_current_action("Murata SCH16T Trennung angefordert.")
         except Exception as exc:
-            self.log(f"KVH DSP trennen fehlgeschlagen: {exc}")
-            messagebox.showerror("Gyro", str(exc), parent=self)
-            self.set_current_action("KVH DSP Trennung fehlgeschlagen.")
+            self.log(f"Murata SCH16T trennen fehlgeschlagen: {exc}")
+            messagebox.showerror("Murata", str(exc), parent=self)
+            self.set_current_action("Murata SCH16T Trennung fehlgeschlagen.")
 
     def reset_gyro_angle(self) -> None:
-        self.set_current_action("KVH DSP Winkel wird auf 0 gesetzt...")
+        self.set_current_action("Murata SCH16T Winkel wird auf 0 gesetzt...")
 
         if not self._gyro_connected_for_command("Winkel auf 0 setzen"):
             return
@@ -2436,61 +2436,61 @@ class MowerOperatorApp(ctk.CTk):
             self.gyro_reference_angle_deg = 0.0
             if self.trafo_valid:
                 self._update_gyro_orientation_reference_from_trafo(log_result=False)
-            self.log("KVH DSP Winkel auf 0 setzen angefordert.")
-            self.set_current_action("KVH DSP Winkel auf 0 gesetzt.")
+            self.log("Murata SCH16T Winkel auf 0 setzen angefordert.")
+            self.set_current_action("Murata SCH16T Winkel auf 0 gesetzt.")
         except Exception as exc:
-            self.log(f"KVH DSP Winkel-Reset fehlgeschlagen: {exc}")
-            messagebox.showerror("Gyro", str(exc), parent=self)
-            self.set_current_action("KVH DSP Winkel-Reset fehlgeschlagen.")
+            self.log(f"Murata SCH16T Winkel-Reset fehlgeschlagen: {exc}")
+            messagebox.showerror("Murata", str(exc), parent=self)
+            self.set_current_action("Murata SCH16T Winkel-Reset fehlgeschlagen.")
 
     def determine_gyro_drift(self) -> None:
-        self.set_current_action("KVH DSP Driftmessung wird vorbereitet...")
+        self.set_current_action("Murata SCH16T Driftmessung wird vorbereitet...")
 
         if not self._gyro_connected_for_command("Drift bestimmen"):
             return
 
-        if show_kvh_drift_dialog is None:
-            self.log("KVH Driftdialog ist nicht verfügbar.")
+        if show_murata_drift_dialog is None:
+            self.log("Murata Driftdialog ist nicht verfügbar.")
             messagebox.showerror(
-                "Gyro",
-                "KVH Driftdialog ist nicht verfügbar.",
+                "Murata",
+                "Murata Driftdialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: KVH Driftdialog nicht verfügbar.")
+            self.set_current_action("Fehler: Murata Driftdialog nicht verfügbar.")
             return
 
-        default_seconds = float(getattr(getattr(CONFIG, "gyro", None), "default_drift_seconds", 30.0))
+        default_seconds = float(getattr(getattr(CONFIG, "murata", None), "default_drift_seconds", 10.0))
 
         try:
-            show_kvh_drift_dialog(
+            show_murata_drift_dialog(
                 parent=self,
                 state_getter=lambda: self.gyro_state,
                 send_gyro_command=self.gyro_worker.send_command,
                 default_seconds=default_seconds,
                 on_finished=self.on_gyro_drift_finished,
-                log=lambda text: self.log(f"Gyro: {text}"),
+                log=lambda text: self.log(f"Murata: {text}"),
                 set_current_action=self.set_current_action,
             )
         except Exception as exc:
-            self.log(f"KVH Driftdialog konnte nicht gestartet werden: {exc}")
-            messagebox.showerror("Gyro", str(exc), parent=self)
-            self.set_current_action("KVH Driftdialog konnte nicht gestartet werden.")
+            self.log(f"Murata Driftdialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Murata", str(exc), parent=self)
+            self.set_current_action("Murata Driftdialog konnte nicht gestartet werden.")
 
     def on_gyro_drift_finished(self) -> None:
-        self.set_current_action("KVH DSP Driftmessung abgeschlossen.")
+        self.set_current_action("Murata SCH16T Driftmessung abgeschlossen.")
         self.update_status()
 
     def show_gyro_status(self) -> None:
         state = self.gyro_state
 
         if state is None:
-            message = "KVH DSP Status: nicht initialisiert"
+            message = "Murata SCH16T Status: nicht initialisiert"
             self.log(message)
-            messagebox.showinfo("Gyro Status", message, parent=self)
+            messagebox.showinfo("Murata Status", message, parent=self)
             return
 
         message = (
-            "KVH DSP Status:\n"
+            "Murata SCH16T Status:\n"
             f"  Verbunden: {'ja' if bool(getattr(state, 'connected', False)) else 'nein'}\n"
             f"  Status: {getattr(state, 'status_text', '-')}\n"
             f"  Port: {getattr(state, 'port', '-') or '-'}\n"
@@ -2502,28 +2502,28 @@ class MowerOperatorApp(ctk.CTk):
             f"  Drift-Fortschritt: {float(getattr(state, 'drift_progress', 0.0)) * 100.0:.1f}% "
             f"({float(getattr(state, 'drift_elapsed_s', 0.0)):.1f} / "
             f"{float(getattr(state, 'drift_duration_s', 0.0)):.1f} s)\n"
-            f"  Gültige Pakete: {int(getattr(state, 'valid_packets', 0))}\n"
-            f"  Übersprungene Bytes: {int(getattr(state, 'skipped_bytes', 0))}\n"
+            f"  Gültige Datensätze: {int(getattr(state, 'valid_packets', 0))}\n"
+            f"  Ungültige Zeilen: {int(getattr(state, 'invalid_lines', 0))}\n"
             f"  Driftmessung aktiv: {'ja' if bool(getattr(state, 'drift_active', False)) else 'nein'}"
         )
         self.log(
-            "KVH DSP Status: "
+            "Murata SCH16T Status: "
             f"connected={bool(getattr(state, 'connected', False))}, "
             f"angle={float(getattr(state, 'angle_deg', 0.0)):+.6f} deg, "
             f"rate={float(getattr(state, 'rate_dps', 0.0)):+.6f} deg/s, "
             f"drift={float(getattr(state, 'drift_dps', 0.0)):+.10f} deg/s"
         )
-        messagebox.showinfo("Gyro Status", message, parent=self)
+        messagebox.showinfo("Murata Status", message, parent=self)
 
     def _gyro_connected_for_command(self, action_name: str) -> bool:
         if self.gyro_worker is None or self.gyro_state is None or not bool(getattr(self.gyro_state, "connected", False)):
-            self.log(f"Gyro: {action_name} nicht möglich, KVH DSP ist nicht verbunden.")
+            self.log(f"Murata: {action_name} nicht möglich, Murata SCH16T ist nicht verbunden.")
             messagebox.showwarning(
-                "Gyro",
-                "KVH DSP ist nicht verbunden.",
+                "Murata",
+                "Murata SCH16T ist nicht verbunden.",
                 parent=self,
             )
-            self.set_current_action(f"{action_name} nicht möglich: KVH DSP nicht verbunden.")
+            self.set_current_action(f"{action_name} nicht möglich: Murata SCH16T nicht verbunden.")
             return False
         return True
 
@@ -3164,7 +3164,7 @@ class MowerOperatorApp(ctk.CTk):
     def request_live_map_update(self) -> None:
         """Fordert ein gedrosseltes Kartenupdate an.
 
-        Tracker und KVH koennen deutlich schneller Daten liefern als die GUI
+        Tracker und Murata koennen deutlich schneller Daten liefern als die GUI
         sinnvoll zeichnen sollte. Die Karte wird daher auf die konfigurierte
         Anzeige-Rate begrenzt.
         """
@@ -3236,7 +3236,7 @@ class MowerOperatorApp(ctk.CTk):
         )
 
         # Die Wagenanzeige darf auch nach einer ungueltig gewordenen
-        # Transformation mit Tracker/KVH weiter live aktualisiert werden.
+        # Transformation mit Tracker/Murata weiter live aktualisiert werden.
         # Die Live-Erreichbarkeit darf daraus aber NICHT abgeleitet werden,
         # weil sie sonst wie eine gueltige Absteckfreigabe wirken wuerde.
         reachability_workspace = state.workspace_polygon if self._map_visualization_valid_for_reachability() else None
@@ -3521,7 +3521,7 @@ class MowerOperatorApp(ctk.CTk):
         if not self.tracker_data_current:
             return False, "Trackerdaten nicht aktuell"
         if self._current_gyro_orientation_lt_deg() is None:
-            return False, "KVH-Orientierung nicht verfuegbar"
+            return False, "Murata-Orientierung nicht verfuegbar"
         if self.reflector_aim_reference_bearing_robot_deg is None:
             return False, "Reflektor-Referenz fehlt"
         if self.reflector_aim_result is None:
@@ -3627,7 +3627,7 @@ class MowerOperatorApp(ctk.CTk):
         """Setzt die Orientierungsreferenz aus der aktiven Transformation.
 
         Die aktive Transformation liefert die Orientierung der Roboter-X-Achse
-        im Lasertracker-XY-System. Der KVH-Winkel wird relativ zu diesem
+        im Lasertracker-XY-System. Der Murata-Winkel wird relativ zu diesem
         Zeitpunkt addiert.
         """
         orientation = self._orientation_lt_from_active_trafo()
@@ -3645,12 +3645,12 @@ class MowerOperatorApp(ctk.CTk):
 
         if log_result:
             self.log(
-                "Gyro-Orientierungsreferenz gesetzt: "
-                f"Orientierung LT={orientation:.3f} deg, KVH-Winkel={gyro_angle:.3f} deg."
+                "Murata-Orientierungsreferenz gesetzt: "
+                f"Orientierung LT={orientation:.3f} deg, Murata-Winkel={gyro_angle:.3f} deg."
             )
 
     def _check_trafo_validity_from_gyro(self) -> None:
-        """Invalidiert die Transformation, sobald der KVH-Winkel nach der Trafo driftet/dreht."""
+        """Invalidiert die Transformation, sobald der Murata-Winkel nach der Trafo driftet/dreht."""
         if not bool(getattr(self, "trafo_valid", False)):
             return
         if self.gyro_reference_angle_deg is None:
@@ -3668,7 +3668,7 @@ class MowerOperatorApp(ctk.CTk):
 
         reason = (
             "Transformation ungueltig: "
-            f"KVH-Winkelaenderung {delta_deg:+.4f} deg "
+            f"Murata-Winkelaenderung {delta_deg:+.4f} deg "
             f"> {threshold_deg:.4f} deg seit der Transformation."
         )
         self._invalidate_transformation(reason)
@@ -3692,9 +3692,9 @@ class MowerOperatorApp(ctk.CTk):
         was_valid = bool(getattr(self, "trafo_valid", False))
         self.trafo_valid = False
 
-        # Gyro-/ARN-Referenzen bewusst erhalten:
+        # Murata-/ARN-Referenzen bewusst erhalten:
         # - gyro_lt_reference_orientation_deg und gyro_reference_angle_deg werden
-        #   weiter benoetigt, um die aktuelle Roboterorientierung aus KVH-Delta
+        #   weiter benoetigt, um die aktuelle Roboterorientierung aus Murata-Delta
         #   zu bestimmen.
         # - reflector_aim_reference_bearing_robot_deg bleibt die mechanische
         #   Reflektor-Referenz fuer die ARN.
@@ -3770,16 +3770,14 @@ class MowerOperatorApp(ctk.CTk):
             return None
 
     def _current_gyro_angle_deg(self) -> float | None:
-        """Liefert den KVH-Winkel mit der im System gueltigen Vorzeichenkonvention.
-
-        Der physische Einbau des KVH liefert den positiven Winkel entgegengesetzt
-        zum gewuenschten Drehsinn im Lasertracker-/Kartensystem. Deshalb wird das
-        Vorzeichen hier zentral korrigiert, statt es in der Config zu fuehren.
-        """
+        """Liefert den Murata-Winkel mit konfigurierbarer Vorzeichenkonvention."""
         if self.gyro_state is None:
             return None
         try:
-            return -float(getattr(self.gyro_state, "angle_deg", 0.0))
+            direction_sign = float(
+                getattr(getattr(CONFIG, "murata", None), "direction_sign", 1.0)
+            )
+            return direction_sign * float(getattr(self.gyro_state, "angle_deg", 0.0))
         except Exception:
             return None
 
@@ -3897,8 +3895,8 @@ class MowerOperatorApp(ctk.CTk):
             "Config:\n"
             f"  XYZ: {CONFIG.xyz.port} @ {CONFIG.xyz.baudrate}\n"
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
-            f"  Gyro/KVH DSP: {getattr(getattr(CONFIG, 'gyro', None), 'port', 'COM3')} @ "
-            f"{getattr(getattr(CONFIG, 'gyro', None), 'baudrate', 375000)}\n"
+            f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "
+            f"{getattr(getattr(CONFIG, 'murata', None), 'baudrate', 115200)}\n"
             f"  Workspace X/Y/Z:\n"
             f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
             f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"
@@ -3917,7 +3915,7 @@ class MowerOperatorApp(ctk.CTk):
             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
             f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}\n"
             f"  Trafo-Schutz:\n"
-            f"    Gyro-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg"
+            f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg"
         )
 
     def _config_float(self, section: str, name: str, fallback: float) -> float:
@@ -3967,3 +3965,4 @@ if __name__ == "__main__":
 
     app = MowerOperatorApp()
     app.mainloop()
+

@@ -22,6 +22,12 @@
         "baudrate": 375000,
         "default_drift_seconds": 10.0
     },
+    "murata": {
+        "port": "COM9",
+        "baudrate": 115200,
+        "default_drift_seconds": 10.0,
+        "direction_sign": 1.0
+    },
     "arn": {
         "kp": 4.0,
         "max_speed_deg_s": 90.0,

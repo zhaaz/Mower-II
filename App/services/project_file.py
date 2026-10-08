@@ -119,7 +119,7 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
     marker = getattr(cfg, "marker", None)
     transformation = getattr(cfg, "transformation", None)
     arn = getattr(cfg, "arn", None)
-    gyro = getattr(cfg, "gyro", None)
+    murata = getattr(cfg, "murata", None)
 
     return {
         "marker": _object_fields(
@@ -143,7 +143,10 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
             arn,
             ["kp", "max_speed_deg_s", "deadband_deg", "command_interval_ms", "direction_sign"],
         ),
-        "gyro": _object_fields(gyro, ["default_drift_seconds"]),
+        "murata": _object_fields(
+            murata,
+            ["default_drift_seconds", "direction_sign"],
+        ),
     }
 
 
@@ -279,3 +282,4 @@ def _format_value(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return ", ".join(_format_value(item) for item in value)
     return str(value).replace("\n", " ").replace(";", ",")
+

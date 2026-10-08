@@ -119,9 +119,9 @@ class SystemInitializationDialog:
         1. XYZ auf Config-Default-Port verbinden
         2. XYZ Homing durchfuehren
         3. Lasertracker UDP starten und auf aktuelle Daten warten
-        4. KVH/Gyro verbinden
-        5. KVH/Gyro Drift bestimmen und setzen
-        6. KVH/Gyro Winkel auf 0 setzen
+        4. Murata SCH16T verbinden
+        5. Murata SCH16T Drift bestimmen und setzen
+        6. Murata SCH16T Winkel auf 0 setzen
         7. Transformationsdialog starten
         8. GYEMS/Drehmotor verbinden
         9. ARN-Referenz setzen
@@ -194,9 +194,9 @@ class SystemInitializationDialog:
             StepState("xyz_connect", "XYZ verbinden"),
             StepState("homing", "XYZ Homing"),
             StepState("tracker", "Tracker UDP starten"),
-            StepState("gyro_connect", "Gyro / KVH verbinden"),
-            StepState("gyro_drift", "Gyro / KVH Drift bestimmen"),
-            StepState("gyro_zero", "Gyro / KVH Winkel nullsetzen"),
+            StepState("gyro_connect", "Murata SCH16T verbinden"),
+            StepState("gyro_drift", "Murata SCH16T Drift bestimmen"),
+            StepState("gyro_zero", "Murata SCH16T Winkel nullsetzen"),
             StepState("trafo", "Transformation durchführen"),
             StepState("gyems_connect", "Drehmotor / GYEMS verbinden"),
             StepState("arn_reference", "ARN-Referenz setzen"),
@@ -481,54 +481,54 @@ class SystemInitializationDialog:
     def connect_gyro_default(self) -> None:
         self.check_abort()
         self.set_step("gyro_connect", "läuft")
-        self.set_status("Gyro / KVH wird verbunden.")
+        self.set_status("Murata SCH16T wird verbunden.")
 
         if self.ensure_gyro_worker is None or self.gyro_state_getter is None or self.send_gyro_command is None:
-            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+            raise RuntimeError("Murata SCH16T-Schnittstelle ist nicht verfügbar.")
 
-        port = str(getattr(getattr(self.config, "gyro", None), "port", "COM3"))
-        baudrate = int(getattr(getattr(self.config, "gyro", None), "baudrate", 375000))
-        self.log(f"Gyro / KVH verbinden: Port={port}, Baudrate={baudrate}")
+        port = str(getattr(getattr(self.config, "murata", None), "port", "COM9"))
+        baudrate = int(getattr(getattr(self.config, "murata", None), "baudrate", 115200))
+        self.log(f"Murata SCH16T verbinden: Port={port}, Baudrate={baudrate}")
 
         state = self.gyro_state_getter()
         if state is not None and bool(getattr(state, "connected", False)):
             current_port = getattr(state, "port", "")
-            self.log(f"Gyro / KVH ist bereits verbunden. Port={current_port or '-'}")
+            self.log(f"Murata SCH16T ist bereits verbunden. Port={current_port or '-'}")
             self.set_step("gyro_connect", "bereits verbunden")
             return
 
         ok = self.ensure_gyro_worker()
         if not ok:
-            raise RuntimeError("Gyro/KVH-Worker konnte nicht initialisiert werden.")
+            raise RuntimeError("Murata SCH16T-Worker konnte nicht initialisiert werden.")
 
         self.send_gyro_command("connect", port=port, baudrate=baudrate)
 
         self.wait_for_gyro_state(
             predicate=lambda state: bool(getattr(state, "connected", False)),
             timeout_s=20.0,
-            error_text="Timeout beim Verbinden mit Gyro / KVH.",
+            error_text="Timeout beim Verbinden mit Murata SCH16T.",
         )
 
-        self.log("Gyro / KVH verbunden.")
+        self.log("Murata SCH16T verbunden.")
         self.set_step("gyro_connect", "OK")
 
     def determine_and_set_gyro_drift(self) -> None:
         self.check_abort()
         self.set_step("gyro_drift", "läuft")
-        self.set_status("Gyro / KVH Driftmessung: Wagen ruhig halten.")
+        self.set_status("Murata SCH16T Driftmessung: Wagen ruhig halten.")
 
         if self.gyro_state_getter is None or self.send_gyro_command is None:
-            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+            raise RuntimeError("Murata SCH16T-Schnittstelle ist nicht verfügbar.")
 
         state = self.gyro_state_getter()
         if state is None or not bool(getattr(state, "connected", False)):
-            raise RuntimeError("Gyro / KVH ist nicht verbunden.")
+            raise RuntimeError("Murata SCH16T ist nicht verbunden.")
 
-        duration_s = float(getattr(getattr(self.config, "gyro", None), "default_drift_seconds", 30.0))
+        duration_s = float(getattr(getattr(self.config, "murata", None), "default_drift_seconds", 10.0))
         duration_s = max(duration_s, 1.0)
 
         self.log("WICHTIG: Wagen während der Driftmessung ruhig halten.")
-        self.log(f"Gyro / KVH Driftmessung starten: Dauer={duration_s:.1f} s")
+        self.log(f"Murata SCH16T Driftmessung starten: Dauer={duration_s:.1f} s")
         time.sleep(1.0)
         self.check_abort()
 
@@ -537,7 +537,7 @@ class SystemInitializationDialog:
         self.wait_for_gyro_state(
             predicate=lambda state: bool(getattr(state, "drift_active", False)),
             timeout_s=5.0,
-            error_text="Gyro / KVH Driftmessung wurde nicht gestartet.",
+            error_text="Murata SCH16T Driftmessung wurde nicht gestartet.",
         )
 
         self.wait_for_gyro_state(
@@ -546,43 +546,43 @@ class SystemInitializationDialog:
                 and getattr(state, "pending_drift_dps", None) is not None
             ),
             timeout_s=duration_s + 10.0,
-            error_text="Timeout bei der Gyro / KVH Driftmessung.",
+            error_text="Timeout bei der Murata SCH16T Driftmessung.",
         )
 
         pending = getattr(self.gyro_state_getter(), "pending_drift_dps", None)
-        self.log(f"Gyro / KVH Drift gemessen: {float(pending):.10f} deg/s")
+        self.log(f"Murata SCH16T Drift gemessen: {float(pending):.10f} deg/s")
 
         self.send_gyro_command("set_drift")
         self.wait_for_gyro_state(
             predicate=lambda state: getattr(state, "pending_drift_dps", None) is None,
             timeout_s=5.0,
-            error_text="Gyro / KVH Driftwert konnte nicht gesetzt werden.",
+            error_text="Murata SCH16T Driftwert konnte nicht gesetzt werden.",
         )
 
         drift = float(getattr(self.gyro_state_getter(), "drift_dps", 0.0))
-        self.log(f"Gyro / KVH Drift gesetzt: {drift:.10f} deg/s")
+        self.log(f"Murata SCH16T Drift gesetzt: {drift:.10f} deg/s")
         self.set_step("gyro_drift", "OK")
 
     def reset_gyro_angle(self) -> None:
         self.check_abort()
         self.set_step("gyro_zero", "läuft")
-        self.set_status("Gyro / KVH Winkel wird auf 0 gesetzt.")
+        self.set_status("Murata SCH16T Winkel wird auf 0 gesetzt.")
 
         if self.gyro_state_getter is None or self.send_gyro_command is None:
-            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+            raise RuntimeError("Murata SCH16T-Schnittstelle ist nicht verfügbar.")
 
         state = self.gyro_state_getter()
         if state is None or not bool(getattr(state, "connected", False)):
-            raise RuntimeError("Gyro / KVH ist nicht verbunden.")
+            raise RuntimeError("Murata SCH16T ist nicht verbunden.")
 
         self.send_gyro_command("reset_angle")
         self.wait_for_gyro_state(
             predicate=lambda state: abs(float(getattr(state, "angle_deg", 0.0))) < 0.05,
             timeout_s=5.0,
-            error_text="Gyro / KVH Winkel konnte nicht auf 0 gesetzt werden.",
+            error_text="Murata SCH16T Winkel konnte nicht auf 0 gesetzt werden.",
         )
 
-        self.log("Gyro / KVH Winkel auf 0 gesetzt.")
+        self.log("Murata SCH16T Winkel auf 0 gesetzt.")
         self.set_step("gyro_zero", "OK")
 
     def run_transformation(self) -> None:
@@ -753,7 +753,7 @@ class SystemInitializationDialog:
 
     def wait_for_gyro_state(self, *, predicate: Callable[[Any], bool], timeout_s: float, error_text: str) -> None:
         if self.gyro_state_getter is None:
-            raise RuntimeError("Gyro/KVH-Schnittstelle ist nicht verfügbar.")
+            raise RuntimeError("Murata SCH16T-Schnittstelle ist nicht verfügbar.")
 
         start = time.time()
         while time.time() - start < timeout_s:
@@ -948,3 +948,4 @@ def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int
     x = parent_x + max((parent_w - width) // 2, 0)
     y = parent_y + max((parent_h - height) // 2, 0)
     window.geometry(f"{width}x{height}+{x}+{y}")
+

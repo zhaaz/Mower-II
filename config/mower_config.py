@@ -49,6 +49,18 @@ class GyroConfig:
 
 
 @dataclass
+class MurataConfig:
+    port: str = "COM9"
+    baudrate: int = 115200
+    default_drift_seconds: float = 10.0
+
+    # Vorzeichen fuer den im Mower verwendeten Winkel. Falls der Winkel bei
+    # der endgueltigen Einbaulage in die falsche Richtung laeuft, auf -1.0
+    # setzen.
+    direction_sign: float = 1.0
+
+
+@dataclass
 class ArnConfig:
     # Proportionalfaktor fuer die aktive Reflektornachfuehrung.
     # speed_cmd_deg_s = kp * error_deg
@@ -128,6 +140,7 @@ class MowerConfig:
     xyz: XYZConfig
     tracker: TrackerConfig
     gyro: GyroConfig
+    murata: MurataConfig
     arn: ArnConfig
     marker: MarkerConfig
     transformation: TransformationConfig
@@ -142,6 +155,7 @@ DEFAULT_CONFIG = MowerConfig(
     xyz=XYZConfig(),
     tracker=TrackerConfig(),
     gyro=GyroConfig(),
+    murata=MurataConfig(),
     arn=ArnConfig(),
     marker=MarkerConfig(),
     transformation=TransformationConfig(),
@@ -196,6 +210,7 @@ def load_config() -> MowerConfig:
     xyz_data = _section(data, "xyz")
     tracker_data = _section(data, "tracker")
     gyro_data = _section(data, "gyro")
+    murata_data = _section(data, "murata")
     arn_data = _section(data, "arn")
     marker_data = _section(data, "marker")
     transformation_data = _section(data, "transformation")
@@ -217,6 +232,7 @@ def load_config() -> MowerConfig:
         xyz=XYZConfig(**xyz_data),
         tracker=TrackerConfig(**tracker_data),
         gyro=GyroConfig(**gyro_data),
+        murata=MurataConfig(**murata_data),
         arn=ArnConfig(**arn_data),
         marker=MarkerConfig(**marker_data),
         transformation=transformation,
@@ -297,3 +313,4 @@ def update_marker_measure_after_marking(enabled: bool) -> None:
 # --------------------------------------------------
 
 CONFIG = load_config()
+
