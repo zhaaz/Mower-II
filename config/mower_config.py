@@ -125,6 +125,18 @@ class TransformationConfig:
     # Transformation invalidiert.
     gyro_invalid_threshold_deg: float = 0.03
 
+    # Qualitaetsgrenzen der Transformation [mm]. Fuer jede Stufe muessen
+    # sowohl RMS als auch maximale Restklaffung innerhalb des Grenzwerts
+    # liegen. Alles bis einschliesslich OK wird technisch freigegeben.
+    very_good_rms_mm: float = 0.05
+    very_good_max_residual_mm: float = 0.10
+
+    good_rms_mm: float = 0.10
+    good_max_residual_mm: float = 0.20
+
+    ok_rms_mm: float = 0.25
+    ok_max_residual_mm: float = 0.50
+
 
 @dataclass
 class PathsConfig:

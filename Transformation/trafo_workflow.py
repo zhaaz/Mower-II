@@ -46,8 +46,17 @@ class TrafoWorkflowConfig:
 
     minimum_required_measurements: int = 4
 
-    max_allowed_rms_mm: float = 0.10
-    max_allowed_max_residual_mm: float = 0.15
+    # Alles bis einschliesslich Qualitaetsstufe OK wird akzeptiert. Die
+    # Standardwerte kommen direkt aus der zentralen Mower-Config, damit auch
+    # Aufrufer ausserhalb des Hauptdialogs dieselben Grenzen verwenden.
+    max_allowed_rms_mm: float = field(
+        default_factory=lambda: float(CONFIG.transformation.ok_rms_mm)
+    )
+    max_allowed_max_residual_mm: float = field(
+        default_factory=lambda: float(
+            CONFIG.transformation.ok_max_residual_mm
+        )
+    )
 
     marker_to_reflector_robot: tuple[float, float, float] = field(
         default_factory=lambda: tuple(CONFIG.transformation.marker_to_reflector_robot)

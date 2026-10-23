@@ -9,6 +9,7 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Callable
 
+from config.mower_config import CONFIG
 from Transformation.trafo_manager import TrafoManager
 from Transformation.trafo_workflow import TrafoWorkflow, TrafoWorkflowConfig
 
@@ -22,6 +23,15 @@ FONT_NORMAL = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")
 FONT_SECTION = ("Segoe UI", 11, "bold")
 FONT_MONO = ("Consolas", 10)
+
+
+def _trafo_threshold(name: str, default: float) -> float:
+    """Liest einen nichtnegativen Trafo-Grenzwert aus der Config."""
+    try:
+        value = getattr(getattr(CONFIG, "transformation", None), name, default)
+        return max(float(value), 0.0)
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def show_trafo_dialog(
@@ -246,8 +256,13 @@ class TrafoDialog:
 
         config = TrafoWorkflowConfig(
             tracker_capture_timeout_s=10.0,
-            max_allowed_rms_mm=0.10,
-            max_allowed_max_residual_mm=0.15,
+            # Dieselben Grenzwerte wie fuer die Stufe OK verwenden. Damit
+            # werden SEHR GUT, GUT und OK akzeptiert, PRUEFEN dagegen nicht.
+            max_allowed_rms_mm=_trafo_threshold("ok_rms_mm", 0.25),
+            max_allowed_max_residual_mm=_trafo_threshold(
+                "ok_max_residual_mm",
+                0.50,
+            ),
             minimum_required_measurements=4,
             allow_scale=True,
             min_geometry_rank=2,
@@ -480,13 +495,31 @@ class TrafoDialog:
 
     @staticmethod
     def _evaluate_trafo_quality(*, rms: float, max_residual: float) -> str:
-        if rms <= 0.05 and max_residual <= 0.10:
+        if (
+                rms <= _trafo_threshold("very_good_rms_mm", 0.05)
+                and max_residual <= _trafo_threshold(
+                    "very_good_max_residual_mm",
+                    0.10,
+                )
+        ):
             return "SEHR GUT"
 
-        if rms <= 0.10 and max_residual <= 0.20:
+        if (
+                rms <= _trafo_threshold("good_rms_mm", 0.10)
+                and max_residual <= _trafo_threshold(
+                    "good_max_residual_mm",
+                    0.20,
+                )
+        ):
             return "GUT"
 
-        if rms <= 0.25 and max_residual <= 0.50:
+        if (
+                rms <= _trafo_threshold("ok_rms_mm", 0.25)
+                and max_residual <= _trafo_threshold(
+                    "ok_max_residual_mm",
+                    0.50,
+                )
+        ):
             return "OK"
 
         return "PRUEFEN"
@@ -523,3 +556,4 @@ def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int
     x = parent_x + max((parent_w - width) // 2, 0)
     y = parent_y + max((parent_h - height) // 2, 0)
     window.geometry(f"{width}x{height}+{x}+{y}")
+

@@ -52,7 +52,13 @@
             -2.515,
             314.349
         ],
-        "gyro_invalid_threshold_deg": 0.2
+        "gyro_invalid_threshold_deg": 0.05,
+        "very_good_rms_mm": 0.05,
+        "very_good_max_residual_mm": 0.10,
+        "good_rms_mm": 0.10,
+        "good_max_residual_mm": 0.20,
+        "ok_rms_mm": 0.25,
+        "ok_max_residual_mm": 0.50
     },
     "paths": {
         "tracker_station_file": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/data/tracker_station.txt",
