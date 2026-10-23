@@ -14,7 +14,7 @@ from typing import Any
 
 @dataclass
 class XYZConfig:
-    port: str = "COM5"
+    port: str = "COM13"
     baudrate: int = 115200
 
     x_min: float = 0.0
@@ -42,13 +42,6 @@ class TrackerConfig:
 
 
 @dataclass
-class GyroConfig:
-    port: str = "COM3"
-    baudrate: int = 375000
-    default_drift_seconds: float = 10.0
-
-
-@dataclass
 class MurataConfig:
     port: str = "COM9"
     baudrate: int = 115200
@@ -58,6 +51,13 @@ class MurataConfig:
     # der endgueltigen Einbaulage in die falsche Richtung laeuft, auf -1.0
     # setzen.
     direction_sign: float = 1.0
+
+
+@dataclass
+class GyemsConfig:
+    port: str = "COM4"
+    baudrate: int = 115200
+    motor_id: int = 1
 
 
 @dataclass
@@ -115,7 +115,7 @@ class TransformationConfig:
         300.037719,
     )
 
-    # Maximale zulaessige KVH-Winkelaenderung nach einer gueltigen
+    # Maximale zulaessige Murata-Winkelaenderung nach einer gueltigen
     # Transformation. Wird der Betrag ueberschritten, wird die
     # Transformation invalidiert.
     gyro_invalid_threshold_deg: float = 0.03
@@ -139,8 +139,8 @@ class PathsConfig:
 class MowerConfig:
     xyz: XYZConfig
     tracker: TrackerConfig
-    gyro: GyroConfig
     murata: MurataConfig
+    gyems: GyemsConfig
     arn: ArnConfig
     marker: MarkerConfig
     transformation: TransformationConfig
@@ -154,8 +154,8 @@ class MowerConfig:
 DEFAULT_CONFIG = MowerConfig(
     xyz=XYZConfig(),
     tracker=TrackerConfig(),
-    gyro=GyroConfig(),
     murata=MurataConfig(),
+    gyems=GyemsConfig(),
     arn=ArnConfig(),
     marker=MarkerConfig(),
     transformation=TransformationConfig(),
@@ -209,8 +209,8 @@ def load_config() -> MowerConfig:
 
     xyz_data = _section(data, "xyz")
     tracker_data = _section(data, "tracker")
-    gyro_data = _section(data, "gyro")
     murata_data = _section(data, "murata")
+    gyems_data = _section(data, "gyems")
     arn_data = _section(data, "arn")
     marker_data = _section(data, "marker")
     transformation_data = _section(data, "transformation")
@@ -231,8 +231,8 @@ def load_config() -> MowerConfig:
     return MowerConfig(
         xyz=XYZConfig(**xyz_data),
         tracker=TrackerConfig(**tracker_data),
-        gyro=GyroConfig(**gyro_data),
         murata=MurataConfig(**murata_data),
+        gyems=GyemsConfig(**gyems_data),
         arn=ArnConfig(**arn_data),
         marker=MarkerConfig(**marker_data),
         transformation=transformation,

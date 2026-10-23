@@ -237,7 +237,6 @@ class XYZRobotWorker:
         self.state.status_text = "Moving"
         self._notify_state_changed()
 
-        # Bewegung ausführen
         robot.move_absolute(
             x=x,
             y=y,
@@ -245,12 +244,9 @@ class XYZRobotWorker:
             feedrate=feedrate
         )
 
-        # Istposition lesen
         position = robot.get_current_position()
-
         self.state.set_position(position)
 
-        # Prüfen
         if x is not None:
             dx = position["X"] - x
 
@@ -302,6 +298,7 @@ class XYZRobotWorker:
             marker_size: float,
             marker_shape: str,
             label: str | None = None,
+            text_height: float = 8.0,
             angle_deg: float = 0.0,
             z_mark_mm: float | None = None,
             z_clear_mm: float | None = None,
@@ -336,6 +333,7 @@ class XYZRobotWorker:
                 label=label_text,
                 marker_size=marker_size,
                 marker_shape=marker_shape,
+                text_height=text_height,
                 angle_deg=angle_deg,
             )
             done_text = f"Punkt {label_text} markiert"

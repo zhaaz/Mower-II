@@ -626,9 +626,9 @@ class SystemInitializationDialog:
         if self.ensure_gyems_worker is None or self.gyems_state_getter is None or self.send_gyems_command is None:
             raise RuntimeError("GYEMS-Schnittstelle ist nicht verfügbar.")
 
-        port = str(getattr(getattr(self.config, "gyems", None), "port", "COM4"))
-        baudrate = int(getattr(getattr(self.config, "gyems", None), "baudrate", 115200))
-        motor_id = int(getattr(getattr(self.config, "gyems", None), "motor_id", 1))
+        port = self.config.gyems.port
+        baudrate = self.config.gyems.baudrate
+        motor_id = self.config.gyems.motor_id
         self.log(f"Drehmotor / GYEMS verbinden: Port={port}, Baudrate={baudrate}, ID={motor_id}")
 
         state = self.gyems_state_getter()

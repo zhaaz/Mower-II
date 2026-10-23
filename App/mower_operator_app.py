@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 import tkinter as tk
-from tkinter import Menu, filedialog, messagebox, simpledialog, ttk
+from tkinter import Menu, filedialog, messagebox, ttk
 
 import customtkinter as ctk
 
@@ -74,6 +74,11 @@ except Exception:
     show_xyz_connect_dialog = None
 
 try:
+    from App.dialogs.serial_connect_dialog import show_serial_connect_dialog
+except Exception:
+    show_serial_connect_dialog = None
+
+try:
     from App.dialogs.xyz_manual_move_dialog import show_xyz_manual_move_dialog
 except Exception:
     show_xyz_manual_move_dialog = None
@@ -128,6 +133,11 @@ try:
     from App.dialogs.point_marking_dialog import show_point_marking_dialog
 except Exception:
     show_point_marking_dialog = None
+
+try:
+    from App.dialogs.test_marking_dialog import show_test_marking_dialog
+except Exception:
+    show_test_marking_dialog = None
 
 try:
     from App.dialogs.point_viewer_dialog import show_point_viewer_dialog
@@ -668,6 +678,7 @@ class MowerOperatorApp(ctk.CTk):
         system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren [Ctrl+K]", command=self.offset_calibration)
         system_menu.add_command(label="Markerhoehe kalibrieren [Ctrl+H]", command=self.calibrate_marker_height)
         system_menu.add_command(label="Punkte markieren [Ctrl+A]", command=self.mark_points_dialog)
+        system_menu.add_command(label="Testmarkierung...", command=self.test_marking_dialog)
         system_menu.add_separator()
         system_menu.add_command(label="ARN aktivieren", command=self.activate_arn)
         system_menu.add_command(label="ARN deaktivieren", command=self.deactivate_arn)
@@ -2087,42 +2098,43 @@ class MowerOperatorApp(ctk.CTk):
     def connect_drehmotor(self) -> None:
         self.set_current_action("Drehmotor wird verbunden...")
 
-        default_port = str(getattr(getattr(CONFIG, "gyems", None), "port", "COM4")) if CONFIG is not None else "COM4"
-        default_baudrate = int(getattr(getattr(CONFIG, "gyems", None), "baudrate", 115200)) if CONFIG is not None else 115200
-        default_motor_id = int(getattr(getattr(CONFIG, "gyems", None), "motor_id", 1)) if CONFIG is not None else 1
+        if CONFIG is None:
+            self.log("GYEMS-Verbindung nicht möglich: Config ist nicht geladen.")
+            messagebox.showerror("Drehmotor", "Config ist nicht geladen.", parent=self)
+            self.set_current_action("Drehmotor-Verbindung fehlgeschlagen.")
+            return
 
-        port = simpledialog.askstring(
-            "Drehmotor verbinden",
-            "GYEMS COM-Port:",
-            initialvalue=default_port,
-            parent=self,
+        if show_serial_connect_dialog is None:
+            self.log("GYEMS-Verbindungsdialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Drehmotor",
+                "GYEMS-Verbindungsdialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Drehmotor-Verbindung fehlgeschlagen.")
+            return
+
+        settings = show_serial_connect_dialog(
+            self,
+            title="Drehmotor verbinden",
+            heading="GYEMS verbinden",
+            device_name="GYEMS-Drehmotors",
+            default_port=CONFIG.gyems.port,
+            baudrate=CONFIG.gyems.baudrate,
+            motor_id=CONFIG.gyems.motor_id,
         )
-        if not port:
+        if settings is None:
             self.set_current_action("Bereit.")
             return
 
-        motor_id = simpledialog.askinteger(
-            "Drehmotor verbinden",
-            "Motor-ID:",
-            initialvalue=default_motor_id,
-            minvalue=0,
-            maxvalue=255,
-            parent=self,
-        )
-        if motor_id is None:
-            self.set_current_action("Bereit.")
-            return
-
-        baudrate = simpledialog.askinteger(
-            "Drehmotor verbinden",
-            "Baudrate:",
-            initialvalue=default_baudrate,
-            minvalue=1200,
-            maxvalue=4000000,
-            parent=self,
-        )
-        if baudrate is None:
-            self.set_current_action("Bereit.")
+        if settings.motor_id is None:
+            self.log("GYEMS-Verbindung fehlgeschlagen: Motor-ID fehlt.")
+            messagebox.showerror(
+                "Drehmotor",
+                "Im Verbindungsdialog wurde keine Motor-ID angegeben.",
+                parent=self,
+            )
+            self.set_current_action("Drehmotor-Verbindung fehlgeschlagen.")
             return
 
         if not self._ensure_gyems_worker():
@@ -2132,11 +2144,14 @@ class MowerOperatorApp(ctk.CTk):
         try:
             self.gyems_worker.send_command(
                 "connect",
-                port=port.strip(),
-                baudrate=int(baudrate),
-                motor_id=int(motor_id),
+                port=settings.port,
+                baudrate=settings.baudrate,
+                motor_id=settings.motor_id,
             )
-            self.log(f"GYEMS verbinden angefordert: {port.strip()} @ {int(baudrate)}, ID={int(motor_id)}.")
+            self.log(
+                f"GYEMS verbinden angefordert: {settings.port} @ "
+                f"{settings.baudrate}, ID={settings.motor_id}."
+            )
             self.set_current_action("Drehmotor-Verbindung wird aufgebaut...")
         except Exception as exc:
             self.log(f"GYEMS verbinden fehlgeschlagen: {exc}")
@@ -2376,17 +2391,26 @@ class MowerOperatorApp(ctk.CTk):
             self.set_current_action("Fehler: CONFIG nicht geladen.")
             return
 
-        default_port = str(getattr(getattr(CONFIG, "murata", None), "port", "COM9"))
-        baudrate = int(getattr(getattr(CONFIG, "murata", None), "baudrate", 115200))
+        if show_serial_connect_dialog is None:
+            self.log("Murata-Verbindungsdialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Murata",
+                "Murata-Verbindungsdialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Murata SCH16T Verbindung fehlgeschlagen.")
+            return
 
-        port = simpledialog.askstring(
-            "Murata verbinden",
-            "Murata SCH16T COM-Port:",
-            initialvalue=default_port,
-            parent=self,
+        settings = show_serial_connect_dialog(
+            self,
+            title="Murata verbinden",
+            heading="Murata SCH16T verbinden",
+            device_name="Murata SCH16T",
+            default_port=CONFIG.murata.port,
+            baudrate=CONFIG.murata.baudrate,
         )
 
-        if not port:
+        if settings is None:
             self.set_current_action("Bereit.")
             return
 
@@ -2397,10 +2421,13 @@ class MowerOperatorApp(ctk.CTk):
         try:
             self.gyro_worker.send_command(
                 "connect",
-                port=port.strip(),
-                baudrate=baudrate,
+                port=settings.port,
+                baudrate=settings.baudrate,
             )
-            self.log(f"Murata SCH16T verbinden angefordert: {port.strip()} @ {baudrate}.")
+            self.log(
+                f"Murata SCH16T verbinden angefordert: "
+                f"{settings.port} @ {settings.baudrate}."
+            )
             self.set_current_action("Murata SCH16T Verbindung wird aufgebaut...")
         except Exception as exc:
             self.log(f"Murata SCH16T verbinden fehlgeschlagen: {exc}")
@@ -2923,6 +2950,59 @@ class MowerOperatorApp(ctk.CTk):
     def on_point_marking_finished(self) -> None:
         self.set_current_action("Punkte markieren abgeschlossen.")
         self.refresh_points(keep_map_view=True)
+        self.update_status()
+
+    def test_marking_dialog(self) -> None:
+        self.set_current_action("Testmarkierung wird vorbereitet...")
+
+        if show_test_marking_dialog is None:
+            self.log("Testmarkierungsdialog ist nicht verfuegbar.")
+            messagebox.showerror(
+                "Testmarkierung",
+                "Testmarkierungsdialog ist nicht verfuegbar.",
+                parent=self,
+            )
+            self.set_current_action("Fehler: Testmarkierungsdialog nicht verfuegbar.")
+            return
+
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.log("Testmarkierung nicht moeglich: XYZ ist nicht verbunden.")
+            messagebox.showwarning(
+                "Testmarkierung",
+                "XYZ ist nicht verbunden.",
+                parent=self,
+            )
+            self.set_current_action("Testmarkierung nicht moeglich: XYZ nicht verbunden.")
+            return
+
+        if not self.homing_done:
+            self.log("Testmarkierung nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            messagebox.showwarning(
+                "Testmarkierung",
+                "Bitte zuerst XYZ-Homing durchfuehren.",
+                parent=self,
+            )
+            self.set_current_action("Testmarkierung nicht moeglich: Homing fehlt.")
+            return
+
+        try:
+            self.log("Testmarkierungsdialog wird geoeffnet.")
+            self.set_current_action("Testmarkierung bereit.")
+            show_test_marking_dialog(
+                parent=self,
+                xyz_worker=self.xyz_worker,
+                xyz_state_getter=lambda: self.xyz_state,
+                on_finished=self.on_test_marking_finished,
+                log=self.log,
+            )
+        except Exception as exc:
+            self.log(f"Testmarkierungsdialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Testmarkierung", str(exc), parent=self)
+            self.set_current_action("Testmarkierung konnte nicht gestartet werden.")
+            self.update_status()
+
+    def on_test_marking_finished(self) -> None:
+        self.set_current_action("Testmarkierung abgeschlossen.")
         self.update_status()
 
     def activate_arn(self) -> None:
@@ -3897,6 +3977,7 @@ class MowerOperatorApp(ctk.CTk):
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
             f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "
             f"{getattr(getattr(CONFIG, 'murata', None), 'baudrate', 115200)}\n"
+            f"  GYEMS: {CONFIG.gyems.port} @ {CONFIG.gyems.baudrate}, ID={CONFIG.gyems.motor_id}\n"
             f"  Workspace X/Y/Z:\n"
             f"    X {CONFIG.xyz.x_min:.0f}..{CONFIG.xyz.x_max:.0f}\n"
             f"    Y {CONFIG.xyz.y_min:.0f}..{CONFIG.xyz.y_max:.0f}\n"

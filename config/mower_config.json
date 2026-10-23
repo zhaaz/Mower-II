@@ -1,6 +1,6 @@
 {
     "xyz": {
-        "port": "COM5",
+        "port": "COM13",
         "baudrate": 115200,
         "x_min": 0.0,
         "x_max": 500.0,
@@ -17,16 +17,16 @@
         "capture_timeout_s": 30.0,
         "ccr_radius_mm": 19.05
     },
-    "gyro": {
-        "port": "COM3",
-        "baudrate": 375000,
-        "default_drift_seconds": 10.0
-    },
     "murata": {
         "port": "COM9",
         "baudrate": 115200,
         "default_drift_seconds": 10.0,
         "direction_sign": 1.0
+    },
+    "gyems": {
+        "port": "COM4",
+        "baudrate": 115200,
+        "motor_id": 1
     },
     "arn": {
         "kp": 4.0,
@@ -41,9 +41,9 @@
         "angle_deg": 0.0,
         "align_to_tracker_axes": true,
         "measure_after_marking": true,
-        "z_mark_mm": 164.0,
-        "z_clear_mm": 169.0,
-        "z_travel_mm": 174.0
+        "z_mark_mm": 165.9,
+        "z_clear_mm": 170.0,
+        "z_travel_mm": 185.0
     },
     "transformation": {
         "marker_to_reflector_robot": [
@@ -51,7 +51,7 @@
             -2.515,
             314.349
         ],
-        "gyro_invalid_threshold_deg": 0.03
+        "gyro_invalid_threshold_deg": 0.2
     },
     "paths": {
         "tracker_station_file": "D:/01_Projekte/2025 Absteckwagen II/03 Software/Python/Mower_II/data/tracker_station.txt",
