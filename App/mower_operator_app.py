@@ -155,6 +155,11 @@ except Exception:
     show_murata_drift_dialog = None
 
 try:
+    from App.dialogs.murata_test_dialog import show_murata_test_dialog
+except Exception:
+    show_murata_test_dialog = None
+
+try:
     from App.dialogs.gyems_diagnostic_dialog import show_gyems_diagnostic_dialog
 except Exception:
     show_gyems_diagnostic_dialog = None
@@ -484,6 +489,9 @@ class MowerOperatorApp(ctk.CTk):
         # Spaetere echte Komponenten koennen hier gesetzt werden.
         self.xyz_worker: Any | None = None
         self.xyz_state: Any | None = None
+        self.transformation_z_prepare_pending = False
+        self.transformation_z_prepare_started = False
+        self.transformation_z_prepare_deadline = 0.0
         self.tracker_receiver: Any | None = None
         self.tracker_state: Any | None = None
         self.gyro_worker: Any | None = None
@@ -669,6 +677,7 @@ class MowerOperatorApp(ctk.CTk):
         gyro_menu.add_command(label="Drift bestimmen", command=self.determine_gyro_drift)
         gyro_menu.add_separator()
         gyro_menu.add_command(label="Status anzeigen", command=self.show_gyro_status)
+        gyro_menu.add_command(label="Murata-Test...", command=self.show_murata_test)
         menu_bar.add_cascade(label="Murata", menu=gyro_menu)
 
         system_menu = Menu(menu_bar, tearoff=False)
@@ -1559,6 +1568,12 @@ class MowerOperatorApp(ctk.CTk):
                     self.set_current_action("XYZ-Homing laeuft...")
                 elif "Homing abgeschlossen" in message:
                     self.set_current_action("XYZ-Homing abgeschlossen.")
+                elif "Z-Homing vor Transformation gestartet" in message:
+                    self.transformation_z_prepare_started = True
+                    self.set_current_action("Z-Homing vor Transformation läuft...")
+                elif "Z-Vorbereitung fuer Transformation abgeschlossen" in message:
+                    self.transformation_z_prepare_started = True
+                    self.set_current_action("Z-Achse für Transformation vorbereitet.")
                 elif "Position gelesen" in message:
                     self.set_current_action("XYZ-Position gelesen.")
 
@@ -2542,6 +2557,45 @@ class MowerOperatorApp(ctk.CTk):
         )
         messagebox.showinfo("Murata Status", message, parent=self)
 
+    def show_murata_test(self) -> None:
+        """Oeffnet das eigenstaendige SCH16T-Testfenster exklusiv am COM-Port."""
+        state = self.gyro_state
+        if state is not None and bool(getattr(state, "connected", False)):
+            messagebox.showwarning(
+                "Murata-Test",
+                "Der Murata-Sensor ist bereits mit dem Hauptprogramm verbunden.\n\n"
+                "Bitte zuerst unter Murata -> Trennen die Hauptverbindung trennen. "
+                "Danach kann das Testfenster den COM-Port exklusiv verwenden.",
+                parent=self,
+            )
+            return
+
+        if CONFIG is None:
+            messagebox.showerror("Murata-Test", "CONFIG ist nicht geladen.", parent=self)
+            return
+
+        if show_murata_test_dialog is None:
+            messagebox.showerror(
+                "Murata-Test",
+                "Das Murata-Testfenster ist nicht verfuegbar.",
+                parent=self,
+            )
+            return
+
+        self.set_current_action("Murata-Testfenster geoeffnet.")
+        self.log("Murata-Testfenster geoeffnet.")
+        try:
+            show_murata_test_dialog(
+                self,
+                default_port=CONFIG.murata.port,
+                baudrate=CONFIG.murata.baudrate,
+            )
+        except Exception as exc:
+            self.log(f"Murata-Testfenster konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Murata-Test", str(exc), parent=self)
+        finally:
+            self.set_current_action("Bereit.")
+
     def _gyro_connected_for_command(self, action_name: str) -> bool:
         if self.gyro_worker is None or self.gyro_state is None or not bool(getattr(self.gyro_state, "connected", False)):
             self.log(f"Murata: {action_name} nicht möglich, Murata SCH16T ist nicht verbunden.")
@@ -2641,6 +2695,11 @@ class MowerOperatorApp(ctk.CTk):
     def start_transformation(self) -> None:
         self.set_current_action("Transformation wird vorbereitet...")
 
+        if self.transformation_z_prepare_pending:
+            self.log("Transformation wird bereits vorbereitet.")
+            self.set_current_action("Z-Homing vor Transformation läuft...")
+            return
+
         if show_trafo_dialog is None:
             self.log("Trafo-Dialog ist nicht verfügbar.")
             messagebox.showerror(
@@ -2699,6 +2758,98 @@ class MowerOperatorApp(ctk.CTk):
                 parent=self,
             )
             self.set_current_action("Transformation nicht möglich: keine aktuellen Trackerdaten.")
+            return
+
+        if bool(getattr(self.xyz_state, "busy", False)):
+            self.log("Transformation nicht möglich: XYZ ist beschäftigt.")
+            messagebox.showwarning(
+                "Transformation",
+                "XYZ ist noch beschäftigt.",
+                parent=self,
+            )
+            self.set_current_action("Transformation nicht möglich: XYZ beschäftigt.")
+            return
+
+        home_z_enabled = bool(
+            getattr(getattr(CONFIG, "xyz", None), "home_z_before_transformation", True)
+        )
+        if home_z_enabled:
+            z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", 176.0))
+            self.transformation_z_prepare_pending = True
+            self.transformation_z_prepare_started = False
+            self.transformation_z_prepare_deadline = time.monotonic() + 180.0
+
+            self.log(
+                f"Z-Homing vor Transformation starten; danach Z_TRAVEL={z_travel_mm:.3f} mm."
+            )
+            self.set_current_action("Z-Homing vor Transformation läuft...")
+            if not self._send_xyz_command(
+                "prepare_transformation_z",
+                z_travel_mm=z_travel_mm,
+            ):
+                self.transformation_z_prepare_pending = False
+                return
+
+            self.after(100, self._poll_transformation_z_preparation)
+            return
+
+        self.log("Z-Homing vor Transformation ist in der Config deaktiviert.")
+        self._open_transformation_dialog()
+
+    def _poll_transformation_z_preparation(self) -> None:
+        if not self.transformation_z_prepare_pending:
+            return
+
+        state = self.xyz_state
+        busy = bool(getattr(state, "busy", False)) if state is not None else False
+        status = str(getattr(state, "status_text", "")) if state is not None else ""
+
+        if busy or status in {"Homing Z", "Moving"}:
+            self.transformation_z_prepare_started = True
+
+        error_text = getattr(state, "error_text", None) if state is not None else None
+        if error_text and status == "Error":
+            self.transformation_z_prepare_pending = False
+            self.log(f"Z-Homing vor Transformation fehlgeschlagen: {error_text}")
+            self.set_current_action("Transformation abgebrochen: Z-Homing fehlgeschlagen.")
+            messagebox.showerror(
+                "Transformation",
+                f"Z-Homing vor der Transformation fehlgeschlagen:\n\n{error_text}",
+                parent=self,
+            )
+            return
+
+        if self.transformation_z_prepare_started and not busy and status == "Connected":
+            self.transformation_z_prepare_pending = False
+            self.log("Z-Homing abgeschlossen; Z-Achse steht auf sicherer Fahrhöhe.")
+            self._open_transformation_dialog()
+            return
+
+        if time.monotonic() >= self.transformation_z_prepare_deadline:
+            self.transformation_z_prepare_pending = False
+            self.log("Timeout beim Z-Homing vor der Transformation.")
+            self.set_current_action("Transformation abgebrochen: Timeout beim Z-Homing.")
+            messagebox.showerror(
+                "Transformation",
+                "Timeout beim Z-Homing vor der Transformation.",
+                parent=self,
+            )
+            return
+
+        self.after(100, self._poll_transformation_z_preparation)
+
+    def _open_transformation_dialog(self) -> None:
+        if not self.xyz_ready or self.xyz_worker is None:
+            self.set_current_action("Transformation abgebrochen: XYZ nicht verbunden.")
+            messagebox.showwarning("Transformation", "XYZ ist nicht verbunden.", parent=self)
+            return
+        if not self.tracker_data_current:
+            self.set_current_action("Transformation abgebrochen: keine aktuellen Trackerdaten.")
+            messagebox.showwarning(
+                "Transformation",
+                "Nach dem Z-Homing liegen keine aktuellen Trackerdaten vor.",
+                parent=self,
+            )
             return
 
         try:
@@ -3974,6 +4125,8 @@ class MowerOperatorApp(ctk.CTk):
         return (
             "Config:\n"
             f"  XYZ: {CONFIG.xyz.port} @ {CONFIG.xyz.baudrate}\n"
+            f"    Z-Homing vor Transformation: "
+            f"{'aktiv' if getattr(CONFIG.xyz, 'home_z_before_transformation', True) else 'inaktiv'}\n"
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
             f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "
             f"{getattr(getattr(CONFIG, 'murata', None), 'baudrate', 115200)}\n"

@@ -595,6 +595,8 @@ class SystemInitializationDialog:
         if self.trafo_manager is None:
             raise RuntimeError("TrafoManager ist nicht verfügbar.")
 
+        self.prepare_z_for_transformation()
+
         self.trafo_finished_event.clear()
         request = DialogRequest(kind="trafo", event=threading.Event())
         self.gui_queue.put(("dialog", request))
@@ -617,6 +619,57 @@ class SystemInitializationDialog:
 
         self.log("Transformation gültig abgeschlossen.")
         self.set_step("trafo", "OK")
+
+    def prepare_z_for_transformation(self) -> None:
+        enabled = bool(
+            getattr(getattr(self.config, "xyz", None), "home_z_before_transformation", True)
+        )
+        if not enabled:
+            self.log("Z-Homing vor Transformation ist in der Config deaktiviert.")
+            return
+
+        state = self.xyz_state_getter()
+        if state is None or not bool(getattr(state, "connected", False)):
+            raise RuntimeError("Z-Homing nicht moeglich: XYZ ist nicht verbunden.")
+        if not bool(getattr(state, "homed", False)):
+            raise RuntimeError("Z-Homing nicht moeglich: vollstaendiges XYZ-Homing fehlt.")
+        if bool(getattr(state, "busy", False)):
+            raise RuntimeError("Z-Homing nicht moeglich: XYZ ist beschaeftigt.")
+
+        z_travel_mm = float(getattr(self.config.marker, "z_travel_mm", 176.0))
+        self.set_status("Z-Achse wird vor der Transformation referenziert.")
+        self.log(
+            f"Z-Homing vor Transformation starten; danach Z_TRAVEL={z_travel_mm:.3f} mm."
+        )
+
+        ok = self.send_xyz_command(
+            "prepare_transformation_z",
+            z_travel_mm=z_travel_mm,
+        )
+        if not ok:
+            raise RuntimeError("Z-Homing-Befehl konnte nicht gesendet werden.")
+
+        # Zuerst sicherstellen, dass der asynchrone Worker den Befehl begonnen
+        # hat. Anschliessend auf das tatsaechliche Ende der Gesamtsequenz warten.
+        self.wait_for_xyz_state(
+            predicate=lambda current: (
+                bool(getattr(current, "busy", False))
+                or str(getattr(current, "status_text", "")) in {"Homing Z", "Moving"}
+            ),
+            timeout_s=5.0,
+            error_text="Z-Homing wurde vom XYZ-Worker nicht gestartet.",
+        )
+        self.wait_for_xyz_state(
+            predicate=lambda current: (
+                not bool(getattr(current, "busy", False))
+                and str(getattr(current, "status_text", "")) == "Connected"
+            ),
+            timeout_s=180.0,
+            error_text="Timeout beim Z-Homing vor der Transformation.",
+        )
+
+        self.log("Z-Homing abgeschlossen; Z-Achse steht auf sicherer Fahrhoehe.")
+        self.set_status("Z-Achse vorbereitet. Transformation wird gestartet.")
 
     def connect_gyems_default(self) -> None:
         self.check_abort()

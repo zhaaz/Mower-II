@@ -14,7 +14,7 @@ from typing import Any
 
 @dataclass
 class XYZConfig:
-    port: str = "COM13"
+    port: str = "COM5"
     baudrate: int = 115200
 
     x_min: float = 0.0
@@ -30,6 +30,11 @@ class XYZConfig:
     fast_feedrate: float = 6000.0
 
     tolerance_mm: float = 0.05
+
+    # Vor jeder Transformation nur die Z-Achse neu referenzieren und danach
+    # auf die sichere Fahrhoehe fahren. So wird ein moeglicher Schrittverlust
+    # der Z-Achse nicht in die Transformationsfahrt uebernommen.
+    home_z_before_transformation: bool = True
 
 
 @dataclass

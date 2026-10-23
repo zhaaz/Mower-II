@@ -94,6 +94,9 @@ class XYZRobotWorker:
         elif command == "home_all":
             self._home_all()
 
+        elif command == "prepare_transformation_z":
+            self._prepare_transformation_z(**kwargs)
+
         elif command == "jog":
             self._jog(**kwargs)
 
@@ -178,6 +181,43 @@ class XYZRobotWorker:
         self._emit_info("Homing abgeschlossen")
 
         self._read_position()
+
+    def _prepare_transformation_z(self, z_travel_mm: float) -> None:
+        """Referenziert Z und faehrt anschliessend auf die sichere Fahrhoehe."""
+        robot = self._require_robot()
+
+        if not self.state.homed:
+            raise RuntimeError(
+                "Z-Vorbereitung nicht moeglich: vollstaendiges XYZ-Homing fehlt."
+            )
+        if not hasattr(robot, "homing_z"):
+            raise RuntimeError(
+                "Die verwendete XYZRobot-Version unterstuetzt homing_z() nicht."
+            )
+
+        self.state.status_text = "Homing Z"
+        self._notify_state_changed()
+        self._emit_info("Z-Homing vor Transformation gestartet")
+
+        robot.homing_z()
+
+        self.state.status_text = "Moving"
+        self._notify_state_changed()
+        self._emit_info(
+            f"Fahre nach Z-Homing auf Z_TRAVEL={float(z_travel_mm):.3f} mm"
+        )
+
+        if hasattr(robot, "set_marker_heights"):
+            robot.set_marker_heights(z_travel_mm=float(z_travel_mm))
+
+        if hasattr(robot, "z_to_travel"):
+            robot.z_to_travel()
+        else:
+            robot.move_absolute(z=float(z_travel_mm))
+
+        self.state.status_text = "Connected"
+        self._read_position()
+        self._emit_info("Z-Vorbereitung fuer Transformation abgeschlossen")
 
     def _jog(
             self,

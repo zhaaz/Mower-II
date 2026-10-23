@@ -10,7 +10,8 @@
         "z_max": 200.0,
         "default_feedrate": 3000.0,
         "fast_feedrate": 6000.0,
-        "tolerance_mm": 0.05
+        "tolerance_mm": 0.05,
+        "home_z_before_transformation": true
     },
     "tracker": {
         "udp_port": 10000,
