@@ -66,12 +66,12 @@ Alle Längenangaben sind grundsätzlich in Millimetern, Winkel in Grad und Winke
 | Abschnitt | Inhalt |
 | --- | --- |
 | `xyz` | COM-Port, Baudrate, Arbeitsraumgrenzen, Fahrgeschwindigkeiten, Positionstoleranz und optionales Z-Homing vor der Transformation |
-| `tracker` | UDP-Port, Zeitlimit für Punktmessungen und Reflektorradius |
+| `tracker` | UDP-Port, Zeitlimit für Punktmessungen und Reflektorradius; der Transformationsworkflow verwendet `capture_timeout_s` direkt |
 | `murata` | COM-Port, Baudrate, Dauer der Driftmessung und Vorzeichen des Winkels |
 | `gyems` | COM-Port, Baudrate und Motor-ID |
 | `arn` | Regelverstärkung, maximale Motorgeschwindigkeit, Totband, Befehlsintervall und Drehrichtung |
 | `marker` | Markierungsform und -größe, Ausrichtung, Nachmessung sowie `Z_MARK`, `Z_CLEAR` und `Z_TRAVEL` |
-| `transformation` | Offset zwischen Markierspitze und Reflektor, Murata-Grenzwert sowie Qualitätsgrenzen der Transformation |
+| `transformation` | Offset, Murata-Grenzwert, Qualitätsgrenzen, Kalibrierpunkte und Maßstabsprüfung der Transformation |
 | `paths` | Pfade zur Trackerstation, zu Logs und Messplänen |
 
 Wichtige Hinweise:
@@ -89,8 +89,22 @@ Die Qualitätsgrenzen stehen im Abschnitt `transformation`:
 "good_rms_mm": 0.10,
 "good_max_residual_mm": 0.20,
 "ok_rms_mm": 0.25,
-"ok_max_residual_mm": 0.50
+"ok_max_residual_mm": 0.50,
+"calibration_points": [
+    ["K1", 100.0, 100.0],
+    ["K2", 100.0, 350.0],
+    ["K3", 350.0, 350.0],
+    ["K4", 400.0, 100.0],
+    ["K5", 200.0, 200.0]
+],
+"calibration_random_radius_mm": 50.0,
+"minimum_required_measurements": 4,
+"min_geometry_rank": 2,
+"allow_scale": true,
+"max_scale_deviation": 0.0005
 ```
+
+Beim Programmstart wird die Konfiguration auf ungültige Werte geprüft. Dazu gehören unter anderem Arbeitsraumgrenzen, Markierhöhen, positive Geschwindigkeiten und Zeiten, die Reihenfolge der Qualitätsgrenzen sowie die Transformationsparameter. Erkannte Fehler werden mit ihrer Ursache angezeigt und in die Logdatei geschrieben.
 
 ## Qualität und Freigabe der Transformation
 
@@ -116,6 +130,16 @@ RMS ≤ ok_rms_mm UND Maximalrestklaffung ≤ ok_max_residual_mm
 
 Mit den Standardwerten werden damit **SEHR GUT**, **GUT** und **OK** freigegeben. Nur **PRÜFEN** wird nicht übernommen. Werden die OK-Grenzen in der Config verändert, ändern sich Qualitätsanzeige und technische Freigabe gemeinsam.
 
+Wenn `allow_scale` aktiviert ist, wird der Maßstab mitgeschätzt. Die Transformation wird jedoch nur akzeptiert, wenn gilt:
+
+```text
+|Maßstab - 1,0| ≤ max_scale_deviation
+```
+
+Mit dem Standardwert `0.0005` darf der Maßstab höchstens um `0,05 %` von `1,0` abweichen. Bei einer größeren Abweichung lautet die Bewertung **PRÜFEN (MASSSTAB)**. Mit `allow_scale: false` wird eine Transformation ohne Maßstabsfaktor berechnet.
+
+Die Kalibrierpunkte werden innerhalb des konfigurierten Zufallsradius erzeugt. Vor der Fahrt wird jeder Punkt gegen die X-/Y-Arbeitsraumgrenzen geprüft. Kann keine gültige Lage erzeugt werden, wird die Transformation mit einer verständlichen Fehlermeldung beendet.
+
 Eine erfolgreiche Berechnung wird zunächst nur als vorläufiges Ergebnis gehalten. Erst mit **Trafo übernehmen** wird sie aktiv. Die aktive Transformation wird wieder ungültig, wenn sich der Murata-Winkel gegenüber der Transformationslage um mehr als `gyro_invalid_threshold_deg` ändert. Der aktuelle Configwert beträgt `0.03°`.
 
 ## Betriebshinweise
@@ -124,3 +148,4 @@ Eine erfolgreiche Berechnung wird zunächst nur als vorläufiges Ergebnis gehalt
 - Nach einer mechanischen Bewegung des Wagens ist eine neue Transformation erforderlich.
 - Die Markierhöhen müssen nach Änderungen an Stift, Halterung oder Mechanik kontrolliert werden.
 - Fehler, Verbindungszustände und Messabläufe werden im Programm und in den Logdateien protokolliert.
+- Gespeicherte Projektdateien enthalten einen Snapshot der relevanten XYZ-, Tracker-, Marker-, ARN-, Murata- und Transformationseinstellungen.

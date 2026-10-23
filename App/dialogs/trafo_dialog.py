@@ -255,7 +255,7 @@ class TrafoDialog:
         self.btn_discard.configure(state="normal")
 
         config = TrafoWorkflowConfig(
-            tracker_capture_timeout_s=10.0,
+            tracker_capture_timeout_s=float(CONFIG.tracker.capture_timeout_s),
             # Dieselben Grenzwerte wie fuer die Stufe OK verwenden. Damit
             # werden SEHR GUT, GUT und OK akzeptiert, PRUEFEN dagegen nicht.
             max_allowed_rms_mm=_trafo_threshold("ok_rms_mm", 0.25),
@@ -263,9 +263,14 @@ class TrafoDialog:
                 "ok_max_residual_mm",
                 0.50,
             ),
-            minimum_required_measurements=4,
-            allow_scale=True,
-            min_geometry_rank=2,
+            minimum_required_measurements=int(
+                CONFIG.transformation.minimum_required_measurements
+            ),
+            allow_scale=bool(CONFIG.transformation.allow_scale),
+            max_scale_deviation=float(
+                CONFIG.transformation.max_scale_deviation
+            ),
+            min_geometry_rank=int(CONFIG.transformation.min_geometry_rank),
         )
 
         self.workflow = TrafoWorkflow(
@@ -454,6 +459,7 @@ class TrafoDialog:
             quality_text = self._evaluate_trafo_quality(
                 rms=trafo.rms,
                 max_residual=trafo.max_residual,
+                scale=trafo.scale,
             )
 
             self.result_rms_var.set(f"{trafo.rms:.3f} mm")
@@ -494,7 +500,19 @@ class TrafoDialog:
         self.result_quality_var.set("-")
 
     @staticmethod
-    def _evaluate_trafo_quality(*, rms: float, max_residual: float) -> str:
+    def _evaluate_trafo_quality(
+            *,
+            rms: float,
+            max_residual: float,
+            scale: float = 1.0,
+    ) -> str:
+        if (
+                bool(CONFIG.transformation.allow_scale)
+                and abs(float(scale) - 1.0)
+                > float(CONFIG.transformation.max_scale_deviation)
+        ):
+            return "PRUEFEN (MASSSTAB)"
+
         if (
                 rms <= _trafo_threshold("very_good_rms_mm", 0.05)
                 and max_residual <= _trafo_threshold(

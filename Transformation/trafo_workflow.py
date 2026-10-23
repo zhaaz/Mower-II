@@ -24,27 +24,52 @@ from Transformation.geometry import (
 
 @dataclass
 class TrafoWorkflowConfig:
-    base_points: list[tuple[str, float, float]] = field(default_factory=lambda: [
-        ("K1", 100.0, 100.0),
-        ("K2", 100.0, 350.0),
-        ("K3", 350.0, 350.0),
-        ("K4", 400.0, 100.0),
-        ("K5", 200.0, 200.0),
-    ])
+    base_points: list[tuple[str, float, float]] = field(
+        default_factory=lambda: [
+            (str(name), float(x), float(y))
+            for name, x, y in CONFIG.transformation.calibration_points
+        ]
+    )
 
-    random_radius_mm: float = 50.0
+    random_radius_mm: float = field(
+        default_factory=lambda: float(
+            CONFIG.transformation.calibration_random_radius_mm
+        )
+    )
     random_seed: Optional[int] = None
 
-    xyz_feedrate: float = 6000.0
-    xyz_position_tolerance_mm: float = 0.05
+    xyz_feedrate: float = field(
+        default_factory=lambda: float(CONFIG.xyz.fast_feedrate)
+    )
+    xyz_position_tolerance_mm: float = field(
+        default_factory=lambda: float(CONFIG.xyz.tolerance_mm)
+    )
     xyz_position_timeout_s: float = 60.0
 
-    tracker_capture_timeout_s: float = 10.0
+    workspace_x_min: float = field(default_factory=lambda: float(CONFIG.xyz.x_min))
+    workspace_x_max: float = field(default_factory=lambda: float(CONFIG.xyz.x_max))
+    workspace_y_min: float = field(default_factory=lambda: float(CONFIG.xyz.y_min))
+    workspace_y_max: float = field(default_factory=lambda: float(CONFIG.xyz.y_max))
 
-    allow_scale: bool = True
-    min_geometry_rank: int = 2
+    tracker_capture_timeout_s: float = field(
+        default_factory=lambda: float(CONFIG.tracker.capture_timeout_s)
+    )
 
-    minimum_required_measurements: int = 4
+    allow_scale: bool = field(
+        default_factory=lambda: bool(CONFIG.transformation.allow_scale)
+    )
+    max_scale_deviation: float = field(
+        default_factory=lambda: float(CONFIG.transformation.max_scale_deviation)
+    )
+    min_geometry_rank: int = field(
+        default_factory=lambda: int(CONFIG.transformation.min_geometry_rank)
+    )
+
+    minimum_required_measurements: int = field(
+        default_factory=lambda: int(
+            CONFIG.transformation.minimum_required_measurements
+        )
+    )
 
     # Alles bis einschliesslich Qualitaetsstufe OK wird akzeptiert. Die
     # Standardwerte kommen direkt aus der zentralen Mower-Config, damit auch
@@ -113,6 +138,7 @@ class TrafoWorkflow:
         self.on_log = on_log
 
         self.cancel_event = threading.Event()
+        self._random = random.Random(self.config.random_seed)
 
     def cancel(self):
         self.cancel_event.set()
@@ -125,9 +151,6 @@ class TrafoWorkflow:
 
         try:
             self._check_cancelled()
-
-            if self.config.random_seed is not None:
-                random.seed(self.config.random_seed)
 
             target_points = self._generate_target_points()
             total_steps = len(target_points)
@@ -277,27 +300,42 @@ class TrafoWorkflow:
         points = []
 
         for name, center_x, center_y in self.config.base_points:
-            x, y = self._random_point_in_radius(
-                center_x=center_x,
-                center_y=center_y,
-                radius_mm=self.config.random_radius_mm,
-            )
-            points.append((name, x, y))
+            for _attempt in range(1000):
+                x, y = self._random_point_in_radius(
+                    center_x=center_x,
+                    center_y=center_y,
+                    radius_mm=self.config.random_radius_mm,
+                )
+                if self._is_inside_xy_workspace(x=x, y=y):
+                    points.append((name, x, y))
+                    break
+            else:
+                raise RuntimeError(
+                    f"Für Transformationspunkt {name} konnte keine Position "
+                    "innerhalb des XYZ-Arbeitsraums erzeugt werden. "
+                    "Kalibrierpunkt, Zufallsradius und Arbeitsraum prüfen."
+                )
 
         return points
 
-    @staticmethod
     def _random_point_in_radius(
+        self,
         center_x: float,
         center_y: float,
         radius_mm: float,
     ) -> tuple[float, float]:
-        angle = random.uniform(0.0, 2.0 * math.pi)
-        radius = radius_mm * math.sqrt(random.uniform(0.0, 1.0))
+        angle = self._random.uniform(0.0, 2.0 * math.pi)
+        radius = radius_mm * math.sqrt(self._random.uniform(0.0, 1.0))
 
         return (
             center_x + radius * math.cos(angle),
             center_y + radius * math.sin(angle),
+        )
+
+    def _is_inside_xy_workspace(self, *, x: float, y: float) -> bool:
+        return (
+            self.config.workspace_x_min <= x <= self.config.workspace_x_max
+            and self.config.workspace_y_min <= y <= self.config.workspace_y_max
         )
 
     def _move_to_position_and_capture(
@@ -432,9 +470,15 @@ class TrafoWorkflow:
         )
 
     def _is_trafo_ok(self, trafo) -> bool:
+        scale_ok = (
+            not self.config.allow_scale
+            or abs(float(trafo.scale) - 1.0)
+            <= self.config.max_scale_deviation
+        )
         return (
             trafo.rms <= self.config.max_allowed_rms_mm
             and trafo.max_residual <= self.config.max_allowed_max_residual_mm
+            and scale_ok
         )
 
     def _calculate_best_transformation_with_outlier_check(

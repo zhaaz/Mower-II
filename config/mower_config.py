@@ -137,6 +137,23 @@ class TransformationConfig:
     ok_rms_mm: float = 0.25
     ok_max_residual_mm: float = 0.50
 
+    # Parameter des Transformationsworkflows.
+    calibration_points: tuple[tuple[str, float, float], ...] = (
+        ("K1", 100.0, 100.0),
+        ("K2", 100.0, 350.0),
+        ("K3", 350.0, 350.0),
+        ("K4", 400.0, 100.0),
+        ("K5", 200.0, 200.0),
+    )
+    calibration_random_radius_mm: float = 50.0
+    minimum_required_measurements: int = 4
+    min_geometry_rank: int = 2
+
+    # Bei allow_scale=true wird der Massstab geschaetzt, aber nur innerhalb
+    # der maximalen Abweichung von 1.0 akzeptiert. 0.0005 entspricht 0.05 %.
+    allow_scale: bool = True
+    max_scale_deviation: float = 0.0005
+
 
 @dataclass
 class PathsConfig:
@@ -187,6 +204,10 @@ DEFAULT_CONFIG = MowerConfig(
 CONFIG_PATH = Path(__file__).with_name("mower_config.json")
 
 
+class ConfigValidationError(ValueError):
+    """Fasst alle erkannten Konfigurationsfehler verständlich zusammen."""
+
+
 # --------------------------------------------------
 # Hilfsfunktionen
 # --------------------------------------------------
@@ -213,12 +234,164 @@ def _as_tuple3(value: Any) -> tuple[float, float, float]:
     return (float(value[0]), float(value[1]), float(value[2]))
 
 
+def _as_calibration_points(value: Any) -> tuple[tuple[str, float, float], ...]:
+    if not isinstance(value, (list, tuple)):
+        return DEFAULT_CONFIG.transformation.calibration_points
+
+    points: list[tuple[str, float, float]] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            raise ConfigValidationError(
+                "Ungültiger Transformationspunkt "
+                f"{index}: erwartet wird [Name, X, Y]."
+            )
+        points.append((str(item[0]), float(item[1]), float(item[2])))
+    return tuple(points)
+
+
+def validate_config(config: MowerConfig) -> None:
+    """Prüft sicherheits- und ablaufrelevante Configwerte beim Programmstart."""
+    errors: list[str] = []
+
+    def number(value: Any, label: str) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            errors.append(f"{label} muss eine Zahl sein.")
+            return None
+
+    def positive(value: Any, label: str, *, allow_zero: bool = False) -> float | None:
+        result = number(value, label)
+        if result is not None:
+            valid = result >= 0.0 if allow_zero else result > 0.0
+            if not valid:
+                relation = "größer oder gleich 0" if allow_zero else "größer als 0"
+                errors.append(f"{label} muss {relation} sein.")
+        return result
+
+    for label, port in (
+        ("xyz.port", config.xyz.port),
+        ("murata.port", config.murata.port),
+        ("gyems.port", config.gyems.port),
+    ):
+        if not isinstance(port, str) or not port.strip():
+            errors.append(f"{label} darf nicht leer sein.")
+
+    positive(config.xyz.baudrate, "xyz.baudrate")
+    positive(config.xyz.default_feedrate, "xyz.default_feedrate")
+    positive(config.xyz.fast_feedrate, "xyz.fast_feedrate")
+    positive(config.xyz.tolerance_mm, "xyz.tolerance_mm")
+
+    axis_limits: dict[str, tuple[float | None, float | None]] = {}
+    for axis in ("x", "y", "z"):
+        lower = number(getattr(config.xyz, f"{axis}_min"), f"xyz.{axis}_min")
+        upper = number(getattr(config.xyz, f"{axis}_max"), f"xyz.{axis}_max")
+        axis_limits[axis] = (lower, upper)
+        if lower is not None and upper is not None and lower >= upper:
+            errors.append(f"xyz.{axis}_min muss kleiner als xyz.{axis}_max sein.")
+
+    if not isinstance(config.xyz.home_z_before_transformation, bool):
+        errors.append("xyz.home_z_before_transformation muss true oder false sein.")
+
+    try:
+        udp_port = int(config.tracker.udp_port)
+        if not 1 <= udp_port <= 65535:
+            errors.append("tracker.udp_port muss zwischen 1 und 65535 liegen.")
+    except (TypeError, ValueError):
+        errors.append("tracker.udp_port muss eine ganze Zahl sein.")
+    positive(config.tracker.capture_timeout_s, "tracker.capture_timeout_s")
+    positive(config.tracker.ccr_radius_mm, "tracker.ccr_radius_mm")
+
+    positive(config.murata.baudrate, "murata.baudrate")
+    positive(config.murata.default_drift_seconds, "murata.default_drift_seconds")
+    positive(config.gyems.baudrate, "gyems.baudrate")
+    positive(config.gyems.motor_id, "gyems.motor_id")
+
+    positive(config.arn.kp, "arn.kp", allow_zero=True)
+    positive(config.arn.max_speed_deg_s, "arn.max_speed_deg_s", allow_zero=True)
+    positive(config.arn.deadband_deg, "arn.deadband_deg", allow_zero=True)
+    positive(config.arn.command_interval_ms, "arn.command_interval_ms")
+    arn_direction = number(config.arn.direction_sign, "arn.direction_sign")
+    if arn_direction == 0.0:
+        errors.append("arn.direction_sign darf nicht 0 sein.")
+
+    positive(config.marker.size_mm, "marker.size_mm")
+    z_values = {
+        "marker.z_mark_mm": number(config.marker.z_mark_mm, "marker.z_mark_mm"),
+        "marker.z_clear_mm": number(config.marker.z_clear_mm, "marker.z_clear_mm"),
+        "marker.z_travel_mm": number(config.marker.z_travel_mm, "marker.z_travel_mm"),
+    }
+    z_min, z_max = axis_limits["z"]
+    if z_min is not None and z_max is not None:
+        for label, value in z_values.items():
+            if value is not None and not z_min <= value <= z_max:
+                errors.append(f"{label} muss innerhalb des Z-Arbeitsraums liegen.")
+    if all(value is not None for value in z_values.values()):
+        z_mark = float(z_values["marker.z_mark_mm"])
+        z_clear = float(z_values["marker.z_clear_mm"])
+        z_travel = float(z_values["marker.z_travel_mm"])
+        if not z_mark <= z_clear <= z_travel:
+            errors.append("Es muss Z_MARK <= Z_CLEAR <= Z_TRAVEL gelten.")
+
+    trafo = config.transformation
+    positive(trafo.gyro_invalid_threshold_deg, "transformation.gyro_invalid_threshold_deg")
+    quality_values = {
+        "very_good_rms_mm": positive(trafo.very_good_rms_mm, "transformation.very_good_rms_mm", allow_zero=True),
+        "good_rms_mm": positive(trafo.good_rms_mm, "transformation.good_rms_mm", allow_zero=True),
+        "ok_rms_mm": positive(trafo.ok_rms_mm, "transformation.ok_rms_mm", allow_zero=True),
+        "very_good_max_residual_mm": positive(trafo.very_good_max_residual_mm, "transformation.very_good_max_residual_mm", allow_zero=True),
+        "good_max_residual_mm": positive(trafo.good_max_residual_mm, "transformation.good_max_residual_mm", allow_zero=True),
+        "ok_max_residual_mm": positive(trafo.ok_max_residual_mm, "transformation.ok_max_residual_mm", allow_zero=True),
+    }
+    rms_order = [quality_values[name] for name in ("very_good_rms_mm", "good_rms_mm", "ok_rms_mm")]
+    max_order = [quality_values[name] for name in ("very_good_max_residual_mm", "good_max_residual_mm", "ok_max_residual_mm")]
+    if all(value is not None for value in rms_order) and not rms_order[0] <= rms_order[1] <= rms_order[2]:
+        errors.append("RMS-Grenzen müssen SEHR GUT <= GUT <= OK erfüllen.")
+    if all(value is not None for value in max_order) and not max_order[0] <= max_order[1] <= max_order[2]:
+        errors.append("Max-Grenzen müssen SEHR GUT <= GUT <= OK erfüllen.")
+
+    positive(trafo.calibration_random_radius_mm, "transformation.calibration_random_radius_mm", allow_zero=True)
+    positive(trafo.max_scale_deviation, "transformation.max_scale_deviation", allow_zero=True)
+    if not isinstance(trafo.allow_scale, bool):
+        errors.append("transformation.allow_scale muss true oder false sein.")
+    try:
+        geometry_rank = int(trafo.min_geometry_rank)
+        if geometry_rank not in (2, 3):
+            errors.append("transformation.min_geometry_rank muss 2 oder 3 sein.")
+    except (TypeError, ValueError):
+        errors.append("transformation.min_geometry_rank muss 2 oder 3 sein.")
+
+    points = trafo.calibration_points
+    if len(points) < 3:
+        errors.append("Mindestens drei Transformationspunkte müssen definiert sein.")
+    names = [str(point[0]).strip() for point in points]
+    if any(not name for name in names):
+        errors.append("Transformationspunktnamen dürfen nicht leer sein.")
+    if len(set(names)) != len(names):
+        errors.append("Transformationspunktnamen müssen eindeutig sein.")
+    try:
+        minimum = int(trafo.minimum_required_measurements)
+        if minimum < 3 or minimum > len(points):
+            errors.append(
+                "transformation.minimum_required_measurements muss zwischen 3 "
+                "und der Anzahl der Transformationspunkte liegen."
+            )
+    except (TypeError, ValueError):
+        errors.append("transformation.minimum_required_measurements muss eine ganze Zahl sein.")
+
+    if errors:
+        raise ConfigValidationError(
+            "Ungültige mower_config.json:\n- " + "\n- ".join(errors)
+        )
+
+
 # --------------------------------------------------
 # Laden
 # --------------------------------------------------
 
 def load_config() -> MowerConfig:
     if not CONFIG_PATH.exists():
+        validate_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
 
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
@@ -242,10 +415,16 @@ def load_config() -> MowerConfig:
                     DEFAULT_CONFIG.transformation.marker_to_reflector_robot,
                 )
             ),
+            "calibration_points": _as_calibration_points(
+                transformation_data.get(
+                    "calibration_points",
+                    DEFAULT_CONFIG.transformation.calibration_points,
+                )
+            ),
         }
     )
 
-    return MowerConfig(
+    config = MowerConfig(
         xyz=XYZConfig(**xyz_data),
         tracker=TrackerConfig(**tracker_data),
         murata=MurataConfig(**murata_data),
@@ -255,6 +434,8 @@ def load_config() -> MowerConfig:
         transformation=transformation,
         paths=PathsConfig(**paths_data),
     )
+    validate_config(config)
+    return config
 
 
 # --------------------------------------------------

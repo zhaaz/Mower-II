@@ -41,13 +41,38 @@ PROJECT_ROOT = find_project_root()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+STARTUP_IMPORT_ERRORS: list[str] = []
+
+
+def _record_startup_import_error(component: str, exc: Exception) -> None:
+    message = f"{component}: {type(exc).__name__}: {exc}"
+    STARTUP_IMPORT_ERRORS.append(message)
+    try:
+        startup_log_dir = PROJECT_ROOT / "logs"
+        startup_log_dir.mkdir(parents=True, exist_ok=True)
+        with (startup_log_dir / "startup_import_errors.log").open(
+                "a",
+                encoding="utf-8",
+        ) as stream:
+            stream.write(
+                f"[{datetime.now().isoformat(timespec='seconds')}] {message}\n"
+            )
+    except Exception:
+        pass
+
+
 try:
     from config.mower_config import CONFIG
-except Exception:
+except Exception as exc:
     CONFIG = None
+    _record_startup_import_error("Konfiguration", exc)
 
-from App.map_view import MapView
-from App.stakeout_point import StakeoutPoint, create_demo_points, load_points_from_txt
+try:
+    from App.map_view import MapView
+    from App.stakeout_point import StakeoutPoint, create_demo_points, load_points_from_txt
+except Exception as exc:
+    _record_startup_import_error("Kernmodule Map/Punktdaten", exc)
+    raise
 
 try:
     from App.ui.classic_style import (
@@ -59,7 +84,7 @@ try:
         FONT_TITLE,
         FONT_MONO,
     )
-except Exception:
+except Exception as exc:
     apply_classic_style = None
     FONT_FAMILY = "Segoe UI"
     FONT_NORMAL = ("Segoe UI", 9)
@@ -67,21 +92,25 @@ except Exception:
     FONT_SECTION = ("Segoe UI", 10, "bold")
     FONT_TITLE = ("Segoe UI", 12, "bold")
     FONT_MONO = ("Consolas", 9)
+    _record_startup_import_error("UI-Stile", exc)
 
 try:
     from App.dialogs.xyz_connect_dialog import show_xyz_connect_dialog
-except Exception:
+except Exception as exc:
     show_xyz_connect_dialog = None
+    _record_startup_import_error("XYZ-Verbindungsdialog", exc)
 
 try:
     from App.dialogs.serial_connect_dialog import show_serial_connect_dialog
-except Exception:
+except Exception as exc:
     show_serial_connect_dialog = None
+    _record_startup_import_error("Serieller Verbindungsdialog", exc)
 
 try:
     from App.dialogs.xyz_manual_move_dialog import show_xyz_manual_move_dialog
-except Exception:
+except Exception as exc:
     show_xyz_manual_move_dialog = None
+    _record_startup_import_error("XYZ-Handfahrdialog", exc)
 
 try:
     from App.services.project_file import (
@@ -89,96 +118,114 @@ try:
         load_project_file,
         save_project_file,
     )
-except Exception:
+except Exception as exc:
     export_project_txt = None
     load_project_file = None
     save_project_file = None
+    _record_startup_import_error("Projektdatei-Service", exc)
 
 try:
     from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
-except Exception:
+except Exception as exc:
     XYZRobotWorker = None
+    _record_startup_import_error("XYZ-Worker", exc)
 
 try:
     from Murata.murata_worker import MurataWorker
-except Exception:
+except Exception as exc:
     MurataWorker = None
+    _record_startup_import_error("Murata-Worker", exc)
 
 try:
     from GYEMS.gyems_worker import GyemsWorker
-except Exception:
+except Exception as exc:
     GyemsWorker = None
+    _record_startup_import_error("GYEMS-Worker", exc)
 
 try:
     from Lasertracker.lasertracker_receiver import LasertrackerReceiver
-except Exception:
+except Exception as exc:
     LasertrackerReceiver = None
+    _record_startup_import_error("Lasertracker-Receiver", exc)
 
 try:
     from App.dialogs.trafo_dialog import show_trafo_dialog
-except Exception:
+except Exception as exc:
     show_trafo_dialog = None
+    _record_startup_import_error("Transformationsdialog", exc)
 
 try:
     from App.dialogs.marker_offset_calibration_dialog import show_marker_offset_calibration_dialog
-except Exception:
+except Exception as exc:
     show_marker_offset_calibration_dialog = None
+    _record_startup_import_error("Marker-Offset-Dialog", exc)
 
 try:
     from App.dialogs.marker_height_calibration_dialog import show_marker_height_calibration_dialog
-except Exception:
+except Exception as exc:
     show_marker_height_calibration_dialog = None
+    _record_startup_import_error("Marker-Höhendialog", exc)
 
 try:
     from App.dialogs.point_marking_dialog import show_point_marking_dialog
-except Exception:
+except Exception as exc:
     show_point_marking_dialog = None
+    _record_startup_import_error("Punktmarkierungsdialog", exc)
 
 try:
     from App.dialogs.test_marking_dialog import show_test_marking_dialog
-except Exception:
+except Exception as exc:
     show_test_marking_dialog = None
+    _record_startup_import_error("Testmarkierungsdialog", exc)
 
 try:
     from App.dialogs.point_viewer_dialog import show_point_viewer_dialog
-except Exception:
+except Exception as exc:
     show_point_viewer_dialog = None
+    _record_startup_import_error("Punktviewer", exc)
 
 try:
     from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
-except Exception:
+except Exception as exc:
     show_system_initialization_dialog = None
+    _record_startup_import_error("Systeminitialisierungsdialog", exc)
 
 try:
     from App.dialogs.murata_drift_dialog import show_murata_drift_dialog
-except Exception:
+except Exception as exc:
     show_murata_drift_dialog = None
+    _record_startup_import_error("Murata-Driftdialog", exc)
 
 try:
     from App.dialogs.murata_test_dialog import show_murata_test_dialog
-except Exception:
+except Exception as exc:
     show_murata_test_dialog = None
+    _record_startup_import_error("Murata-Testdialog", exc)
 
 try:
     from App.dialogs.gyems_diagnostic_dialog import show_gyems_diagnostic_dialog
-except Exception:
+except Exception as exc:
     show_gyems_diagnostic_dialog = None
+    _record_startup_import_error("GYEMS-Diagnosedialog", exc)
 
 try:
     from Transformation.trafo_manager import TrafoManager
-except Exception:
+except Exception as exc:
     TrafoManager = None
+    _record_startup_import_error("TrafoManager", exc)
 
 try:
     from Transformation.coordinate_mapper import CoordinateMapper, RobotWorkspace
-except Exception:
+except Exception as exc:
     CoordinateMapper = None
     RobotWorkspace = None
+    _record_startup_import_error("Koordinatenabbildung", exc)
 
 try:
     from App.services.map_visualization import build_map_visualization_state
-except Exception:
+except Exception as exc:
     build_map_visualization_state = None
+    _record_startup_import_error("Kartenvisualisierung", exc)
 
 try:
     from App.services.reflector_aiming import (
@@ -186,10 +233,11 @@ try:
         ReflectorAimCalculator,
         ReflectorAimConfig,
     )
-except Exception:
+except Exception as exc:
     Point2D = None
     ReflectorAimCalculator = None
     ReflectorAimConfig = None
+    _record_startup_import_error("Reflektornachführung", exc)
 
 
 def project_path(relative_path: str | Path) -> Path:
@@ -577,6 +625,28 @@ class MowerOperatorApp(ctk.CTk):
 
         self._build_ui()
         self._bind_hotkeys()
+        if STARTUP_IMPORT_ERRORS:
+            self.log("Beim Programmstart wurden Importfehler erkannt:")
+            for import_error in STARTUP_IMPORT_ERRORS:
+                self.log(f"  {import_error}")
+
+        if CONFIG is None:
+            config_error = next(
+                (
+                    error
+                    for error in STARTUP_IMPORT_ERRORS
+                    if error.startswith("Konfiguration:")
+                ),
+                "Konfiguration konnte nicht geladen werden.",
+            )
+            self.after(
+                200,
+                lambda text=config_error: messagebox.showerror(
+                    "Konfigurationsfehler",
+                    text,
+                    parent=self,
+                ),
+            )
         self._apply_demo_scene()
         self.refresh_points()
         self.set_current_action("Bereit.")
@@ -4128,6 +4198,7 @@ class MowerOperatorApp(ctk.CTk):
             f"    Z-Homing vor Transformation: "
             f"{'aktiv' if getattr(CONFIG.xyz, 'home_z_before_transformation', True) else 'inaktiv'}\n"
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
+            f"    Punkt-Timeout={CONFIG.tracker.capture_timeout_s:.1f} s\n"
             f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "
             f"{getattr(getattr(CONFIG, 'murata', None), 'baudrate', 115200)}\n"
             f"  GYEMS: {CONFIG.gyems.port} @ {CONFIG.gyems.baudrate}, ID={CONFIG.gyems.motor_id}\n"
@@ -4149,7 +4220,12 @@ class MowerOperatorApp(ctk.CTk):
             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
             f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}\n"
             f"  Trafo-Schutz:\n"
-            f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg"
+            f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg\n"
+            f"  Trafo-Qualitaet:\n"
+            f"    OK: RMS<={CONFIG.transformation.ok_rms_mm:.3f} mm, "
+            f"Max<={CONFIG.transformation.ok_max_residual_mm:.3f} mm\n"
+            f"    Massstab={'frei' if CONFIG.transformation.allow_scale else 'fest 1.0'}, "
+            f"max. Abweichung={CONFIG.transformation.max_scale_deviation:.6f}"
         )
 
     def _config_float(self, section: str, name: str, fallback: float) -> float:

@@ -118,10 +118,31 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
 
     marker = getattr(cfg, "marker", None)
     transformation = getattr(cfg, "transformation", None)
+    xyz = getattr(cfg, "xyz", None)
+    tracker = getattr(cfg, "tracker", None)
     arn = getattr(cfg, "arn", None)
     murata = getattr(cfg, "murata", None)
 
     return {
+        "xyz": _object_fields(
+            xyz,
+            [
+                "x_min",
+                "x_max",
+                "y_min",
+                "y_max",
+                "z_min",
+                "z_max",
+                "default_feedrate",
+                "fast_feedrate",
+                "tolerance_mm",
+                "home_z_before_transformation",
+            ],
+        ),
+        "tracker": _object_fields(
+            tracker,
+            ["udp_port", "capture_timeout_s", "ccr_radius_mm"],
+        ),
         "marker": _object_fields(
             marker,
             [
@@ -137,7 +158,22 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
         ),
         "transformation": _object_fields(
             transformation,
-            ["marker_to_reflector_robot", "gyro_invalid_threshold_deg"],
+            [
+                "marker_to_reflector_robot",
+                "gyro_invalid_threshold_deg",
+                "very_good_rms_mm",
+                "very_good_max_residual_mm",
+                "good_rms_mm",
+                "good_max_residual_mm",
+                "ok_rms_mm",
+                "ok_max_residual_mm",
+                "calibration_points",
+                "calibration_random_radius_mm",
+                "minimum_required_measurements",
+                "min_geometry_rank",
+                "allow_scale",
+                "max_scale_deviation",
+            ],
         ),
         "arn": _object_fields(
             arn,
