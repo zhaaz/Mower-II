@@ -280,6 +280,8 @@ def get_configured_directory(name: str, fallback: str) -> Path:
 class OperatorMapView(MapView):
     """Helle Kartenansicht fuer die klassische Operator-Oberflaeche."""
 
+    REFLECTOR_ZOOM_SIZE_MM = 1000.0
+
     COLOR_CANVAS = "#eeeeee"
     COLOR_GRID = "#d6d6d6"
     COLOR_AXIS = "#b8b8b8"
@@ -440,12 +442,14 @@ class OperatorMapView(MapView):
             ("+", "zoom_in"),
             ("-", "zoom_out"),
             ("[]", "zoom_all"),
+            ("R", "zoom_reflector"),
         ]
 
-        x0 = max(self.canvas.winfo_width() - 112, 8)
-        y0 = 10
         size = 28
         gap = 6
+        total_width = len(button_specs) * size + (len(button_specs) - 1) * gap
+        x0 = max(self.canvas.winfo_width() - total_width - 16, 8)
+        y0 = 10
 
         for index, (label, tag_name) in enumerate(button_specs):
             x1 = x0 + index * (size + gap)
@@ -472,6 +476,49 @@ class OperatorMapView(MapView):
                 font=("Segoe UI", 10, "bold"),
                 tags=("view_button", tag),
             )
+
+    def zoom_reflector(self) -> None:
+        """Zentriert die Karte auf den Reflektor und zeigt ca. 1 m Umgebung."""
+
+        if self.robot_reflector_position is None:
+            return
+
+        self.view_center_x = float(self.robot_reflector_position[0])
+        self.view_center_y = float(self.robot_reflector_position[1])
+
+        canvas_w = max(self.canvas.winfo_width(), 1)
+        canvas_h = max(self.canvas.winfo_height(), 1)
+        margin_px = 40.0
+        usable_w = max(canvas_w - 2.0 * margin_px, 1.0)
+        usable_h = max(canvas_h - 2.0 * margin_px, 1.0)
+        self.scale_px_per_mm = max(
+            min(
+                usable_w / self.REFLECTOR_ZOOM_SIZE_MM,
+                usable_h / self.REFLECTOR_ZOOM_SIZE_MM,
+            ),
+            0.0001,
+        )
+        self.redraw()
+
+    def _handle_view_button_click(self, sx: float, sy: float) -> bool:
+        actions = [self.zoom_in, self.zoom_out, self.zoom_all, self.zoom_reflector]
+        size = 28
+        gap = 6
+        total_width = len(actions) * size + (len(actions) - 1) * gap
+        x0 = max(self.canvas.winfo_width() - total_width - 16, 8)
+        y0 = 10
+
+        for index, action in enumerate(actions):
+            x1 = x0 + index * (size + gap)
+            y1 = y0
+            x2 = x1 + size
+            y2 = y1 + size
+
+            if x1 <= sx <= x2 and y1 <= sy <= y2:
+                action()
+                return True
+
+        return False
 
 
 class MowerOperatorApp(ctk.CTk):
@@ -1036,8 +1083,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_status_row(system, row=2, key="trackerdaten", label="Trackerdaten")
         self._add_status_row(system, row=3, key="arn", label="Reflektornachf.")
 
-        live = self._status_card(panel, title="Live-Werte", row=2, sticky="nsew")
-        live.grid_rowconfigure(22, weight=1)
+        live = self._scrollable_status_card(panel, title="Live-Werte", row=2)
         self._add_live_section_label(live, row=0, text="XYZ-Roboter")
         self._add_live_value_row(live, row=1, key="xyz_x", label="X")
         self._add_live_value_row(live, row=2, key="xyz_y", label="Y")
@@ -1054,6 +1100,55 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_section_label(live, row=14, text="Reflektornachführung")
         self._add_live_value_row(live, row=15, key="arn_distance", label="Distanz LT")
         self._add_live_value_row(live, row=16, key="arn_speed_cmd", label="Speed")
+
+    def _scrollable_status_card(self, parent: ctk.CTkFrame, *, title: str, row: int) -> tk.Frame:
+        """Statuskarte mit vertikaler Scrollleiste fuer kleine Bildschirmhoehen."""
+
+        card = tk.Frame(
+            parent,
+            bg=self.COLOR_PANEL,
+            highlightthickness=1,
+            highlightbackground=self.COLOR_BORDER,
+            bd=0,
+        )
+        card.grid(row=row, column=0, padx=12, pady=(6, 6), sticky="nsew")
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            card,
+            text=title,
+            text_color=self.COLOR_TEXT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 5), sticky="ew")
+
+        canvas = tk.Canvas(
+            card,
+            bg=self.COLOR_PANEL,
+            highlightthickness=0,
+            bd=0,
+        )
+        scrollbar = ttk.Scrollbar(card, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.grid(row=1, column=0, padx=(10, 0), pady=(0, 9), sticky="nsew")
+        scrollbar.grid(row=1, column=1, padx=(2, 7), pady=(0, 9), sticky="ns")
+
+        content = tk.Frame(canvas, bg=self.COLOR_PANEL, highlightthickness=0, bd=0)
+        content.grid_columnconfigure(0, weight=0, minsize=24)
+        content.grid_columnconfigure(1, weight=1)
+        content.grid_columnconfigure(2, weight=0, minsize=105)
+        content_window = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def update_scroll_region(_event: tk.Event | None = None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def fit_content_width(event: tk.Event) -> None:
+            canvas.itemconfigure(content_window, width=max(int(event.width), 1))
+
+        content.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", fit_content_width)
+        return content
 
     def _status_card(
             self,

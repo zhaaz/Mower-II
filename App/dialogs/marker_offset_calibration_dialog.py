@@ -401,8 +401,11 @@ class MarkerOffsetCalibrationDialog:
             self.set_status(f"{label}: markiere Punkt.")
             step += 1
             self.set_progress(step, total)
+            calibration_marker_size_mm = float(CONFIG.marker.size_mm) * 2.0
             self.log(
-                f"Markiere {label}: {CONFIG.marker.shape}, Größe={CONFIG.marker.size_mm:.3f} mm"
+                f"Markiere {label}: {CONFIG.marker.shape}, "
+                f"Kalibriergröße={calibration_marker_size_mm:.3f} mm "
+                f"(2 x Standardgröße {CONFIG.marker.size_mm:.3f} mm)"
             )
             z_mark_mm = float(getattr(CONFIG.marker, "z_mark_mm", 166.0))
             z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
@@ -417,7 +420,7 @@ class MarkerOffsetCalibrationDialog:
                 x=x,
                 y=y,
                 label=label,
-                marker_size=CONFIG.marker.size_mm,
+                marker_size=calibration_marker_size_mm,
                 marker_shape=CONFIG.marker.shape,
                 angle_deg=CONFIG.marker.angle_deg,
                 z_mark_mm=z_mark_mm,
