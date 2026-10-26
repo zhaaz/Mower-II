@@ -16,7 +16,11 @@ from typing import Any, Callable, Literal
 
 import numpy as np
 
-from config.mower_config import CONFIG, update_marker_to_reflector_robot
+from config.mower_config import (
+    CONFIG,
+    resolve_runtime_path,
+    update_marker_to_reflector_robot,
+)
 from Transformation.marker_offset_calibration import (
     MarkerOffsetCalibrationResult,
     compute_marker_to_reflector_offset,
@@ -333,7 +337,7 @@ class MarkerOffsetCalibrationDialog:
             message=(
                 "Alle Kalibrierpunkte wurden markiert und der obere Reflektor wurde gemessen.\n\n"
                 "Der Roboter wurde auf die Parkposition X=10 mm / Y=10 mm gefahren.\n"
-                "Der Wagen kann nun bei Bedarf zusaetzlich gesichert werden.\n\n"
+                "Der Wagen kann nun wegbewegt werden.\n\n"
                 "Im naechsten Schritt werden die Punkte P1 bis P5 manuell mit CCR/Nest gemessen."
             ),
         )
@@ -577,13 +581,13 @@ class MarkerOffsetCalibrationDialog:
         dialog.resizable(False, False)
         dialog.transient(self.window)
         dialog.grab_set()
-        _center_window(self.window, dialog, 560, 250)
+        _center_window(self.window, dialog, 520, 230)
 
         frame = ttk.Frame(dialog, padding=14)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
 
-        ttk.Label(frame, text=request.message, wraplength=520, justify="left", style="Offset.TLabel").grid(
+        ttk.Label(frame, text=request.message, wraplength=480, justify="left", style="Offset.TLabel").grid(
             row=0, column=0, pady=(0, 14), sticky="ew"
         )
 
@@ -592,9 +596,15 @@ class MarkerOffsetCalibrationDialog:
             request.event.set()
             dialog.destroy()
 
-        ttk.Button(frame, text="OK", command=ok, style="Offset.TButton").grid(
-            row=1, column=0, sticky="ew"
-        )
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=1, column=0)
+        ttk.Button(
+            button_row,
+            text="Weiter",
+            command=ok,
+            width=16,
+            style="Offset.TButton",
+        ).grid(row=0, column=0)
         dialog.protocol("WM_DELETE_WINDOW", ok)
 
     def create_measure_dialog(self, request: DialogRequest) -> None:
@@ -603,20 +613,18 @@ class MarkerOffsetCalibrationDialog:
         dialog.resizable(False, False)
         dialog.transient(self.window)
         dialog.grab_set()
-        _center_window(self.window, dialog, 560, 270)
+        _center_window(self.window, dialog, 480, 190)
 
         frame = ttk.Frame(dialog, padding=14)
         frame.grid(row=0, column=0, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
 
-        ttk.Label(frame, text=request.message, wraplength=520, justify="left", style="Offset.TLabel").grid(
+        ttk.Label(frame, text=request.message, wraplength=440, justify="left", style="Offset.TLabel").grid(
             row=0, column=0, pady=(0, 14), sticky="ew"
         )
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=1, column=0, sticky="ew")
-        buttons.grid_columnconfigure(0, weight=1)
-        buttons.grid_columnconfigure(1, weight=1)
+        buttons.grid(row=1, column=0)
 
         def measure() -> None:
             request.result = "measure"
@@ -628,11 +636,11 @@ class MarkerOffsetCalibrationDialog:
             request.event.set()
             dialog.destroy()
 
-        ttk.Button(buttons, text="Messen", command=measure, style="Offset.TButton").grid(
-            row=0, column=0, padx=(0, 6), sticky="ew"
+        ttk.Button(buttons, text="Messen", command=measure, width=16, style="Offset.TButton").grid(
+            row=0, column=0, padx=(0, 6)
         )
-        ttk.Button(buttons, text="Abbrechen", command=cancel, style="Offset.TButton").grid(
-            row=0, column=1, padx=(6, 0), sticky="ew"
+        ttk.Button(buttons, text="Abbrechen", command=cancel, width=16, style="Offset.TButton").grid(
+            row=0, column=1, padx=(6, 0)
         )
         dialog.protocol("WM_DELETE_WINDOW", cancel)
 
@@ -719,7 +727,13 @@ class MarkerOffsetCalibrationDialog:
         )
 
     def save_result_files(self, result: MarkerOffsetCalibrationResult) -> None:
-        out_dir = _find_project_root() / "results" / "marker_offset_calibration"
+        out_dir = resolve_runtime_path(
+            getattr(
+                CONFIG.paths,
+                "calibration_results_dir",
+                "data/messungen/kalibrierung",
+            )
+        ) / "marker_offset"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

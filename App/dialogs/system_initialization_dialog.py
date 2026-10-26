@@ -17,6 +17,7 @@ LogFunction = Callable[[str], None]
 FinishedCallback = Callable[[], None]
 SendXYZCommand = Callable[..., bool]
 StartTrackerFunction = Callable[[], None]
+LoadTrackerStationFunction = Callable[[str], bool]
 ShowTrafoDialogFunction = Callable[..., None]
 SendGyroCommand = Callable[..., Any]
 SendGyemsCommand = Callable[..., Any]
@@ -65,6 +66,7 @@ def show_system_initialization_dialog(
         tracker_receiver_getter: Callable[[], Any],
         tracker_data_current_getter: Callable[[], bool],
         start_tracker: StartTrackerFunction,
+        load_tracker_station: LoadTrackerStationFunction,
         gyro_worker_getter: Callable[[], Any] | None = None,
         ensure_gyro_worker: Callable[[], bool] | None = None,
         gyro_state_getter: StateGetter | None = None,
@@ -92,6 +94,7 @@ def show_system_initialization_dialog(
         tracker_receiver_getter=tracker_receiver_getter,
         tracker_data_current_getter=tracker_data_current_getter,
         start_tracker=start_tracker,
+        load_tracker_station=load_tracker_station,
         gyro_worker_getter=gyro_worker_getter,
         ensure_gyro_worker=ensure_gyro_worker,
         gyro_state_getter=gyro_state_getter,
@@ -119,13 +122,14 @@ class SystemInitializationDialog:
         1. XYZ auf Config-Default-Port verbinden
         2. XYZ Homing durchfuehren
         3. Lasertracker UDP starten und auf aktuelle Daten warten
-        4. Murata SCH16T verbinden
-        5. Murata SCH16T Drift bestimmen und setzen
-        6. Murata SCH16T Winkel auf 0 setzen
-        7. Transformationsdialog starten
-        8. GYEMS/Drehmotor verbinden
-        9. ARN-Referenz setzen
-       10. ARN aktivieren
+        4. Lasertracker-Standpunkt aus dem Config-Pfad laden
+        5. Murata SCH16T verbinden
+        6. Murata SCH16T Drift bestimmen und setzen
+        7. Murata SCH16T Winkel auf 0 setzen
+        8. Transformationsdialog starten
+        9. GYEMS/Drehmotor verbinden
+       10. ARN-Referenz setzen
+       11. ARN aktivieren
     """
 
     def __init__(
@@ -140,6 +144,7 @@ class SystemInitializationDialog:
             tracker_receiver_getter: Callable[[], Any],
             tracker_data_current_getter: Callable[[], bool],
             start_tracker: StartTrackerFunction,
+            load_tracker_station: LoadTrackerStationFunction,
             gyro_worker_getter: Callable[[], Any] | None,
             ensure_gyro_worker: Callable[[], bool] | None,
             gyro_state_getter: StateGetter | None,
@@ -166,6 +171,7 @@ class SystemInitializationDialog:
         self.tracker_receiver_getter = tracker_receiver_getter
         self.tracker_data_current_getter = tracker_data_current_getter
         self.start_tracker = start_tracker
+        self.load_tracker_station = load_tracker_station
         self.gyro_worker_getter = gyro_worker_getter
         self.ensure_gyro_worker = ensure_gyro_worker
         self.gyro_state_getter = gyro_state_getter
@@ -189,11 +195,14 @@ class SystemInitializationDialog:
         self.workflow_running = False
         self.closed = False
         self.trafo_finished_event = threading.Event()
+        self.tracker_station_loaded = False
+        self.initialization_warnings: list[str] = []
 
         self.steps: list[StepState] = [
             StepState("xyz_connect", "XYZ verbinden"),
             StepState("homing", "XYZ Homing"),
             StepState("tracker", "Tracker UDP starten"),
+            StepState("tracker_station", "Tracker-Standpunkt laden"),
             StepState("gyro_connect", "Murata SCH16T verbinden"),
             StepState("gyro_drift", "Murata SCH16T Drift bestimmen"),
             StepState("gyro_zero", "Murata SCH16T Winkel nullsetzen"),
@@ -348,9 +357,17 @@ class SystemInitializationDialog:
         try:
             self._run_workflow()
             success = True
-            self.set_status("Initialisierung abgeschlossen.")
+            if self.initialization_warnings:
+                self.set_status("Initialisierung mit Warnung abgeschlossen.")
+            else:
+                self.set_status("Initialisierung abgeschlossen.")
             self.log("")
-            self.log("Systeminitialisierung abgeschlossen.")
+            if self.initialization_warnings:
+                self.log("Systeminitialisierung mit Warnung abgeschlossen:")
+                for warning in self.initialization_warnings:
+                    self.log(f"WARNUNG: {warning}")
+            else:
+                self.log("Systeminitialisierung abgeschlossen.")
         except InterruptedError:
             self.set_status("Initialisierung abgebrochen.")
             self.log("")
@@ -377,26 +394,39 @@ class SystemInitializationDialog:
         self.start_tracker_udp()
         self.set_progress(3, len(self.steps))
 
-        self.connect_gyro_default()
+        self.load_tracker_station_from_config()
         self.set_progress(4, len(self.steps))
 
-        self.determine_and_set_gyro_drift()
+        self.connect_gyro_default()
         self.set_progress(5, len(self.steps))
 
-        self.reset_gyro_angle()
+        self.determine_and_set_gyro_drift()
         self.set_progress(6, len(self.steps))
 
-        self.run_transformation()
+        self.reset_gyro_angle()
         self.set_progress(7, len(self.steps))
 
-        self.connect_gyems_default()
+        self.run_transformation()
         self.set_progress(8, len(self.steps))
 
-        self.set_arn_reference_step()
+        self.connect_gyems_default()
         self.set_progress(9, len(self.steps))
 
-        self.activate_arn_step()
+        if not self.tracker_station_loaded:
+            self.set_step("arn_reference", "übersprungen")
+            self.set_step("arn_activate", "übersprungen")
+            self.set_progress(11, len(self.steps))
+            self.log(
+                "ARN-Referenz und ARN-Aktivierung werden übersprungen, "
+                "weil kein Tracker-Standpunkt geladen ist."
+            )
+            return
+
+        self.set_arn_reference_step()
         self.set_progress(10, len(self.steps))
+
+        self.activate_arn_step()
+        self.set_progress(11, len(self.steps))
 
     def connect_xyz_default(self) -> None:
         self.check_abort()
@@ -477,6 +507,51 @@ class SystemInitializationDialog:
         self.wait_for_tracker_data(timeout_s=30.0)
         self.log("Aktuelle Trackerdaten vorhanden.")
         self.set_step("tracker", "OK")
+
+    def load_tracker_station_from_config(self) -> None:
+        self.check_abort()
+        self.set_step("tracker_station", "läuft")
+        self.set_status("Lasertracker-Standpunkt wird aus der Config geladen.")
+
+        configured_path = str(
+            getattr(
+                getattr(self.config, "paths", None),
+                "tracker_station_file",
+                "data/tracker_station.txt",
+            )
+        ).strip()
+        if not configured_path:
+            raise RuntimeError("paths.tracker_station_file ist leer.")
+
+        self.log(f"Tracker-Standpunkt laden: {configured_path}")
+        try:
+            loaded = bool(
+                self.call_in_gui_thread(
+                    lambda: self.load_tracker_station(configured_path)
+                )
+            )
+            if not loaded:
+                raise RuntimeError(
+                    "Lasertracker-Standpunkt konnte nicht geladen werden."
+                )
+        except Exception as exc:
+            warning = (
+                "Tracker-Standpunkt konnte nicht geladen werden: "
+                f"{exc}"
+            )
+            self.tracker_station_loaded = False
+            self.initialization_warnings.append(warning)
+            self.log(f"WARNUNG: {warning}")
+            self.log(
+                "Die Initialisierung wird fortgesetzt. ARN bleibt aus, "
+                "bis ein Standpunkt geladen wurde."
+            )
+            self.set_step("tracker_station", "WARNUNG")
+            return
+
+        self.tracker_station_loaded = True
+        self.log("Tracker-Standpunkt aus Config geladen.")
+        self.set_step("tracker_station", "OK")
 
     def connect_gyro_default(self) -> None:
         self.check_abort()

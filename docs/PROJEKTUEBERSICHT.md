@@ -56,23 +56,23 @@ Die GUI steuert die Hardware damit nicht unmittelbar. Zeitaufwendige Gerätezugr
 Die benutzerspezifischen Einstellungen stehen in:
 
 ```text
-config/mower_config.json
+data/config/mower_config.json
 ```
 
-Für normale Änderungen wie COM-Ports, Geschwindigkeiten, Markierhöhen oder Pfade wird die JSON-Datei geändert. `mower_config.py` definiert dagegen die verfügbaren Parameter und ihre Standardwerte. Änderungen werden beim Programmstart geladen; nach einer Änderung sollte das Programm neu gestartet werden.
+Für normale Änderungen wie COM-Ports, Geschwindigkeiten, Markierhöhen oder Pfade wird die JSON-Datei geändert. `config/mower_config.py` enthält nur noch Programmcode, verfügbare Parameter und Standardwerte. Änderungen werden beim Programmstart geladen; nach einer Änderung sollte das Programm neu gestartet werden. Beim ersten Start wird eine vorhandene alte `config/mower_config.json` automatisch in den neuen Datenordner übernommen.
 
 Alle Längenangaben sind grundsätzlich in Millimetern, Winkel in Grad und Winkelgeschwindigkeiten in Grad pro Sekunde angegeben.
 
 | Abschnitt | Inhalt |
 | --- | --- |
-| `xyz` | COM-Port, Baudrate, Arbeitsraumgrenzen, Fahrgeschwindigkeiten, Positionstoleranz und optionales Z-Homing vor der Transformation |
+| `xyz` | COM-Port, Baudrate, Arbeitsraumgrenzen, Fahrgeschwindigkeiten, Positionstoleranz sowie optionales Z-Homing vor Transformationen und Markierungen |
 | `tracker` | UDP-Port, Zeitlimit für Punktmessungen und Reflektorradius; der Transformationsworkflow verwendet `capture_timeout_s` direkt |
 | `murata` | COM-Port, Baudrate, Dauer der Driftmessung und Vorzeichen des Winkels |
 | `gyems` | COM-Port, Baudrate und Motor-ID |
 | `arn` | Regelverstärkung, maximale Motorgeschwindigkeit, Totband, Befehlsintervall und Drehrichtung |
 | `marker` | Markierungsform und -größe, Ausrichtung, Nachmessung sowie `Z_MARK`, `Z_CLEAR` und `Z_TRAVEL` |
 | `transformation` | Offset, Murata-Grenzwert, Qualitätsgrenzen, Kalibrierpunkte und Maßstabsprüfung der Transformation |
-| `paths` | Pfade zur Trackerstation, zu Logs und Messplänen |
+| `paths` | Pfade zur Trackerstation, zu Logs, Projekten, Kalibrierergebnissen und Messplänen; `tracker_station_file` wird bei der Systeminitialisierung automatisch geladen |
 
 Wichtige Hinweise:
 
@@ -80,6 +80,7 @@ Wichtige Hinweise:
 - Zwischen Einträgen muss ein Komma stehen; hinter dem letzten Eintrag eines Abschnitts nicht.
 - Relative Pfade werden vom Projektverzeichnis aus interpretiert. Sie sind für andere Rechner meist geeigneter als absolute Pfade.
 - `home_z_before_transformation: true` aktiviert das Z-Homing vor jeder Transformation.
+- `home_z_before_each_marking: true` referenziert Z unmittelbar vor jedem Markierauftrag neu und verhindert, dass sich Schrittverluste auf nachfolgende Markierungen übertragen.
 
 Die Qualitätsgrenzen stehen im Abschnitt `transformation`:
 
@@ -149,3 +150,22 @@ Eine erfolgreiche Berechnung wird zunächst nur als vorläufiges Ergebnis gehalt
 - Die Markierhöhen müssen nach Änderungen an Stift, Halterung oder Mechanik kontrolliert werden.
 - Fehler, Verbindungszustände und Messabläufe werden im Programm und in den Logdateien protokolliert.
 - Gespeicherte Projektdateien enthalten einen Snapshot der relevanten XYZ-, Tracker-, Marker-, ARN-, Murata- und Transformationseinstellungen.
+
+## Ordnerstruktur der EXE
+
+Veränderliche Dateien liegen sichtbar neben der EXE und niemals im technischen Ordner `_internal`:
+
+```text
+MowerOperator/
+├── MowerOperator.exe
+├── _internal/
+└── data/
+    ├── config/mower_config.json
+    ├── tracker/tracker_station.txt
+    ├── messungen/kalibrierung/
+    ├── messungen/messplaene/
+    ├── projekte/
+    └── logs/
+```
+
+Beim EXE-Start werden relative Pfade gegen den Ordner der `MowerOperator.exe` aufgelöst. Im Python-/PyCharm-Betrieb ist der Projektordner die Basis. Das Skript `build_mower_operator.ps1` erstellt die EXE und diese Ordnerstruktur. Eine genaue Anleitung steht in `docs/EXE_ERSTELLEN.md`.

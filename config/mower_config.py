@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,11 @@ class XYZConfig:
     # auf die sichere Fahrhoehe fahren. So wird ein moeglicher Schrittverlust
     # der Z-Achse nicht in die Transformationsfahrt uebernommen.
     home_z_before_transformation: bool = True
+
+    # Referenziert die Z-Achse unmittelbar vor jedem Markierauftrag neu.
+    # Dadurch koennen sich moegliche Schrittverluste nicht von einer
+    # Markierung auf die naechste uebertragen.
+    home_z_before_each_marking: bool = True
 
 
 @dataclass
@@ -164,9 +171,11 @@ class PathsConfig:
     Absolute Pfade bleiben absolute Pfade.
     """
 
-    tracker_station_file: str = "data/tracker_station.txt"
-    log_dir: str = "logs"
-    measurement_plans_dir: str = "measurement_plans"
+    tracker_station_file: str = "data/tracker/tracker_station.txt"
+    log_dir: str = "data/logs"
+    measurement_plans_dir: str = "data/messungen/messplaene"
+    calibration_results_dir: str = "data/messungen/kalibrierung"
+    projects_dir: str = "data/projekte"
 
 
 @dataclass
@@ -198,10 +207,46 @@ DEFAULT_CONFIG = MowerConfig(
 
 
 # --------------------------------------------------
-# Pfade
+# Laufzeitpfade
 # --------------------------------------------------
 
-CONFIG_PATH = Path(__file__).with_name("mower_config.json")
+def get_application_root() -> Path:
+    """Liefert im Quellbetrieb den Projektordner, in der EXE den EXE-Ordner."""
+    if bool(getattr(sys, "frozen", False)):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
+APPLICATION_ROOT = get_application_root()
+DATA_DIR = APPLICATION_ROOT / "data"
+CONFIG_PATH = DATA_DIR / "config" / "mower_config.json"
+LEGACY_CONFIG_PATH = Path(__file__).with_name("mower_config.json")
+
+
+def resolve_runtime_path(value: str | Path) -> Path:
+    """Loest relative Configpfade gegen Projekt- bzw. EXE-Ordner auf."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return APPLICATION_ROOT / path
+
+
+def ensure_runtime_directories() -> None:
+    """Erzeugt die sichtbare, beschreibbare Datenstruktur der Anwendung."""
+    for relative in (
+        "config",
+        "tracker",
+        "messungen/kalibrierung",
+        "messungen/messplaene",
+        "projekte",
+        "logs",
+    ):
+        (DATA_DIR / relative).mkdir(parents=True, exist_ok=True)
+
+    legacy_station = DATA_DIR / "tracker_station.txt"
+    new_station = DATA_DIR / "tracker" / "tracker_station.txt"
+    if legacy_station.exists() and not new_station.exists():
+        shutil.copy2(legacy_station, new_station)
 
 
 class ConfigValidationError(ValueError):
@@ -249,6 +294,42 @@ def _as_calibration_points(value: Any) -> tuple[tuple[str, float, float], ...]:
     return tuple(points)
 
 
+def _migrate_legacy_paths(paths_data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Uebernimmt bekannte alte Pfade in die neue externe Datenstruktur."""
+    migrated = dict(paths_data)
+    changed = False
+
+    tracker_value = str(migrated.get("tracker_station_file", "")).strip()
+    normalized_tracker = tracker_value.replace("\\", "/").rstrip("/").lower()
+    if not tracker_value or normalized_tracker.endswith("/data/tracker_station.txt") or normalized_tracker == "data/tracker_station.txt":
+        migrated["tracker_station_file"] = "data/tracker/tracker_station.txt"
+        changed = tracker_value != migrated["tracker_station_file"]
+
+    replacements = {
+        "log_dir": ("logs", "data/logs"),
+        "measurement_plans_dir": (
+            "measurement_plans",
+            "data/messungen/messplaene",
+        ),
+    }
+    for key, (legacy_value, new_value) in replacements.items():
+        current = str(migrated.get(key, "")).strip().replace("\\", "/").rstrip("/")
+        if not current or current == legacy_value:
+            if migrated.get(key) != new_value:
+                migrated[key] = new_value
+                changed = True
+
+    for key, value in (
+        ("calibration_results_dir", "data/messungen/kalibrierung"),
+        ("projects_dir", "data/projekte"),
+    ):
+        if key not in migrated:
+            migrated[key] = value
+            changed = True
+
+    return migrated, changed
+
+
 def validate_config(config: MowerConfig) -> None:
     """Prüft sicherheits- und ablaufrelevante Configwerte beim Programmstart."""
     errors: list[str] = []
@@ -277,6 +358,17 @@ def validate_config(config: MowerConfig) -> None:
         if not isinstance(port, str) or not port.strip():
             errors.append(f"{label} darf nicht leer sein.")
 
+    for name in (
+        "tracker_station_file",
+        "log_dir",
+        "measurement_plans_dir",
+        "calibration_results_dir",
+        "projects_dir",
+    ):
+        value = getattr(config.paths, name, "")
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"paths.{name} darf nicht leer sein.")
+
     positive(config.xyz.baudrate, "xyz.baudrate")
     positive(config.xyz.default_feedrate, "xyz.default_feedrate")
     positive(config.xyz.fast_feedrate, "xyz.fast_feedrate")
@@ -292,6 +384,8 @@ def validate_config(config: MowerConfig) -> None:
 
     if not isinstance(config.xyz.home_z_before_transformation, bool):
         errors.append("xyz.home_z_before_transformation muss true oder false sein.")
+    if not isinstance(config.xyz.home_z_before_each_marking, bool):
+        errors.append("xyz.home_z_before_each_marking muss true oder false sein.")
 
     try:
         udp_port = int(config.tracker.udp_port)
@@ -389,10 +483,22 @@ def validate_config(config: MowerConfig) -> None:
 # Laden
 # --------------------------------------------------
 
+def _prepare_external_config() -> None:
+    ensure_runtime_directories()
+    if CONFIG_PATH.exists():
+        return
+
+    if LEGACY_CONFIG_PATH.exists() and LEGACY_CONFIG_PATH != CONFIG_PATH:
+        shutil.copy2(LEGACY_CONFIG_PATH, CONFIG_PATH)
+        return
+
+    CONFIG_PATH.write_text(
+        json.dumps(asdict(DEFAULT_CONFIG), indent=4, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
 def load_config() -> MowerConfig:
-    if not CONFIG_PATH.exists():
-        validate_config(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG
+    _prepare_external_config()
 
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -404,7 +510,7 @@ def load_config() -> MowerConfig:
     arn_data = _section(data, "arn")
     marker_data = _section(data, "marker")
     transformation_data = _section(data, "transformation")
-    paths_data = _section(data, "paths")
+    paths_data, paths_migrated = _migrate_legacy_paths(_section(data, "paths"))
 
     transformation = TransformationConfig(
         **{
@@ -435,6 +541,8 @@ def load_config() -> MowerConfig:
         paths=PathsConfig(**paths_data),
     )
     validate_config(config)
+    if paths_migrated:
+        save_config(config)
     return config
 
 
@@ -444,13 +552,16 @@ def load_config() -> MowerConfig:
 
 def save_config(config: MowerConfig) -> None:
     data = asdict(config)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with CONFIG_PATH.open("w", encoding="utf-8") as f:
         json.dump(
             data,
             f,
             indent=4,
+            ensure_ascii=False,
         )
+        f.write("\n")
 
 
 # --------------------------------------------------

@@ -137,6 +137,7 @@ def build_settings_snapshot(config: Any | None = None) -> dict[str, Any]:
                 "fast_feedrate",
                 "tolerance_mm",
                 "home_z_before_transformation",
+                "home_z_before_each_marking",
             ],
         ),
         "tracker": _object_fields(

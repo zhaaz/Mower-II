@@ -1,0 +1,845 @@
+--- a/App/mower_operator_app.py
++++ b/App/mower_operator_app.py
+@@ -41,13 +41,38 @@
+ if str(PROJECT_ROOT) not in sys.path:
+     sys.path.insert(0, str(PROJECT_ROOT))
+ 
++STARTUP_IMPORT_ERRORS: list[str] = []
++
++
++def _record_startup_import_error(component: str, exc: Exception) -> None:
++    message = f"{component}: {type(exc).__name__}: {exc}"
++    STARTUP_IMPORT_ERRORS.append(message)
++    try:
++        startup_log_dir = PROJECT_ROOT / "logs"
++        startup_log_dir.mkdir(parents=True, exist_ok=True)
++        with (startup_log_dir / "startup_import_errors.log").open(
++                "a",
++                encoding="utf-8",
++        ) as stream:
++            stream.write(
++                f"[{datetime.now().isoformat(timespec='seconds')}] {message}\n"
++            )
++    except Exception:
++        pass
++
++
+ try:
+     from config.mower_config import CONFIG
+-except Exception:
++except Exception as exc:
+     CONFIG = None
++    _record_startup_import_error("Konfiguration", exc)
+ 
+-from App.map_view import MapView
+-from App.stakeout_point import StakeoutPoint, create_demo_points, load_points_from_txt
++try:
++    from App.map_view import MapView
++    from App.stakeout_point import StakeoutPoint, create_demo_points, load_points_from_txt
++except Exception as exc:
++    _record_startup_import_error("Kernmodule Map/Punktdaten", exc)
++    raise
+ 
+ try:
+     from App.ui.classic_style import (
+@@ -59,7 +84,7 @@
+         FONT_TITLE,
+         FONT_MONO,
+     )
+-except Exception:
++except Exception as exc:
+     apply_classic_style = None
+     FONT_FAMILY = "Segoe UI"
+     FONT_NORMAL = ("Segoe UI", 9)
+@@ -67,21 +92,25 @@
+     FONT_SECTION = ("Segoe UI", 10, "bold")
+     FONT_TITLE = ("Segoe UI", 12, "bold")
+     FONT_MONO = ("Consolas", 9)
++    _record_startup_import_error("UI-Stile", exc)
+ 
+ try:
+     from App.dialogs.xyz_connect_dialog import show_xyz_connect_dialog
+-except Exception:
++except Exception as exc:
+     show_xyz_connect_dialog = None
++    _record_startup_import_error("XYZ-Verbindungsdialog", exc)
+ 
+ try:
+     from App.dialogs.serial_connect_dialog import show_serial_connect_dialog
+-except Exception:
++except Exception as exc:
+     show_serial_connect_dialog = None
++    _record_startup_import_error("Serieller Verbindungsdialog", exc)
+ 
+ try:
+     from App.dialogs.xyz_manual_move_dialog import show_xyz_manual_move_dialog
+-except Exception:
++except Exception as exc:
+     show_xyz_manual_move_dialog = None
++    _record_startup_import_error("XYZ-Handfahrdialog", exc)
+ 
+ try:
+     from App.services.project_file import (
+@@ -89,96 +118,114 @@
+         load_project_file,
+         save_project_file,
+     )
+-except Exception:
++except Exception as exc:
+     export_project_txt = None
+     load_project_file = None
+     save_project_file = None
++    _record_startup_import_error("Projektdatei-Service", exc)
+ 
+ try:
+     from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
+-except Exception:
++except Exception as exc:
+     XYZRobotWorker = None
++    _record_startup_import_error("XYZ-Worker", exc)
+ 
+ try:
+     from Murata.murata_worker import MurataWorker
+-except Exception:
++except Exception as exc:
+     MurataWorker = None
++    _record_startup_import_error("Murata-Worker", exc)
+ 
+ try:
+     from GYEMS.gyems_worker import GyemsWorker
+-except Exception:
++except Exception as exc:
+     GyemsWorker = None
++    _record_startup_import_error("GYEMS-Worker", exc)
+ 
+ try:
+     from Lasertracker.lasertracker_receiver import LasertrackerReceiver
+-except Exception:
++except Exception as exc:
+     LasertrackerReceiver = None
++    _record_startup_import_error("Lasertracker-Receiver", exc)
+ 
+ try:
+     from App.dialogs.trafo_dialog import show_trafo_dialog
+-except Exception:
++except Exception as exc:
+     show_trafo_dialog = None
++    _record_startup_import_error("Transformationsdialog", exc)
+ 
+ try:
+     from App.dialogs.marker_offset_calibration_dialog import show_marker_offset_calibration_dialog
+-except Exception:
++except Exception as exc:
+     show_marker_offset_calibration_dialog = None
++    _record_startup_import_error("Marker-Offset-Dialog", exc)
+ 
+ try:
+     from App.dialogs.marker_height_calibration_dialog import show_marker_height_calibration_dialog
+-except Exception:
++except Exception as exc:
+     show_marker_height_calibration_dialog = None
++    _record_startup_import_error("Marker-Höhendialog", exc)
+ 
+ try:
+     from App.dialogs.point_marking_dialog import show_point_marking_dialog
+-except Exception:
++except Exception as exc:
+     show_point_marking_dialog = None
++    _record_startup_import_error("Punktmarkierungsdialog", exc)
+ 
+ try:
+     from App.dialogs.test_marking_dialog import show_test_marking_dialog
+-except Exception:
++except Exception as exc:
+     show_test_marking_dialog = None
++    _record_startup_import_error("Testmarkierungsdialog", exc)
+ 
+ try:
+     from App.dialogs.point_viewer_dialog import show_point_viewer_dialog
+-except Exception:
++except Exception as exc:
+     show_point_viewer_dialog = None
++    _record_startup_import_error("Punktviewer", exc)
+ 
+ try:
+     from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
+-except Exception:
++except Exception as exc:
+     show_system_initialization_dialog = None
++    _record_startup_import_error("Systeminitialisierungsdialog", exc)
+ 
+ try:
+     from App.dialogs.murata_drift_dialog import show_murata_drift_dialog
+-except Exception:
++except Exception as exc:
+     show_murata_drift_dialog = None
++    _record_startup_import_error("Murata-Driftdialog", exc)
+ 
+ try:
+     from App.dialogs.murata_test_dialog import show_murata_test_dialog
+-except Exception:
++except Exception as exc:
+     show_murata_test_dialog = None
++    _record_startup_import_error("Murata-Testdialog", exc)
+ 
+ try:
+     from App.dialogs.gyems_diagnostic_dialog import show_gyems_diagnostic_dialog
+-except Exception:
++except Exception as exc:
+     show_gyems_diagnostic_dialog = None
++    _record_startup_import_error("GYEMS-Diagnosedialog", exc)
+ 
+ try:
+     from Transformation.trafo_manager import TrafoManager
+-except Exception:
++except Exception as exc:
+     TrafoManager = None
++    _record_startup_import_error("TrafoManager", exc)
+ 
+ try:
+     from Transformation.coordinate_mapper import CoordinateMapper, RobotWorkspace
+-except Exception:
++except Exception as exc:
+     CoordinateMapper = None
+     RobotWorkspace = None
++    _record_startup_import_error("Koordinatenabbildung", exc)
+ 
+ try:
+     from App.services.map_visualization import build_map_visualization_state
+-except Exception:
++except Exception as exc:
+     build_map_visualization_state = None
++    _record_startup_import_error("Kartenvisualisierung", exc)
+ 
+ try:
+     from App.services.reflector_aiming import (
+@@ -186,10 +233,11 @@
+         ReflectorAimCalculator,
+         ReflectorAimConfig,
+     )
+-except Exception:
++except Exception as exc:
+     Point2D = None
+     ReflectorAimCalculator = None
+     ReflectorAimConfig = None
++    _record_startup_import_error("Reflektornachführung", exc)
+ 
+ 
+ def project_path(relative_path: str | Path) -> Path:
+@@ -577,6 +625,28 @@
+ 
+         self._build_ui()
+         self._bind_hotkeys()
++        if STARTUP_IMPORT_ERRORS:
++            self.log("Beim Programmstart wurden Importfehler erkannt:")
++            for import_error in STARTUP_IMPORT_ERRORS:
++                self.log(f"  {import_error}")
++
++        if CONFIG is None:
++            config_error = next(
++                (
++                    error
++                    for error in STARTUP_IMPORT_ERRORS
++                    if error.startswith("Konfiguration:")
++                ),
++                "Konfiguration konnte nicht geladen werden.",
++            )
++            self.after(
++                200,
++                lambda text=config_error: messagebox.showerror(
++                    "Konfigurationsfehler",
++                    text,
++                    parent=self,
++                ),
++            )
+         self._apply_demo_scene()
+         self.refresh_points()
+         self.set_current_action("Bereit.")
+@@ -4128,6 +4198,7 @@
+             f"    Z-Homing vor Transformation: "
+             f"{'aktiv' if getattr(CONFIG.xyz, 'home_z_before_transformation', True) else 'inaktiv'}\n"
+             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
++            f"    Punkt-Timeout={CONFIG.tracker.capture_timeout_s:.1f} s\n"
+             f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "
+             f"{getattr(getattr(CONFIG, 'murata', None), 'baudrate', 115200)}\n"
+             f"  GYEMS: {CONFIG.gyems.port} @ {CONFIG.gyems.baudrate}, ID={CONFIG.gyems.motor_id}\n"
+@@ -4149,7 +4220,12 @@
+             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
+             f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}\n"
+             f"  Trafo-Schutz:\n"
+-            f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg"
++            f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg\n"
++            f"  Trafo-Qualitaet:\n"
++            f"    OK: RMS<={CONFIG.transformation.ok_rms_mm:.3f} mm, "
++            f"Max<={CONFIG.transformation.ok_max_residual_mm:.3f} mm\n"
++            f"    Massstab={'frei' if CONFIG.transformation.allow_scale else 'fest 1.0'}, "
++            f"max. Abweichung={CONFIG.transformation.max_scale_deviation:.6f}"
+         )
+ 
+     def _config_float(self, section: str, name: str, fallback: float) -> float:
+--- a/App/dialogs/trafo_dialog.py
++++ b/App/dialogs/trafo_dialog.py
+@@ -255,7 +255,7 @@
+         self.btn_discard.configure(state="normal")
+ 
+         config = TrafoWorkflowConfig(
+-            tracker_capture_timeout_s=10.0,
++            tracker_capture_timeout_s=float(CONFIG.tracker.capture_timeout_s),
+             # Dieselben Grenzwerte wie fuer die Stufe OK verwenden. Damit
+             # werden SEHR GUT, GUT und OK akzeptiert, PRUEFEN dagegen nicht.
+             max_allowed_rms_mm=_trafo_threshold("ok_rms_mm", 0.25),
+@@ -263,9 +263,14 @@
+                 "ok_max_residual_mm",
+                 0.50,
+             ),
+-            minimum_required_measurements=4,
+-            allow_scale=True,
+-            min_geometry_rank=2,
++            minimum_required_measurements=int(
++                CONFIG.transformation.minimum_required_measurements
++            ),
++            allow_scale=bool(CONFIG.transformation.allow_scale),
++            max_scale_deviation=float(
++                CONFIG.transformation.max_scale_deviation
++            ),
++            min_geometry_rank=int(CONFIG.transformation.min_geometry_rank),
+         )
+ 
+         self.workflow = TrafoWorkflow(
+@@ -454,6 +459,7 @@
+             quality_text = self._evaluate_trafo_quality(
+                 rms=trafo.rms,
+                 max_residual=trafo.max_residual,
++                scale=trafo.scale,
+             )
+ 
+             self.result_rms_var.set(f"{trafo.rms:.3f} mm")
+@@ -494,7 +500,19 @@
+         self.result_quality_var.set("-")
+ 
+     @staticmethod
+-    def _evaluate_trafo_quality(*, rms: float, max_residual: float) -> str:
++    def _evaluate_trafo_quality(
++            *,
++            rms: float,
++            max_residual: float,
++            scale: float = 1.0,
++    ) -> str:
++        if (
++                bool(CONFIG.transformation.allow_scale)
++                and abs(float(scale) - 1.0)
++                > float(CONFIG.transformation.max_scale_deviation)
++        ):
++            return "PRUEFEN (MASSSTAB)"
++
+         if (
+                 rms <= _trafo_threshold("very_good_rms_mm", 0.05)
+                 and max_residual <= _trafo_threshold(
+--- a/App/services/project_file.py
++++ b/App/services/project_file.py
+@@ -118,10 +118,31 @@
+ 
+     marker = getattr(cfg, "marker", None)
+     transformation = getattr(cfg, "transformation", None)
++    xyz = getattr(cfg, "xyz", None)
++    tracker = getattr(cfg, "tracker", None)
+     arn = getattr(cfg, "arn", None)
+     murata = getattr(cfg, "murata", None)
+ 
+     return {
++        "xyz": _object_fields(
++            xyz,
++            [
++                "x_min",
++                "x_max",
++                "y_min",
++                "y_max",
++                "z_min",
++                "z_max",
++                "default_feedrate",
++                "fast_feedrate",
++                "tolerance_mm",
++                "home_z_before_transformation",
++            ],
++        ),
++        "tracker": _object_fields(
++            tracker,
++            ["udp_port", "capture_timeout_s", "ccr_radius_mm"],
++        ),
+         "marker": _object_fields(
+             marker,
+             [
+@@ -137,7 +158,22 @@
+         ),
+         "transformation": _object_fields(
+             transformation,
+-            ["marker_to_reflector_robot", "gyro_invalid_threshold_deg"],
++            [
++                "marker_to_reflector_robot",
++                "gyro_invalid_threshold_deg",
++                "very_good_rms_mm",
++                "very_good_max_residual_mm",
++                "good_rms_mm",
++                "good_max_residual_mm",
++                "ok_rms_mm",
++                "ok_max_residual_mm",
++                "calibration_points",
++                "calibration_random_radius_mm",
++                "minimum_required_measurements",
++                "min_geometry_rank",
++                "allow_scale",
++                "max_scale_deviation",
++            ],
+         ),
+         "arn": _object_fields(
+             arn,
+--- a/Transformation/trafo_workflow.py
++++ b/Transformation/trafo_workflow.py
+@@ -24,27 +24,52 @@
+ 
+ @dataclass
+ class TrafoWorkflowConfig:
+-    base_points: list[tuple[str, float, float]] = field(default_factory=lambda: [
+-        ("K1", 100.0, 100.0),
+-        ("K2", 100.0, 350.0),
+-        ("K3", 350.0, 350.0),
+-        ("K4", 400.0, 100.0),
+-        ("K5", 200.0, 200.0),
+-    ])
++    base_points: list[tuple[str, float, float]] = field(
++        default_factory=lambda: [
++            (str(name), float(x), float(y))
++            for name, x, y in CONFIG.transformation.calibration_points
++        ]
++    )
+ 
+-    random_radius_mm: float = 50.0
++    random_radius_mm: float = field(
++        default_factory=lambda: float(
++            CONFIG.transformation.calibration_random_radius_mm
++        )
++    )
+     random_seed: Optional[int] = None
+ 
+-    xyz_feedrate: float = 6000.0
+-    xyz_position_tolerance_mm: float = 0.05
++    xyz_feedrate: float = field(
++        default_factory=lambda: float(CONFIG.xyz.fast_feedrate)
++    )
++    xyz_position_tolerance_mm: float = field(
++        default_factory=lambda: float(CONFIG.xyz.tolerance_mm)
++    )
+     xyz_position_timeout_s: float = 60.0
+ 
+-    tracker_capture_timeout_s: float = 10.0
++    workspace_x_min: float = field(default_factory=lambda: float(CONFIG.xyz.x_min))
++    workspace_x_max: float = field(default_factory=lambda: float(CONFIG.xyz.x_max))
++    workspace_y_min: float = field(default_factory=lambda: float(CONFIG.xyz.y_min))
++    workspace_y_max: float = field(default_factory=lambda: float(CONFIG.xyz.y_max))
+ 
+-    allow_scale: bool = True
+-    min_geometry_rank: int = 2
++    tracker_capture_timeout_s: float = field(
++        default_factory=lambda: float(CONFIG.tracker.capture_timeout_s)
++    )
+ 
+-    minimum_required_measurements: int = 4
++    allow_scale: bool = field(
++        default_factory=lambda: bool(CONFIG.transformation.allow_scale)
++    )
++    max_scale_deviation: float = field(
++        default_factory=lambda: float(CONFIG.transformation.max_scale_deviation)
++    )
++    min_geometry_rank: int = field(
++        default_factory=lambda: int(CONFIG.transformation.min_geometry_rank)
++    )
++
++    minimum_required_measurements: int = field(
++        default_factory=lambda: int(
++            CONFIG.transformation.minimum_required_measurements
++        )
++    )
+ 
+     # Alles bis einschliesslich Qualitaetsstufe OK wird akzeptiert. Die
+     # Standardwerte kommen direkt aus der zentralen Mower-Config, damit auch
+@@ -113,6 +138,7 @@
+         self.on_log = on_log
+ 
+         self.cancel_event = threading.Event()
++        self._random = random.Random(self.config.random_seed)
+ 
+     def cancel(self):
+         self.cancel_event.set()
+@@ -126,9 +152,6 @@
+         try:
+             self._check_cancelled()
+ 
+-            if self.config.random_seed is not None:
+-                random.seed(self.config.random_seed)
+-
+             target_points = self._generate_target_points()
+             total_steps = len(target_points)
+ 
+@@ -277,29 +300,44 @@
+         points = []
+ 
+         for name, center_x, center_y in self.config.base_points:
+-            x, y = self._random_point_in_radius(
+-                center_x=center_x,
+-                center_y=center_y,
+-                radius_mm=self.config.random_radius_mm,
+-            )
+-            points.append((name, x, y))
++            for _attempt in range(1000):
++                x, y = self._random_point_in_radius(
++                    center_x=center_x,
++                    center_y=center_y,
++                    radius_mm=self.config.random_radius_mm,
++                )
++                if self._is_inside_xy_workspace(x=x, y=y):
++                    points.append((name, x, y))
++                    break
++            else:
++                raise RuntimeError(
++                    f"Für Transformationspunkt {name} konnte keine Position "
++                    "innerhalb des XYZ-Arbeitsraums erzeugt werden. "
++                    "Kalibrierpunkt, Zufallsradius und Arbeitsraum prüfen."
++                )
+ 
+         return points
+ 
+-    @staticmethod
+     def _random_point_in_radius(
++        self,
+         center_x: float,
+         center_y: float,
+         radius_mm: float,
+     ) -> tuple[float, float]:
+-        angle = random.uniform(0.0, 2.0 * math.pi)
+-        radius = radius_mm * math.sqrt(random.uniform(0.0, 1.0))
++        angle = self._random.uniform(0.0, 2.0 * math.pi)
++        radius = radius_mm * math.sqrt(self._random.uniform(0.0, 1.0))
+ 
+         return (
+             center_x + radius * math.cos(angle),
+             center_y + radius * math.sin(angle),
+         )
+ 
++    def _is_inside_xy_workspace(self, *, x: float, y: float) -> bool:
++        return (
++            self.config.workspace_x_min <= x <= self.config.workspace_x_max
++            and self.config.workspace_y_min <= y <= self.config.workspace_y_max
++        )
++
+     def _move_to_position_and_capture(
+         self,
+         point_name: str,
+@@ -432,9 +470,15 @@
+         )
+ 
+     def _is_trafo_ok(self, trafo) -> bool:
++        scale_ok = (
++            not self.config.allow_scale
++            or abs(float(trafo.scale) - 1.0)
++            <= self.config.max_scale_deviation
++        )
+         return (
+             trafo.rms <= self.config.max_allowed_rms_mm
+             and trafo.max_residual <= self.config.max_allowed_max_residual_mm
++            and scale_ok
+         )
+ 
+     def _calculate_best_transformation_with_outlier_check(
+--- a/config/mower_config.py
++++ b/config/mower_config.py
+@@ -137,6 +137,23 @@
+     ok_rms_mm: float = 0.25
+     ok_max_residual_mm: float = 0.50
+ 
++    # Parameter des Transformationsworkflows.
++    calibration_points: tuple[tuple[str, float, float], ...] = (
++        ("K1", 100.0, 100.0),
++        ("K2", 100.0, 350.0),
++        ("K3", 350.0, 350.0),
++        ("K4", 400.0, 100.0),
++        ("K5", 200.0, 200.0),
++    )
++    calibration_random_radius_mm: float = 50.0
++    minimum_required_measurements: int = 4
++    min_geometry_rank: int = 2
++
++    # Bei allow_scale=true wird der Massstab geschaetzt, aber nur innerhalb
++    # der maximalen Abweichung von 1.0 akzeptiert. 0.0005 entspricht 0.05 %.
++    allow_scale: bool = True
++    max_scale_deviation: float = 0.0005
++
+ 
+ @dataclass
+ class PathsConfig:
+@@ -187,6 +204,10 @@
+ CONFIG_PATH = Path(__file__).with_name("mower_config.json")
+ 
+ 
++class ConfigValidationError(ValueError):
++    """Fasst alle erkannten Konfigurationsfehler verständlich zusammen."""
++
++
+ # --------------------------------------------------
+ # Hilfsfunktionen
+ # --------------------------------------------------
+@@ -213,12 +234,164 @@
+     return (float(value[0]), float(value[1]), float(value[2]))
+ 
+ 
++def _as_calibration_points(value: Any) -> tuple[tuple[str, float, float], ...]:
++    if not isinstance(value, (list, tuple)):
++        return DEFAULT_CONFIG.transformation.calibration_points
++
++    points: list[tuple[str, float, float]] = []
++    for index, item in enumerate(value, start=1):
++        if not isinstance(item, (list, tuple)) or len(item) != 3:
++            raise ConfigValidationError(
++                "Ungültiger Transformationspunkt "
++                f"{index}: erwartet wird [Name, X, Y]."
++            )
++        points.append((str(item[0]), float(item[1]), float(item[2])))
++    return tuple(points)
++
++
++def validate_config(config: MowerConfig) -> None:
++    """Prüft sicherheits- und ablaufrelevante Configwerte beim Programmstart."""
++    errors: list[str] = []
++
++    def number(value: Any, label: str) -> float | None:
++        try:
++            return float(value)
++        except (TypeError, ValueError):
++            errors.append(f"{label} muss eine Zahl sein.")
++            return None
++
++    def positive(value: Any, label: str, *, allow_zero: bool = False) -> float | None:
++        result = number(value, label)
++        if result is not None:
++            valid = result >= 0.0 if allow_zero else result > 0.0
++            if not valid:
++                relation = "größer oder gleich 0" if allow_zero else "größer als 0"
++                errors.append(f"{label} muss {relation} sein.")
++        return result
++
++    for label, port in (
++        ("xyz.port", config.xyz.port),
++        ("murata.port", config.murata.port),
++        ("gyems.port", config.gyems.port),
++    ):
++        if not isinstance(port, str) or not port.strip():
++            errors.append(f"{label} darf nicht leer sein.")
++
++    positive(config.xyz.baudrate, "xyz.baudrate")
++    positive(config.xyz.default_feedrate, "xyz.default_feedrate")
++    positive(config.xyz.fast_feedrate, "xyz.fast_feedrate")
++    positive(config.xyz.tolerance_mm, "xyz.tolerance_mm")
++
++    axis_limits: dict[str, tuple[float | None, float | None]] = {}
++    for axis in ("x", "y", "z"):
++        lower = number(getattr(config.xyz, f"{axis}_min"), f"xyz.{axis}_min")
++        upper = number(getattr(config.xyz, f"{axis}_max"), f"xyz.{axis}_max")
++        axis_limits[axis] = (lower, upper)
++        if lower is not None and upper is not None and lower >= upper:
++            errors.append(f"xyz.{axis}_min muss kleiner als xyz.{axis}_max sein.")
++
++    if not isinstance(config.xyz.home_z_before_transformation, bool):
++        errors.append("xyz.home_z_before_transformation muss true oder false sein.")
++
++    try:
++        udp_port = int(config.tracker.udp_port)
++        if not 1 <= udp_port <= 65535:
++            errors.append("tracker.udp_port muss zwischen 1 und 65535 liegen.")
++    except (TypeError, ValueError):
++        errors.append("tracker.udp_port muss eine ganze Zahl sein.")
++    positive(config.tracker.capture_timeout_s, "tracker.capture_timeout_s")
++    positive(config.tracker.ccr_radius_mm, "tracker.ccr_radius_mm")
++
++    positive(config.murata.baudrate, "murata.baudrate")
++    positive(config.murata.default_drift_seconds, "murata.default_drift_seconds")
++    positive(config.gyems.baudrate, "gyems.baudrate")
++    positive(config.gyems.motor_id, "gyems.motor_id")
++
++    positive(config.arn.kp, "arn.kp", allow_zero=True)
++    positive(config.arn.max_speed_deg_s, "arn.max_speed_deg_s", allow_zero=True)
++    positive(config.arn.deadband_deg, "arn.deadband_deg", allow_zero=True)
++    positive(config.arn.command_interval_ms, "arn.command_interval_ms")
++    arn_direction = number(config.arn.direction_sign, "arn.direction_sign")
++    if arn_direction == 0.0:
++        errors.append("arn.direction_sign darf nicht 0 sein.")
++
++    positive(config.marker.size_mm, "marker.size_mm")
++    z_values = {
++        "marker.z_mark_mm": number(config.marker.z_mark_mm, "marker.z_mark_mm"),
++        "marker.z_clear_mm": number(config.marker.z_clear_mm, "marker.z_clear_mm"),
++        "marker.z_travel_mm": number(config.marker.z_travel_mm, "marker.z_travel_mm"),
++    }
++    z_min, z_max = axis_limits["z"]
++    if z_min is not None and z_max is not None:
++        for label, value in z_values.items():
++            if value is not None and not z_min <= value <= z_max:
++                errors.append(f"{label} muss innerhalb des Z-Arbeitsraums liegen.")
++    if all(value is not None for value in z_values.values()):
++        z_mark = float(z_values["marker.z_mark_mm"])
++        z_clear = float(z_values["marker.z_clear_mm"])
++        z_travel = float(z_values["marker.z_travel_mm"])
++        if not z_mark <= z_clear <= z_travel:
++            errors.append("Es muss Z_MARK <= Z_CLEAR <= Z_TRAVEL gelten.")
++
++    trafo = config.transformation
++    positive(trafo.gyro_invalid_threshold_deg, "transformation.gyro_invalid_threshold_deg")
++    quality_values = {
++        "very_good_rms_mm": positive(trafo.very_good_rms_mm, "transformation.very_good_rms_mm", allow_zero=True),
++        "good_rms_mm": positive(trafo.good_rms_mm, "transformation.good_rms_mm", allow_zero=True),
++        "ok_rms_mm": positive(trafo.ok_rms_mm, "transformation.ok_rms_mm", allow_zero=True),
++        "very_good_max_residual_mm": positive(trafo.very_good_max_residual_mm, "transformation.very_good_max_residual_mm", allow_zero=True),
++        "good_max_residual_mm": positive(trafo.good_max_residual_mm, "transformation.good_max_residual_mm", allow_zero=True),
++        "ok_max_residual_mm": positive(trafo.ok_max_residual_mm, "transformation.ok_max_residual_mm", allow_zero=True),
++    }
++    rms_order = [quality_values[name] for name in ("very_good_rms_mm", "good_rms_mm", "ok_rms_mm")]
++    max_order = [quality_values[name] for name in ("very_good_max_residual_mm", "good_max_residual_mm", "ok_max_residual_mm")]
++    if all(value is not None for value in rms_order) and not rms_order[0] <= rms_order[1] <= rms_order[2]:
++        errors.append("RMS-Grenzen müssen SEHR GUT <= GUT <= OK erfüllen.")
++    if all(value is not None for value in max_order) and not max_order[0] <= max_order[1] <= max_order[2]:
++        errors.append("Max-Grenzen müssen SEHR GUT <= GUT <= OK erfüllen.")
++
++    positive(trafo.calibration_random_radius_mm, "transformation.calibration_random_radius_mm", allow_zero=True)
++    positive(trafo.max_scale_deviation, "transformation.max_scale_deviation", allow_zero=True)
++    if not isinstance(trafo.allow_scale, bool):
++        errors.append("transformation.allow_scale muss true oder false sein.")
++    try:
++        geometry_rank = int(trafo.min_geometry_rank)
++        if geometry_rank not in (2, 3):
++            errors.append("transformation.min_geometry_rank muss 2 oder 3 sein.")
++    except (TypeError, ValueError):
++        errors.append("transformation.min_geometry_rank muss 2 oder 3 sein.")
++
++    points = trafo.calibration_points
++    if len(points) < 3:
++        errors.append("Mindestens drei Transformationspunkte müssen definiert sein.")
++    names = [str(point[0]).strip() for point in points]
++    if any(not name for name in names):
++        errors.append("Transformationspunktnamen dürfen nicht leer sein.")
++    if len(set(names)) != len(names):
++        errors.append("Transformationspunktnamen müssen eindeutig sein.")
++    try:
++        minimum = int(trafo.minimum_required_measurements)
++        if minimum < 3 or minimum > len(points):
++            errors.append(
++                "transformation.minimum_required_measurements muss zwischen 3 "
++                "und der Anzahl der Transformationspunkte liegen."
++            )
++    except (TypeError, ValueError):
++        errors.append("transformation.minimum_required_measurements muss eine ganze Zahl sein.")
++
++    if errors:
++        raise ConfigValidationError(
++            "Ungültige mower_config.json:\n- " + "\n- ".join(errors)
++        )
++
++
+ # --------------------------------------------------
+ # Laden
+ # --------------------------------------------------
+ 
+ def load_config() -> MowerConfig:
+     if not CONFIG_PATH.exists():
++        validate_config(DEFAULT_CONFIG)
+         return DEFAULT_CONFIG
+ 
+     with CONFIG_PATH.open("r", encoding="utf-8") as f:
+@@ -242,10 +415,16 @@
+                     DEFAULT_CONFIG.transformation.marker_to_reflector_robot,
+                 )
+             ),
++            "calibration_points": _as_calibration_points(
++                transformation_data.get(
++                    "calibration_points",
++                    DEFAULT_CONFIG.transformation.calibration_points,
++                )
++            ),
+         }
+     )
+ 
+-    return MowerConfig(
++    config = MowerConfig(
+         xyz=XYZConfig(**xyz_data),
+         tracker=TrackerConfig(**tracker_data),
+         murata=MurataConfig(**murata_data),
+@@ -255,6 +434,8 @@
+         transformation=transformation,
+         paths=PathsConfig(**paths_data),
+     )
++    validate_config(config)
++    return config
+ 
+ 
+ # --------------------------------------------------
+--- a/docs/PROJEKTUEBERSICHT.md
++++ b/docs/PROJEKTUEBERSICHT.md
+@@ -66,12 +66,12 @@
+ | Abschnitt | Inhalt |
+ | --- | --- |
+ | `xyz` | COM-Port, Baudrate, Arbeitsraumgrenzen, Fahrgeschwindigkeiten, Positionstoleranz und optionales Z-Homing vor der Transformation |
+-| `tracker` | UDP-Port, Zeitlimit für Punktmessungen und Reflektorradius |
++| `tracker` | UDP-Port, Zeitlimit für Punktmessungen und Reflektorradius; der Transformationsworkflow verwendet `capture_timeout_s` direkt |
+ | `murata` | COM-Port, Baudrate, Dauer der Driftmessung und Vorzeichen des Winkels |
+ | `gyems` | COM-Port, Baudrate und Motor-ID |
+ | `arn` | Regelverstärkung, maximale Motorgeschwindigkeit, Totband, Befehlsintervall und Drehrichtung |
+ | `marker` | Markierungsform und -größe, Ausrichtung, Nachmessung sowie `Z_MARK`, `Z_CLEAR` und `Z_TRAVEL` |
+-| `transformation` | Offset zwischen Markierspitze und Reflektor, Murata-Grenzwert sowie Qualitätsgrenzen der Transformation |
++| `transformation` | Offset, Murata-Grenzwert, Qualitätsgrenzen, Kalibrierpunkte und Maßstabsprüfung der Transformation |
+ | `paths` | Pfade zur Trackerstation, zu Logs und Messplänen |
+ 
+ Wichtige Hinweise:
+@@ -89,9 +89,23 @@
+ "good_rms_mm": 0.10,
+ "good_max_residual_mm": 0.20,
+ "ok_rms_mm": 0.25,
+-"ok_max_residual_mm": 0.50
++"ok_max_residual_mm": 0.50,
++"calibration_points": [
++    ["K1", 100.0, 100.0],
++    ["K2", 100.0, 350.0],
++    ["K3", 350.0, 350.0],
++    ["K4", 400.0, 100.0],
++    ["K5", 200.0, 200.0]
++],
++"calibration_random_radius_mm": 50.0,
++"minimum_required_measurements": 4,
++"min_geometry_rank": 2,
++"allow_scale": true,
++"max_scale_deviation": 0.0005
+ ```
+ 
++Beim Programmstart wird die Konfiguration auf ungültige Werte geprüft. Dazu gehören unter anderem Arbeitsraumgrenzen, Markierhöhen, positive Geschwindigkeiten und Zeiten, die Reihenfolge der Qualitätsgrenzen sowie die Transformationsparameter. Erkannte Fehler werden mit ihrer Ursache angezeigt und in die Logdatei geschrieben.
++
+ ## Qualität und Freigabe der Transformation
+ 
+ Die Qualität wird aus den Restklaffungen der Transformationspunkte beurteilt:
+@@ -116,6 +130,16 @@
+ 
+ Mit den Standardwerten werden damit **SEHR GUT**, **GUT** und **OK** freigegeben. Nur **PRÜFEN** wird nicht übernommen. Werden die OK-Grenzen in der Config verändert, ändern sich Qualitätsanzeige und technische Freigabe gemeinsam.
+ 
++Wenn `allow_scale` aktiviert ist, wird der Maßstab mitgeschätzt. Die Transformation wird jedoch nur akzeptiert, wenn gilt:
++
++```text
++|Maßstab - 1,0| ≤ max_scale_deviation
++```
++
++Mit dem Standardwert `0.0005` darf der Maßstab höchstens um `0,05 %` von `1,0` abweichen. Bei einer größeren Abweichung lautet die Bewertung **PRÜFEN (MASSSTAB)**. Mit `allow_scale: false` wird eine Transformation ohne Maßstabsfaktor berechnet.
++
++Die Kalibrierpunkte werden innerhalb des konfigurierten Zufallsradius erzeugt. Vor der Fahrt wird jeder Punkt gegen die X-/Y-Arbeitsraumgrenzen geprüft. Kann keine gültige Lage erzeugt werden, wird die Transformation mit einer verständlichen Fehlermeldung beendet.
++
+ Eine erfolgreiche Berechnung wird zunächst nur als vorläufiges Ergebnis gehalten. Erst mit **Trafo übernehmen** wird sie aktiv. Die aktive Transformation wird wieder ungültig, wenn sich der Murata-Winkel gegenüber der Transformationslage um mehr als `gyro_invalid_threshold_deg` ändert. Der aktuelle Configwert beträgt `0.03°`.
+ 
+ ## Betriebshinweise
+@@ -124,3 +148,4 @@
+ - Nach einer mechanischen Bewegung des Wagens ist eine neue Transformation erforderlich.
+ - Die Markierhöhen müssen nach Änderungen an Stift, Halterung oder Mechanik kontrolliert werden.
+ - Fehler, Verbindungszustände und Messabläufe werden im Programm und in den Logdateien protokolliert.
++- Gespeicherte Projektdateien enthalten einen Snapshot der relevanten XYZ-, Tracker-, Marker-, ARN-, Murata- und Transformationseinstellungen.

@@ -27,6 +27,9 @@ def find_project_root() -> Path:
     Damit ist der Pfad unabhaengig vom aktuellen Arbeitsverzeichnis
     der PyCharm-Run-Configuration.
     """
+    if bool(getattr(sys, "frozen", False)):
+        return Path(sys.executable).resolve().parent
+
     app_file = Path(__file__).resolve()
 
     for parent in app_file.parents:
@@ -48,7 +51,7 @@ def _record_startup_import_error(component: str, exc: Exception) -> None:
     message = f"{component}: {type(exc).__name__}: {exc}"
     STARTUP_IMPORT_ERRORS.append(message)
     try:
-        startup_log_dir = PROJECT_ROOT / "logs"
+        startup_log_dir = PROJECT_ROOT / "data" / "logs"
         startup_log_dir.mkdir(parents=True, exist_ok=True)
         with (startup_log_dir / "startup_import_errors.log").open(
                 "a",
@@ -62,9 +65,10 @@ def _record_startup_import_error(component: str, exc: Exception) -> None:
 
 
 try:
-    from config.mower_config import CONFIG
+    from config.mower_config import CONFIG, CONFIG_PATH
 except Exception as exc:
     CONFIG = None
+    CONFIG_PATH = None
     _record_startup_import_error("Konfiguration", exc)
 
 try:
@@ -261,7 +265,16 @@ def get_tracker_station_file() -> Path:
     if CONFIG is not None and hasattr(CONFIG, "paths"):
         return project_path(CONFIG.paths.tracker_station_file)
 
-    return PROJECT_ROOT / "data" / "tracker_station.txt"
+    return PROJECT_ROOT / "data" / "tracker" / "tracker_station.txt"
+
+
+def get_configured_directory(name: str, fallback: str) -> Path:
+    configured = fallback
+    if CONFIG is not None and hasattr(CONFIG, "paths"):
+        configured = str(getattr(CONFIG.paths, name, fallback))
+    path = project_path(configured)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 class OperatorMapView(MapView):
@@ -502,7 +515,7 @@ class MowerOperatorApp(ctk.CTk):
         self.selected_point_name: str | None = None
         self.project_path: Path | None = None
 
-        logs_dir = PROJECT_ROOT / "logs"
+        logs_dir = get_configured_directory("log_dir", "data/logs")
         logs_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file_path = logs_dir / f"mower_operator_{timestamp}.log"
@@ -1265,6 +1278,7 @@ class MowerOperatorApp(ctk.CTk):
 
         file_path = filedialog.askopenfilename(
             title="Projekt laden",
+            initialdir=str(get_configured_directory("projects_dir", "data/projekte")),
             filetypes=[
                 ("Mower-II-Projekt", "*.mower.json"),
                 ("JSON-Dateien", "*.json"),
@@ -1328,6 +1342,7 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("Punktdatei wird geladen...")
         file_path = filedialog.askopenfilename(
             title="Punktdatei importieren",
+            initialdir=str(get_configured_directory("measurement_plans_dir", "data/messungen/messplaene")),
             filetypes=[
                 ("Punktdateien", "*.txt *.csv"),
                 ("Textdateien", "*.txt"),
@@ -1394,6 +1409,7 @@ class MowerOperatorApp(ctk.CTk):
     def save_project_as(self) -> None:
         file_path = filedialog.asksaveasfilename(
             title="Projekt speichern unter",
+            initialdir=str(get_configured_directory("projects_dir", "data/projekte")),
             defaultextension=".mower.json",
             filetypes=[
                 ("Mower-II-Projekt", "*.mower.json"),
@@ -1454,6 +1470,7 @@ class MowerOperatorApp(ctk.CTk):
 
         file_path = filedialog.asksaveasfilename(
             title="Daten exportieren",
+            initialdir=str(get_configured_directory("measurement_plans_dir", "data/messungen/messplaene").parent),
             initialfile=default_name,
             defaultextension=".txt",
             filetypes=[
@@ -1964,18 +1981,32 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("Trackerstation wird geladen...")
 
         try:
-            x, y, z = self._read_tracker_xyz_from_file(path)
+            self._load_tracker_station_or_raise(path)
         except Exception as exc:
             self.log(f"Trackerstation konnte nicht geladen werden: {exc}")
             messagebox.showerror("Trackerstation", str(exc), parent=self)
             self.set_current_action("Trackerstation konnte nicht geladen werden.")
             return
 
+    def _load_tracker_station_or_raise(self, path: Path) -> None:
+        x, y, z = self._read_tracker_xyz_from_file(path)
         self.tracker_station_xyz = (x, y, z)
         self.update_map_visualization(keep_view=True)
         self.log(f"Trackerstation geladen: X={x:.3f}, Y={y:.3f}, Z={z:.3f} aus {path}")
         self.set_current_action("Trackerstation geladen.")
         self.update_status()
+
+    def load_tracker_station_for_initialization(self, configured_path: str) -> bool:
+        """Laedt den Trackerstandpunkt waehrend der Initialisierung.
+
+        Die Methode wird vom Initialisierungsdialog im GUI-Thread aufgerufen.
+        Fehler werden an den Initialisierungsworkflow weitergereicht und dort
+        im Status sowie im Log angezeigt.
+        """
+        path = project_path(configured_path)
+        self.set_current_action("Trackerstation wird aus der Config geladen...")
+        self._load_tracker_station_or_raise(path)
+        return True
 
     @staticmethod
     def _read_tracker_xyz_from_file(path: Path) -> tuple[float, float, float]:
@@ -2734,6 +2765,7 @@ class MowerOperatorApp(ctk.CTk):
                 tracker_receiver_getter=lambda: self.tracker_receiver,
                 tracker_data_current_getter=lambda: self.tracker_data_current,
                 start_tracker=self.start_tracker,
+                load_tracker_station=self.load_tracker_station_for_initialization,
                 gyro_worker_getter=lambda: self.gyro_worker,
                 ensure_gyro_worker=self._ensure_gyro_worker,
                 gyro_state_getter=lambda: self.gyro_state,
@@ -3891,7 +3923,14 @@ class MowerOperatorApp(ctk.CTk):
         if reflector_xyz is None:
             return
 
-        station_xyz = self.tracker_station_xyz or (0.0, 0.0, 0.0)
+        if self.tracker_station_xyz is None:
+            self._log_arn_state_once(
+                "tracker_station_missing",
+                "ARN inaktiv: Es ist kein Lasertracker-Standpunkt geladen.",
+            )
+            return
+
+        station_xyz = self.tracker_station_xyz
 
         try:
             aim = self.reflector_aim_calculator.calculate(
@@ -4194,9 +4233,12 @@ class MowerOperatorApp(ctk.CTk):
             return "Config: nicht geladen"
         return (
             "Config:\n"
+            f"  Datei: {CONFIG_PATH if CONFIG_PATH is not None else '-'}\n"
             f"  XYZ: {CONFIG.xyz.port} @ {CONFIG.xyz.baudrate}\n"
             f"    Z-Homing vor Transformation: "
             f"{'aktiv' if getattr(CONFIG.xyz, 'home_z_before_transformation', True) else 'inaktiv'}\n"
+            f"    Z-Homing vor jeder Markierung: "
+            f"{'aktiv' if getattr(CONFIG.xyz, 'home_z_before_each_marking', True) else 'inaktiv'}\n"
             f"  Tracker UDP: {CONFIG.tracker.udp_port}\n"
             f"    Punkt-Timeout={CONFIG.tracker.capture_timeout_s:.1f} s\n"
             f"  Murata SCH16T: {getattr(getattr(CONFIG, 'murata', None), 'port', 'COM9')} @ "

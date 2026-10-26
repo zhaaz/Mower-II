@@ -8,6 +8,11 @@ from XYZ_Robot.xyz_robot import XYZRobot
 from XYZ_Robot.xyz_robot_state import XYZRobotState
 from XYZ_Robot.component_event import ComponentEvent, EventLevel
 
+try:
+    from config.mower_config import CONFIG
+except Exception:  # pragma: no cover - Worker bleibt isoliert testbar
+    CONFIG = None
+
 
 class XYZRobotWorker:
     COMPONENT_NAME = "XYZRobot"
@@ -356,6 +361,14 @@ class XYZRobotWorker:
                 z_travel_mm=z_travel_mm,
             )
 
+        self._home_z_before_marking_if_enabled(
+            robot=robot,
+            z_travel_mm=z_travel_mm,
+        )
+
+        self.state.status_text = "Marking"
+        self._notify_state_changed()
+
         marker_heights = ""
         if z_mark_mm is not None:
             marker_heights = (
@@ -392,6 +405,63 @@ class XYZRobotWorker:
         self._emit_info(done_text)
 
         self._read_position()
+
+    def _home_z_before_marking_if_enabled(
+            self,
+            *,
+            robot: XYZRobot,
+            z_travel_mm: float | None,
+    ) -> None:
+        enabled = bool(
+            getattr(
+                getattr(CONFIG, "xyz", None),
+                "home_z_before_each_marking",
+                True,
+            )
+        )
+        if not enabled:
+            return
+
+        if not self.state.homed:
+            raise RuntimeError(
+                "Z-Homing vor Markierung nicht moeglich: "
+                "vollstaendiges XYZ-Homing fehlt."
+            )
+        if not hasattr(robot, "homing_z"):
+            raise RuntimeError(
+                "Die verwendete XYZRobot-Version unterstuetzt homing_z() nicht."
+            )
+
+        self.state.status_text = "Homing Z"
+        self._notify_state_changed()
+        self._emit_info("Z-Homing vor Markierung gestartet")
+
+        robot.homing_z()
+
+        self.state.status_text = "Moving"
+        self._notify_state_changed()
+
+        if z_travel_mm is None:
+            z_travel_mm = float(
+                getattr(
+                    getattr(CONFIG, "marker", None),
+                    "z_travel_mm",
+                    176.0,
+                )
+            )
+
+        self._emit_info(
+            "Fahre nach Z-Homing vor Markierung auf "
+            f"Z_TRAVEL={float(z_travel_mm):.3f} mm"
+        )
+
+        if hasattr(robot, "z_to_travel"):
+            robot.z_to_travel()
+        else:
+            robot.move_absolute(z=float(z_travel_mm))
+
+        self._read_position()
+        self._emit_info("Z-Homing vor Markierung abgeschlossen")
 
     def _mark_line_absolute(
             self,
