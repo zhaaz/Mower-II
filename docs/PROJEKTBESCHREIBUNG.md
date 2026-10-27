@@ -1,9 +1,24 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Mower II – Projektdokumentation
 
 **Dokumenttyp:** Technische Projektbeschreibung und Betriebsübersicht  
-**Stand:** 26.10.2026  
+**Stand:** 27.10.2026  
 **Projektstatus:** Entwicklung und Erprobung  
-**Verantwortlich:** `[TODO: Projektverantwortliche Person / Organisation]`  
+**Projektverantwortlich:** Andreas Wehner  
+**Organisation:** Institut für Geodäsie  
+**E-Mail:** [andreas.wehner@unibw.de](mailto:andreas.wehner@unibw.de)  
 **Repository:** `https://github.com/zhaaz/Mower-II`
 
 > Diese Dokumentation beschreibt den gegenwärtigen Softwarestand. Stellen mit
@@ -77,7 +92,7 @@ flowchart TD
 | SpatialAnalyzer | Bereitstellung der Trackermesswerte | UDP-Ausgabe | `[TODO: verwendeten Measurement Plan und SA-Version dokumentieren]` |
 | XYZ-Roboter | Lokales Positionieren und Markieren | Seriell/USB | Standard `115200 Baud`, Port aus Config |
 | Murata SCH16T-K01 | Drehrate und relativer Gierwinkel | Über Arduino Nano ESP32 und seriell/USB | `115200 Baud`, ca. `100 Hz` |
-| Arduino Nano ESP32 | Auslesen und Vorverarbeiten des Murata-Sensors | USB-CDC | Ausgabeformat siehe Abschnitt 7.3 |
+| Arduino Nano ESP32 | Auslesen und Vorverarbeiten des Murata-Sensors | USB-CDC | Passendes Arduino-Boardpaket und USB-Erkennung erforderlich; Ausgabeformat siehe Abschnitt 7.3 |
 | GYEMS-Motor | Automatische Reflektornachführung (ARN) | Seriell/USB | Standard `115200 Baud`, Motor-ID aus Config |
 | Reflektor | Ziel des Lasertrackers | Optisch | CCR-Radius standardmäßig `19,05 mm` |
 | Markierstift | Physische Bodenmarkierung | Mechanisch am XYZ-Roboter | Form, Größe und Höhen aus Config |
@@ -365,15 +380,92 @@ Einbaurichtung.
 > **TODO – Elektronik:** Pinbelegung Murata ↔ Arduino, Spannungsversorgung,
 > Pegel, Arduino-Sketch und Firmwarestand dokumentieren bzw. verlinken.
 
+#### Voraussetzungen für den Arduino Nano ESP32
+
+Der aktuell verwendete Murata-Adapter basiert auf einem **Arduino Nano ESP32**.
+Auf einem Entwicklungs- oder Service-Rechner müssen dafür installiert sein:
+
+- eine aktuelle Arduino IDE, vorzugsweise Arduino IDE 2.x,
+- das zum Arduino Nano ESP32 passende Boardpaket über die Boardverwaltung,
+- die vom verwendeten Arduino-Sketch benötigten Bibliotheken,
+- die erforderliche USB-/Seriell-Erkennung unter Windows,
+- der zum Projekt gehörende und freigegebene Arduino-Sketch.
+
+In der Arduino IDE muss anschließend das Board **Arduino Nano ESP32** ausgewählt
+werden. Für Firmware-Upload, Wiederherstellung und Diagnose muss außerdem der
+richtige COM-Port bzw. – im Bootloaderfall – das erkannte DFU-/Bootloader-Gerät
+verwendet werden.
+
+Für den normalen Betrieb von Mower Operator ist die Arduino IDE nicht
+zwingend geöffnet oder aktiv. Entscheidend ist, dass der bereits programmierte
+Nano ESP32 von Windows als serielles Gerät erkannt wird und kontinuierlich das
+vereinbarte Murata-Datenformat sendet. Die Arduino IDE und das Boardpaket werden
+jedoch für die erstmalige Einrichtung, Firmwareänderungen und die Behebung von
+Bootloader-/DFU-Problemen benötigt.
+
+> **TODO – Arduino-Abhängigkeiten:** Exakte Version der Arduino IDE, Name und
+> Version des Boardpakets, verwendete Sketch-Bibliotheken sowie Speicherort und
+> Versionsstand des freigegebenen Sketches ergänzen.
+
 ### 7.4 Punktdateien
 
 Über **Punktdatei importieren** können Text- und CSV-Dateien geladen werden.
-Die Punktliste enthält mindestens Name sowie X-, Y- und Z-Koordinate und kann
-zusätzlich Markierungscode, Markierungsform und Bemerkung enthalten.
+Das verwendete Mower-II-Punktformat ist zeilenorientiert. Eine Punktzeile hat
+folgenden Aufbau:
 
-> **TODO – Importformat:** Verbindliches Spaltenformat mit zwei realen
-> Beispieldateien dokumentieren. Dabei auch Dezimal- und Spaltentrenner sowie
-> die Zuordnung der Markierungscodes 1 bis 4 festhalten.
+```text
+Punkt-ID  X  Y  Z  Markierungsart  "optionaler Markierungstext"
+```
+
+| Position | Feld | Pflicht | Beschreibung |
+| ---: | --- | :---: | --- |
+| 1 | Punkt-ID | Ja | Eindeutige Bezeichnung des Punkts, beispielsweise `P_1` |
+| 2 | X | Ja | X-Koordinate in Millimetern |
+| 3 | Y | Ja | Y-Koordinate in Millimetern |
+| 4 | Z | Ja | Z-Koordinate in Millimetern |
+| 5 | Markierungsart | Nein* | Numerischer Markierungscode von `1` bis `4` |
+| 6 | Markierungstext | Nein | Frei wählbarer Text in doppelten Anführungszeichen |
+
+\* Im empfohlenen Standardformat wird die Markierungsart immer angegeben.
+Fehlt sie in einer älteren oder vereinfachten Datei, verwendet das Programm
+automatisch `1 = Plus`.
+
+Die Felder werden durch ein oder mehrere Leerzeichen getrennt. Zusätzlich
+werden Tabulatoren, Semikolon und alte komma-separierte Formate unterstützt.
+Als Dezimaltrennzeichen sind Punkt und Dezimalkomma zulässig. Koordinaten
+dürfen positiv oder negativ sein. Durch die Anführungszeichen kann der
+optionale Markierungstext auch Leerzeichen enthalten. Ist kein Text gewünscht,
+kann das Textfeld entfallen bzw. als leerer Text `""` angegeben werden.
+
+Kommentar- und Headerzeilen können mit `//` oder `#` beginnen und enthalten
+keine Punktdaten. Ein Inline-Kommentar nach `//` wird ebenfalls ignoriert,
+solange er außerhalb des Textes in Anführungszeichen steht. Ein empfohlener
+Dateikopf mit drei Beispielpunkten sieht so aus:
+
+```text
+// Mower II Punktimport
+// Format: Punkt-ID X Y Z Markierungsart "optionaler Markierungstext"
+// XYZ in mm
+// Point  X  Y  Z  Markierungsart  Text
+
+P_1  1974.158015  -1189.685819  -1300.659017  2  "123"
+P_2  2008.582791  -1002.629107  -1300.664921  2  "123"
+P_3  1562.204479   -516.751686  -1300.896005  2  "123"
+```
+
+Im Beispiel werden die drei Punkte mit der Markierungsart `2` und dem
+zusätzlichen Text `123` importiert. Der Text gehört zur auszuführenden
+Markierung und ist nicht mit einem allgemeinen Dateikommentar zu verwechseln.
+
+Die Kennziffer wird in `App/stakeout_point.py` auf die in
+`XYZ_Robot/marker_shapes.py` definierten Markierungsformen abgebildet:
+
+| Code | Interner Name | Markierungsform |
+| ---: | --- | --- |
+| `1` | `plus` | Pluszeichen aus einer horizontalen und einer vertikalen Linie |
+| `2` | `cross` | Diagonales Kreuz bzw. X |
+| `3` | `circle_point` | Kreis mit Mittelpunkt |
+| `4` | `plus_circle` | Pluszeichen mit umschließendem Kreis |
 
 ### 7.5 Projektdateien
 
@@ -623,6 +715,13 @@ anzupassen.
 > Installation der virtuellen Umgebung in einer `requirements.txt` oder
 > `pyproject.toml` dokumentieren.
 
+Zusätzlich zur Python-Umgebung wird für Entwicklung und Wartung des
+Murata-Adapters die in Abschnitt 7.3 beschriebene Arduino-Umgebung benötigt.
+Vor der Inbetriebnahme auf einem neuen Rechner ist zu prüfen, ob der Arduino
+Nano ESP32 im Windows-Geräte-Manager ohne Warnsymbol erscheint und ein stabiler
+COM-Port zugewiesen wird. Der tatsächlich verwendete Port wird anschließend in
+`data/config/mower_config.json` unter `murata.port` eingetragen.
+
 Typischer Start aus dem Projektordner:
 
 ```powershell
@@ -714,14 +813,15 @@ Nicht ins Repository gehören insbesondere:
 Die folgenden Informationen sind für eine vollständige Übergabe besonders
 wichtig:
 
-- [ ] Projektverantwortliche und Kontaktpersonen
+- [x] Projektverantwortlicher und Kontaktadresse
 - [ ] Freigegebene Hardware- und Softwareversionen
 - [ ] Schaltplan, Sicherungen und Energieversorgung
 - [ ] Pinbelegung Murata/Arduino und Arduino-Firmware
+- [ ] Arduino-IDE-, Boardpaket- und Bibliotheksversionen
 - [ ] Mechanische Zeichnungen und Achsdefinitionen
 - [ ] SpatialAnalyzer Measurement Plan und UDP-Format
-- [ ] Verbindliches Punktdateiformat mit Beispielen
-- [ ] Markierungscode-Tabelle 1 bis 4
+- [x] Verbindliches Punktdateiformat mit Beispielen
+- [x] Markierungscode-Tabelle 1 bis 4
 - [ ] Kalibrier- und Prüfanweisungen
 - [ ] Gefährdungsbeurteilung und Not-Halt-Konzept
 - [ ] Wartungsintervalle für Mechanik, Stift und Reflektor
@@ -736,4 +836,8 @@ wichtig:
 | Datum | Version | Änderung | Bearbeiter |
 | --- | --- | --- | --- |
 | 26.10.2026 | 0.1 | Ausführliche Erstfassung auf Basis des aktuellen Projektstands | `[TODO]` |
+| 27.10.2026 | 0.2 | Punktimportformat mit Feldern, Kommentaren und Beispieldaten ergänzt | `[TODO]` |
+| 27.10.2026 | 0.3 | Markierungscodes und tatsächliches Parser-Verhalten dokumentiert | `[TODO]` |
+| 27.10.2026 | 0.4 | Arduino-Nano-ESP32-Abhängigkeiten und Installationsvoraussetzungen ergänzt | `[TODO]` |
+| 27.10.2026 | 0.5 | Projektverantwortlichen, Organisation und Kontaktadresse ergänzt | Andreas Wehner |
 

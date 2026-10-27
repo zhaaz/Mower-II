@@ -16,3 +16,7 @@ data/*
 results/
 Transformation/results/
 Transformation/marker_offset_calibration_results/
+
+MowerOperator.spec
+Mower-II.spec
+MowerII_Debug.spec
