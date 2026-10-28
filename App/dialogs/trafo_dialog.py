@@ -44,10 +44,10 @@ def show_trafo_dialog(
         on_finished: FinishedCallback | None = None,
         log: LogFunction | None = None,
 ) -> None:
-    """Tk-Dialog fuer die Transformationsmessung.
+    """Tk-Dialog für die Transformationsmessung.
 
-    Der Workflow startet direkt nach dem Oeffnen des Dialogs. Die eigentliche
-    Berechnung laeuft in einem Hintergrundthread; GUI-Updates erfolgen ueber
+    Der Workflow startet direkt nach dem Öffnen des Dialogs. Die eigentliche
+    Berechnung läuft in einem Hintergrundthread; GUI-Updates erfolgen über
     eine Queue im Tk-Hauptthread.
     """
 
@@ -180,7 +180,7 @@ class TrafoDialog:
         ttk.Label(result_frame, text="Max:", style="Trafo.TLabel").grid(row=0, column=4, padx=(0, 6), pady=2, sticky="w")
         ttk.Label(result_frame, textvariable=self.result_max_var, style="Trafo.TLabel").grid(row=0, column=5, pady=2, sticky="ew")
 
-        ttk.Label(result_frame, text="Massstab:", style="Trafo.TLabel").grid(row=1, column=0, padx=(0, 6), pady=2, sticky="w")
+        ttk.Label(result_frame, text="Maßstab:", style="Trafo.TLabel").grid(row=1, column=0, padx=(0, 6), pady=2, sticky="w")
         ttk.Label(result_frame, textvariable=self.result_scale_var, style="Trafo.TLabel").grid(row=1, column=1, padx=(0, 16), pady=2, sticky="ew")
         ttk.Label(result_frame, text="Bewertung:", style="Trafo.TLabel").grid(row=1, column=2, padx=(0, 6), pady=2, sticky="w")
         ttk.Label(result_frame, textvariable=self.result_quality_var, style="Trafo.TLabel").grid(row=1, column=3, columnspan=3, pady=2, sticky="ew")
@@ -256,8 +256,8 @@ class TrafoDialog:
 
         config = TrafoWorkflowConfig(
             tracker_capture_timeout_s=float(CONFIG.tracker.capture_timeout_s),
-            # Dieselben Grenzwerte wie fuer die Stufe OK verwenden. Damit
-            # werden SEHR GUT, GUT und OK akzeptiert, PRUEFEN dagegen nicht.
+            # Dieselben Grenzwerte wie für die Stufe OK verwenden. Damit
+            # werden SEHR GUT, GUT und OK akzeptiert, PRÜFEN dagegen nicht.
             max_allowed_rms_mm=_trafo_threshold("ok_rms_mm", 0.25),
             max_allowed_max_residual_mm=_trafo_threshold(
                 "ok_max_residual_mm",
@@ -329,11 +329,11 @@ class TrafoDialog:
             self.trafo_manager.set_pending(self.result)
             self.trafo_manager.accept_pending()
         except Exception as exc:
-            self.log(f"FEHLER beim Uebernehmen der Trafo: {exc}")
+            self.log(f"FEHLER beim Übernehmen der Trafo: {exc}")
             messagebox.showerror("Transformation", str(exc), parent=self.window)
             return
 
-        self.log("Trafo wurde uebernommen und ist jetzt gueltig.")
+        self.log("Trafo wurde übernommen und ist jetzt gültig.")
 
         if self.on_finished:
             self.on_finished()
@@ -468,11 +468,11 @@ class TrafoDialog:
             self.result_quality_var.set(quality_text)
 
             self.log("")
-            self.log("Qualitaet:")
+            self.log("Qualität:")
             self.log(f"  Punktanzahl: {trafo.point_count}")
             self.log(f"  RMS:         {trafo.rms:.3f} mm")
             self.log(f"  Max:         {trafo.max_residual:.3f} mm")
-            self.log(f"  Massstab:    {trafo.scale:.9f}")
+            self.log(f"  Maßstab:    {trafo.scale:.9f}")
             self.log(f"  Bewertung:   {quality_text}")
 
         self.log("")
@@ -511,7 +511,7 @@ class TrafoDialog:
                 and abs(float(scale) - 1.0)
                 > float(CONFIG.transformation.max_scale_deviation)
         ):
-            return "PRUEFEN (MASSSTAB)"
+            return "PRÜFEN (MASSSTAB)"
 
         if (
                 rms <= _trafo_threshold("very_good_rms_mm", 0.05)
@@ -540,7 +540,7 @@ class TrafoDialog:
         ):
             return "OK"
 
-        return "PRUEFEN"
+        return "PRÜFEN"
 
     # --------------------------------------------------
     # Logging

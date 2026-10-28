@@ -51,7 +51,7 @@ ROBOT_POINTS: list[tuple[str, float, float, float]] = [
 ]
 
 # Parkposition nach dem Markieren und vor der manuellen CCR-/Nest-Messung.
-# Es wird kein neues Homing ausgefuehrt; der Roboter faehrt im bereits
+# Es wird kein neues Homing ausgeführt; der Roboter fährt im bereits
 # referenzierten Koordinatensystem auf diese sichere Position.
 PARK_X_MM = 10.0
 PARK_Y_MM = 10.0
@@ -75,7 +75,7 @@ def show_marker_offset_calibration_dialog(
         on_finished: FinishedCallback | None = None,
         log: LogFunction | None = None,
 ) -> None:
-    """Dialog zur Marker-/Reflektoroffset-Kalibrierung."""
+    """Dialog zur Marker-/Reflektorkalibrierung."""
 
     dialog = MarkerOffsetCalibrationDialog(
         parent=parent,
@@ -119,7 +119,7 @@ class MarkerOffsetCalibrationDialog:
         self.previous_offset_robot = tuple(float(v) for v in CONFIG.transformation.marker_to_reflector_robot)
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Marker-/Reflektoroffset kalibrieren")
+        self.window.title("Marker-/Reflektorkalibrierung")
         self.window.minsize(860, 560)
         self.window.transient(parent)
         self.window.grab_set()
@@ -209,7 +209,7 @@ class MarkerOffsetCalibrationDialog:
         self.result_max_var = tk.StringVar(value="-")
         self.result_std_var = tk.StringVar(value="-")
 
-        ttk.Label(result_frame, text="Neuer Offset:", style="Offset.TLabel").grid(row=0, column=0, padx=(0, 6), pady=2, sticky="w")
+        ttk.Label(result_frame, text="Neuer Kalibrierwert:", style="Offset.TLabel").grid(row=0, column=0, padx=(0, 6), pady=2, sticky="w")
         ttk.Label(result_frame, textvariable=self.result_offset_var, style="Offset.TLabel").grid(row=0, column=1, columnspan=5, pady=2, sticky="ew")
 
         ttk.Label(result_frame, text="Bisher:", style="Offset.TLabel").grid(row=1, column=0, padx=(0, 6), pady=2, sticky="w")
@@ -255,7 +255,7 @@ class MarkerOffsetCalibrationDialog:
 
         self.btn_repeat = ttk.Button(
             button_frame,
-            text="Kalibrierung Wiederholen",
+            text="Kalibrierung wiederholen",
             command=self.repeat_workflow,
             state="disabled",
             style="Offset.TButton",
@@ -264,7 +264,7 @@ class MarkerOffsetCalibrationDialog:
 
         self.btn_discard = ttk.Button(
             button_frame,
-            text="Kalibrierung Verwerfen",
+            text="Kalibrierung verwerfen",
             command=self.discard_and_close,
             style="Offset.TButton",
         )
@@ -272,7 +272,7 @@ class MarkerOffsetCalibrationDialog:
 
         self.btn_accept = ttk.Button(
             button_frame,
-            text="Offset Übernehmen",
+            text="Kalibrierung übernehmen",
             command=self.accept_calibration,
             state="disabled",
             style="Offset.TButton",
@@ -301,7 +301,7 @@ class MarkerOffsetCalibrationDialog:
 
         self.workflow_thread = threading.Thread(target=self._workflow_thread_main, daemon=True)
         self.workflow_thread.start()
-        self.log("Marker-/Reflektoroffset-Kalibrierung gestartet.")
+        self.log("Marker-/Reflektorkalibrierung gestartet.")
 
     def _workflow_thread_main(self) -> None:
         try:
@@ -322,9 +322,9 @@ class MarkerOffsetCalibrationDialog:
 
         self.log("Ablauf:")
         self.log("1. Roboter markiert feste Kalibrierpunkte und Reflektor oben wird gemessen.")
-        self.log("2. Danach faehrt der Roboter auf Parkposition X=10 mm / Y=10 mm.")
+        self.log("2. Danach fährt der Roboter auf Parkposition X=10 mm / Y=10 mm.")
         self.log("3. Danach werden die markierten Punkte manuell mit CCR/Nest gemessen.")
-        self.log("4. Aus beiden Messsaetzen wird marker_to_reflector_robot berechnet.")
+        self.log("4. Aus beiden Messsätzen wird marker_to_reflector_robot berechnet.")
 
         self.run_robot_mark_and_reflector_measurement()
         self.check_abort()
@@ -338,7 +338,7 @@ class MarkerOffsetCalibrationDialog:
                 "Alle Kalibrierpunkte wurden markiert und der obere Reflektor wurde gemessen.\n\n"
                 "Der Roboter wurde auf die Parkposition X=10 mm / Y=10 mm gefahren.\n"
                 "Der Wagen kann nun wegbewegt werden.\n\n"
-                "Im naechsten Schritt werden die Punkte P1 bis P5 manuell mit CCR/Nest gemessen."
+                "Im nächsten Schritt werden die Punkte P1 bis P5 manuell mit CCR/Nest gemessen."
             ),
         )
         if response != "ok":
@@ -411,7 +411,7 @@ class MarkerOffsetCalibrationDialog:
             z_clear_mm = float(getattr(CONFIG.marker, "z_clear_mm", z_mark_mm + 5.0))
             z_travel_mm = float(getattr(CONFIG.marker, "z_travel_mm", z_mark_mm + 10.0))
             self.log(
-                f"Markierhoehen: Z_MARK={z_mark_mm:.3f} mm, "
+                f"Markierhöhen: Z_MARK={z_mark_mm:.3f} mm, "
                 f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
             )
             self.send_robot_command(
@@ -445,11 +445,11 @@ class MarkerOffsetCalibrationDialog:
             self.reflector_lt_points[label] = self.capture_tracker_point(f"{label} reflector_lt")
 
     def move_robot_to_park_position(self) -> None:
-        """Faehrt den Roboter nach dem Markieren auf eine sichere Parkposition.
+        """Fährt den Roboter nach dem Markieren auf eine sichere Parkposition.
 
         Wichtig:
-            Es wird bewusst kein home_all ausgefuehrt. Die Fahrt erfolgt im
-            bereits referenzierten Koordinatensystem ueber move_absolute_verified.
+            Es wird bewusst kein home_all ausgeführt. Die Fahrt erfolgt im
+            bereits referenzierten Koordinatensystem über move_absolute_verified.
         """
 
         self.log("")
@@ -463,11 +463,11 @@ class MarkerOffsetCalibrationDialog:
         current_x = getattr(state, "x", None) if state is not None else None
         current_y = getattr(state, "y", None) if state is not None else None
 
-        self.set_status("Fahre Roboter auf sichere Z-Parkhoehe.")
+        self.set_status("Fahre Roboter auf sichere Z-Parkhöhe.")
 
         if current_x is not None and current_y is not None:
             self.log(
-                f"Fahre zuerst auf sichere Z-Hoehe: "
+                f"Fahre zuerst auf sichere Z-Höhe: "
                 f"X={float(current_x):.3f}, Y={float(current_y):.3f}, Z={safe_z:.3f}"
             )
             self.send_robot_command(
@@ -482,7 +482,7 @@ class MarkerOffsetCalibrationDialog:
         else:
             self.log(
                 "Aktuelle XY-Position nicht sicher bekannt; "
-                "fahre direkt auf Parkposition mit sicherer Z-Hoehe."
+                "fahre direkt auf Parkposition mit sicherer Z-Höhe."
             )
 
         self.check_abort()
@@ -723,7 +723,7 @@ class MarkerOffsetCalibrationDialog:
             f"Std [mm]: X={result.std_offset_robot[0]:.6f}, "
             f"Y={result.std_offset_robot[1]:.6f}, Z={result.std_offset_robot[2]:.6f}"
         )
-        self.log(f"RMS Offset={result.rms_offset:.6f} mm | Max Abweichung={result.max_deviation:.6f} mm")
+        self.log(f"RMS Kalibrierwert={result.rms_offset:.6f} mm | Max Abweichung={result.max_deviation:.6f} mm")
         self.log(
             f"Helmert RMS={result.helmert.rms:.6f} mm | Helmert Max={result.helmert.max_residual:.6f} mm | "
             f"Scale={result.helmert.scale:.12f}"
@@ -826,13 +826,13 @@ class MarkerOffsetCalibrationDialog:
             update_marker_to_reflector_robot(vector)
             CONFIG.transformation.marker_to_reflector_robot = vector
         except Exception as exc:
-            self.log(f"FEHLER beim Speichern des Offsets: {exc}")
-            messagebox.showerror("Marker-/Reflektoroffset", str(exc), parent=self.window)
+            self.log(f"FEHLER beim Speichern der Kalibrierung: {exc}")
+            messagebox.showerror("Marker-/Reflektorkalibrierung", str(exc), parent=self.window)
             return
 
         self.previous_offset_robot = vector
         self.log("")
-        self.log("Offset wurde dauerhaft in config/mower_config.json gespeichert:")
+        self.log("Kalibrierwert wurde dauerhaft in der Config gespeichert:")
         self.log(f"  X={vector[0]:.6f}, Y={vector[1]:.6f}, Z={vector[2]:.6f}")
 
         if self.on_finished:
@@ -890,7 +890,7 @@ class MarkerOffsetCalibrationDialog:
     def log(self, text: str) -> None:
         self.gui_queue.put(("log", text))
         if self.external_log:
-            self.external_log(f"[Offset] {text}")
+            self.external_log(f"[Kalibrierung] {text}")
 
     def _write_log(self, text: str) -> None:
         timestamp = time.strftime("%H:%M:%S")

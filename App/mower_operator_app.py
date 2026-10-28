@@ -24,7 +24,7 @@ def find_project_root() -> Path:
     Erwartete Lage:
         Mower_II/App/mower_operator_app.py
 
-    Damit ist der Pfad unabhaengig vom aktuellen Arbeitsverzeichnis
+    Damit ist der Pfad unabhängig vom aktuellen Arbeitsverzeichnis
     der PyCharm-Run-Configuration.
     """
     if bool(getattr(sys, "frozen", False)):
@@ -36,7 +36,7 @@ def find_project_root() -> Path:
         if (parent / "config" / "mower_config.py").exists():
             return parent
 
-    # Fallback fuer den normalen Fall: App/mower_operator_app.py
+    # Fallback für den normalen Fall: App/mower_operator_app.py
     return app_file.parents[1]
 
 
@@ -65,10 +65,11 @@ def _record_startup_import_error(component: str, exc: Exception) -> None:
 
 
 try:
-    from config.mower_config import CONFIG, CONFIG_PATH
+    from config.mower_config import CONFIG, CONFIG_PATH, reload_active_config
 except Exception as exc:
     CONFIG = None
     CONFIG_PATH = None
+    reload_active_config = None
     _record_startup_import_error("Konfiguration", exc)
 
 try:
@@ -162,7 +163,7 @@ try:
     from App.dialogs.marker_offset_calibration_dialog import show_marker_offset_calibration_dialog
 except Exception as exc:
     show_marker_offset_calibration_dialog = None
-    _record_startup_import_error("Marker-Offset-Dialog", exc)
+    _record_startup_import_error("Marker-/Reflektorkalibrierung", exc)
 
 try:
     from App.dialogs.marker_height_calibration_dialog import show_marker_height_calibration_dialog
@@ -247,7 +248,7 @@ except Exception as exc:
 def project_path(relative_path: str | Path) -> Path:
     """
     Wandelt einen relativen Projektpfad aus der Config in einen absoluten Pfad um.
-    Absolute Pfade bleiben unveraendert.
+    Absolute Pfade bleiben unverändert.
     """
     path = Path(relative_path)
 
@@ -278,7 +279,7 @@ def get_configured_directory(name: str, fallback: str) -> Path:
 
 
 class OperatorMapView(MapView):
-    """Helle Kartenansicht fuer die klassische Operator-Oberflaeche."""
+    """Helle Kartenansicht für die klassische Operator-Oberfläche."""
 
     REFLECTOR_ZOOM_SIZE_MM = 1000.0
 
@@ -523,18 +524,18 @@ class OperatorMapView(MapView):
 
 class MowerOperatorApp(ctk.CTk):
     """
-    Klassische Bedienoberflaeche fuer das Mower-Abstecksystem.
+    Klassische Bedienoberfläche für das Mower-Abstecksystem.
 
     Ziel dieser Version:
-        - helle/graue Windows-artige Bedienoberflaeche
-        - Standard-Menueleiste statt eigener MenuBand
+        - helle/graue Windows-artige Bedienoberfläche
+        - Standard-Menüleiste statt eigener MenuBand
         - Punktliste links
         - 2D-Ansicht in der Mitte
         - Status und Live-Werte rechts
         - aktuelle Aktion unten
 
     Die Hardwarelogik ist bewusst so gehalten, dass vorhandene Dialoge und
-    spaetere echte Komponenten schrittweise eingehangen werden koennen.
+    spätere echte Komponenten schrittweise eingehangen werden können.
     """
 
     COLOR_BG = "#f2f2f2"
@@ -582,19 +583,19 @@ class MowerOperatorApp(ctk.CTk):
         # Lasertrackerkoordinaten
         self.tracker_station_xyz: tuple[float, float, float] | None = None
         self.current_lt_measurement_xyz: tuple[float, float, float] | None = None
-        # Letzte gueltige Reflektormessung fuer die Live-Kartenpose.
+        # Letzte gültige Reflektormessung für die Live-Kartenpose.
         # Wenn die Tracker-Messung kurzzeitig ausfaellt, darf die Karte nicht
-        # auf die statische Transformationspose zurueckspringen. Stattdessen
+        # auf die statische Transformationspose zurückspringen. Stattdessen
         # bleibt die letzte bekannte Reflektorposition als Anker erhalten.
         self.last_live_reflector_lt_xyz: tuple[float, float, float] | None = None
 
-        # Kompatibilitaet zu bisherigen Namen aus der V3/V5-Oberflaeche
+        # Kompatibilität zu bisherigen Namen aus der V3/V5-Oberfläche
         self.xyz_connected = False
         self.tracker_started = False
         self.skr_connected = False
         self.gyems_connected = False
 
-        # Spaetere echte Komponenten koennen hier gesetzt werden.
+        # Spaetere echte Komponenten können hier gesetzt werden.
         self.xyz_worker: Any | None = None
         self.xyz_state: Any | None = None
         self.transformation_z_prepare_pending = False
@@ -613,9 +614,9 @@ class MowerOperatorApp(ctk.CTk):
         self.gyro_reference_angle_deg: float | None = None
         self.gyro_lt_reference_orientation_deg: float | None = None
 
-        # Sicherheitsueberwachung nach gueltiger Transformation:
-        # Wenn sich der Murata-Winkel danach merklich aendert, ist die
-        # Transformation fuer den aktuellen Wagenzustand nicht mehr gueltig.
+        # Sicherheitsüberwachung nach gültiger Transformation:
+        # Wenn sich der Murata-Winkel danach merklich ändert, ist die
+        # Transformation für den aktuellen Wagenzustand nicht mehr gültig.
         try:
             self.trafo_gyro_invalid_threshold_deg: float = float(
                 getattr(getattr(CONFIG, "transformation", None), "gyro_invalid_threshold_deg", 0.03)
@@ -623,8 +624,8 @@ class MowerOperatorApp(ctk.CTk):
         except Exception:
             self.trafo_gyro_invalid_threshold_deg = 0.03
 
-        # Reflektornachfuehrung: Der Reflektor wird bei der Initialisierung
-        # mechanisch auf den Tracker ausgerichtet. Die Nachfuehrung arbeitet
+        # Reflektornachführung: Der Reflektor wird bei der Initialisierung
+        # mechanisch auf den Tracker ausgerichtet. Die Nachführung arbeitet
         # daher relativ zu dieser Referenzausrichtung, nicht mit einem
         # absoluten mechanischen Motorwinkel.
         self.reflector_aim_calculator: Any | None = None
@@ -635,8 +636,8 @@ class MowerOperatorApp(ctk.CTk):
         self.reflector_aim_direction_sign: float = 1.0
 
         # ARN-Regelung Stufe 1: defensiver P-Regler auf GYEMS-Speed.
-        # Die Nachfuehrung arbeitet nur, wenn ARN aktiv ist und alle
-        # benoetigten Live-Daten gueltig sind. Bei ungueltigem Zustand wird
+        # Die Nachführung arbeitet nur, wenn ARN aktiv ist und alle
+        # benötigten Live-Daten gültig sind. Bei ungültigem Zustand wird
         # der Motor per Speed=0 gestoppt.
         self.arn_control_kp: float = 2.0
         self.arn_control_deadband_deg: float = 0.5
@@ -669,10 +670,10 @@ class MowerOperatorApp(ctk.CTk):
         self._last_map_update_time_s = 0.0
         self._pending_map_update_after_id: str | None = None
 
-        # Letzte berechnete Wagenvisualisierung fuer die Karte.
-        # Diese Daten sind ausschliesslich Anzeigezustand. Wenn die
-        # Absteck-Transformation durch Bewegung ungueltig wird, bleibt der
-        # Wagen in der Karte sichtbar, wird aber nicht fuer Markierung oder
+        # Letzte berechnete Wagenvisualisierung für die Karte.
+        # Diese Daten sind ausschließlich Anzeigezustand. Wenn die
+        # Absteck-Transformation durch Bewegung ungültig wird, bleibt der
+        # Wagen in der Karte sichtbar, wird aber nicht für Markierung oder
         # Erreichbarkeit verwendet.
         self._last_robot_map_visualization_state: Any | None = None
 
@@ -776,8 +777,7 @@ class MowerOperatorApp(ctk.CTk):
         xyz_menu.add_command(label="Trennen", command=self.disconnect_xyz)
         xyz_menu.add_separator()
         xyz_menu.add_command(label="Homing", command=self.home_xyz)
-        xyz_menu.add_command(label="Fahre zu Position...", command=self.move_xyz_to_position_dialog)
-        xyz_menu.add_command(label="Position lesen", command=self.read_xyz_position)
+        xyz_menu.add_command(label="Manuelle Steuerung...", command=self.move_xyz_to_position_dialog)
         menu_bar.add_cascade(label="XYZ", menu=xyz_menu)
 
         tracker_menu = Menu(menu_bar, tearoff=False)
@@ -791,9 +791,6 @@ class MowerOperatorApp(ctk.CTk):
         motor_menu = Menu(menu_bar, tearoff=False)
         motor_menu.add_command(label="Verbinden", command=self.connect_drehmotor)
         motor_menu.add_command(label="Trennen", command=self.disconnect_drehmotor)
-        motor_menu.add_separator()
-        motor_menu.add_command(label="Referenz setzen", command=self.drehmotor_set_reference)
-        motor_menu.add_command(label="Stop", command=self.drehmotor_stop)
         motor_menu.add_separator()
         motor_menu.add_command(label="Status anzeigen", command=self.show_drehmotor_status)
         motor_menu.add_command(label="GYEMS Diagnose...", command=self.show_gyems_diagnostic_dialog)
@@ -814,8 +811,8 @@ class MowerOperatorApp(ctk.CTk):
         system_menu.add_command(label="Initialisieren [Ctrl+I]", command=self.initialize_system)
         system_menu.add_separator()
         system_menu.add_command(label="Transformation starten [Ctrl+T]", command=self.start_transformation)
-        system_menu.add_command(label="Marker-/Reflektoroffset kalibrieren [Ctrl+K]", command=self.offset_calibration)
-        system_menu.add_command(label="Markerhoehe kalibrieren [Ctrl+H]", command=self.calibrate_marker_height)
+        system_menu.add_command(label="Marker-/Reflektorkalibrierung [Ctrl+K]", command=self.offset_calibration)
+        system_menu.add_command(label="Markerhöhe kalibrieren [Ctrl+H]", command=self.calibrate_marker_height)
         system_menu.add_command(label="Punkte markieren [Ctrl+A]", command=self.mark_points_dialog)
         system_menu.add_command(label="Testmarkierung...", command=self.test_marking_dialog)
         system_menu.add_separator()
@@ -833,7 +830,7 @@ class MowerOperatorApp(ctk.CTk):
         self.configure(menu=menu_bar)
 
     def _bind_hotkeys(self) -> None:
-        """Registriert globale Tastenkombinationen fuer haeufige Systembefehle."""
+        """Registriert globale Tastenkombinationen für häufige Systembefehle."""
         self.bind_all("<Control-i>", lambda event: self._run_hotkey(event, self.initialize_system))
         self.bind_all("<Control-I>", lambda event: self._run_hotkey(event, self.initialize_system))
         self.bind_all("<Control-t>", lambda event: self._run_hotkey(event, self.start_transformation))
@@ -856,7 +853,7 @@ class MowerOperatorApp(ctk.CTk):
         return "break"
 
     def _hotkeys_should_ignore(self, event: tk.Event | None) -> bool:
-        """Verhindert Hotkeys in Eingabefeldern und waehrend modaler Dialoge."""
+        """Verhindert Hotkeys in Eingabefeldern und während modaler Dialoge."""
         if self._has_open_child_toplevel():
             return True
 
@@ -1051,8 +1048,8 @@ class MowerOperatorApp(ctk.CTk):
         panel.grid_rowconfigure(0, weight=1)
         panel.grid_columnconfigure(0, weight=1)
 
-        # In der Operator-Oberflaeche bleibt der Kartenbereich bewusst ruhig:
-        # keine zusaetzliche Ueberschrift und keine zweite Auswahl-Anzeige,
+        # In der Operator-Oberfläche bleibt der Kartenbereich bewusst ruhig:
+        # keine zusaetzliche Überschrift und keine zweite Auswahl-Anzeige,
         # da diese Informationen bereits in der Punktliste stehen.
         self.lbl_selected_point = None
 
@@ -1102,7 +1099,7 @@ class MowerOperatorApp(ctk.CTk):
         self._add_live_value_row(live, row=16, key="arn_speed_cmd", label="Speed")
 
     def _scrollable_status_card(self, parent: ctk.CTkFrame, *, title: str, row: int) -> tk.Frame:
-        """Statuskarte mit vertikaler Scrollleiste fuer kleine Bildschirmhoehen."""
+        """Statuskarte mit vertikaler Scrollleiste für kleine Bildschirmhöhen."""
 
         card = tk.Frame(
             parent,
@@ -1362,7 +1359,7 @@ class MowerOperatorApp(ctk.CTk):
         if load_project_file is None:
             messagebox.showerror(
                 "Projekt laden",
-                "Projekt-Ladefunktion ist nicht verfuegbar.",
+                "Projekt-Ladefunktion ist nicht verfügbar.",
                 parent=self,
             )
             return
@@ -1412,10 +1409,10 @@ class MowerOperatorApp(ctk.CTk):
 
     def show_point_viewer(self) -> None:
         if show_point_viewer_dialog is None:
-            self.log("Punktviewer ist nicht verfuegbar.")
+            self.log("Punktviewer ist nicht verfügbar.")
             messagebox.showerror(
                 "Punktviewer",
-                "Der Punktviewer ist nicht verfuegbar.",
+                "Der Punktviewer ist nicht verfügbar.",
                 parent=self,
             )
             return
@@ -1426,8 +1423,8 @@ class MowerOperatorApp(ctk.CTk):
                 points=self.points,
                 on_refresh=lambda: self.refresh_points(keep_map_view=True),
             )
-            self.log("Punktviewer geoeffnet.")
-            self.set_current_action("Punktviewer geoeffnet.")
+            self.log("Punktviewer geöffnet.")
+            self.set_current_action("Punktviewer geöffnet.")
         except Exception as exc:
             self.log(f"Punktviewer konnte nicht gestartet werden: {exc}")
             messagebox.showerror("Punktviewer", str(exc), parent=self)
@@ -1460,14 +1457,14 @@ class MowerOperatorApp(ctk.CTk):
 
         self.selected_point_name = self.points[0].name if self.points else None
         self.project_path = None
-        # Punktimport veraendert nur die Punktliste.
-        # Die Wagenpose/Transformation bleibt gueltig, da die Geometrie des
-        # Systems dadurch nicht veraendert wird.
+        # Punktimport verändert nur die Punktliste.
+        # Die Wagenpose/Transformation bleibt gültig, da die Geometrie des
+        # Systems dadurch nicht verändert wird.
         self._apply_demo_scene()
         self.refresh_points()
         self._update_window_title()
-        self.log(f"Punktdatei importiert: {file_path}. Transformation unveraendert.")
-        self.set_current_action("Punktdatei importiert. Transformation unveraendert.")
+        self.log(f"Punktdatei importiert: {file_path}. Transformation unverändert.")
+        self.set_current_action("Punktdatei importiert. Transformation unverändert.")
 
     def clear_points_dialog(self) -> None:
         if not self.points:
@@ -1477,7 +1474,7 @@ class MowerOperatorApp(ctk.CTk):
 
         confirmed = messagebox.askyesno(
             "Punkte löschen",
-            "Punkte wirklich löschen?\n\nDie aktuelle Transformation bleibt unveraendert.",
+            "Punkte wirklich löschen?\n\nDie aktuelle Transformation bleibt unverändert.",
             parent=self,
         )
 
@@ -1488,12 +1485,12 @@ class MowerOperatorApp(ctk.CTk):
         count = len(self.points)
         self.points = []
         self.selected_point_name = None
-        # Das Loeschen der Punktliste veraendert nicht die Systemgeometrie.
+        # Das Loeschen der Punktliste verändert nicht die Systemgeometrie.
         # Transformation, Wagenanzeige und ARN-Zustand bleiben daher erhalten.
         self._apply_demo_scene()
         self.refresh_points()
-        self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt. Transformation unveraendert.")
-        self.set_current_action("Punktliste gelöscht. Transformation unveraendert.")
+        self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt. Transformation unverändert.")
+        self.set_current_action("Punktliste gelöscht. Transformation unverändert.")
 
     def save_project(self) -> None:
         if self.project_path is None:
@@ -1528,7 +1525,7 @@ class MowerOperatorApp(ctk.CTk):
         if save_project_file is None:
             messagebox.showerror(
                 "Projekt speichern",
-                "Projekt-Speicherfunktion ist nicht verfuegbar.",
+                "Projekt-Speicherfunktion ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Projekt konnte nicht gespeichert werden.")
@@ -1554,7 +1551,7 @@ class MowerOperatorApp(ctk.CTk):
         if export_project_txt is None:
             messagebox.showerror(
                 "Daten exportieren",
-                "TXT-Exportfunktion ist nicht verfuegbar.",
+                "TXT-Exportfunktion ist nicht verfügbar.",
                 parent=self,
             )
             return
@@ -1608,7 +1605,7 @@ class MowerOperatorApp(ctk.CTk):
             if self.trafo_manager is not None and hasattr(self.trafo_manager, "invalidate"):
                 self.trafo_manager.invalidate(reason)
         except Exception as exc:
-            self.log(f"Transformation konnte nicht ueber TrafoManager invalidiert werden: {exc}")
+            self.log(f"Transformation konnte nicht über TrafoManager invalidiert werden: {exc}")
 
         self.trafo_valid = False
         self.gyro_lt_reference_orientation_deg = None
@@ -1635,15 +1632,15 @@ class MowerOperatorApp(ctk.CTk):
         }
 
     def open_log_file(self) -> None:
-        self.log("Logdatei wird geoeffnet.")
+        self.log("Logdatei wird geöffnet.")
         try:
             if hasattr(os, "startfile"):
                 os.startfile(self.log_file_path)  # type: ignore[attr-defined]
             else:
                 webbrowser.open(self.log_file_path.as_uri())
         except Exception as exc:
-            self.log(f"Logdatei konnte nicht geoeffnet werden: {exc}")
-            messagebox.showerror("Log oeffnen", str(exc), parent=self)
+            self.log(f"Logdatei konnte nicht geöffnet werden: {exc}")
+            messagebox.showerror("Log öffnen", str(exc), parent=self)
 
     def on_close(self) -> None:
         try:
@@ -1747,7 +1744,7 @@ class MowerOperatorApp(ctk.CTk):
                 elif "Verbindung getrennt" in message:
                     self.set_current_action("XYZ getrennt.")
                 elif "Homing gestartet" in message:
-                    self.set_current_action("XYZ-Homing laeuft...")
+                    self.set_current_action("XYZ-Homing läuft...")
                 elif "Homing abgeschlossen" in message:
                     self.set_current_action("XYZ-Homing abgeschlossen.")
                 elif "Z-Homing vor Transformation gestartet" in message:
@@ -1834,26 +1831,26 @@ class MowerOperatorApp(ctk.CTk):
         else:
             self.set_current_action("XYZ-Trennung fehlgeschlagen.")
 
-        # UI-Zustand direkt zuruecksetzen; falls der Worker danach noch einen
-        # State sendet, wird dieser durch on_xyz_state_changed uebernommen.
+        # UI-Zustand direkt zurücksetzen; falls der Worker danach noch einen
+        # State sendet, wird dieser durch on_xyz_state_changed übernommen.
         self.xyz_ready = False
         self.xyz_connected = False
         self.homing_done = False
         self.update_status()
 
     def home_xyz(self) -> None:
-        self.set_current_action("XYZ-Homing wird durchgefuehrt...")
+        self.set_current_action("XYZ-Homing wird durchgeführt...")
 
         if not self.xyz_ready:
-            self.log("XYZ-Homing nicht moeglich: XYZ ist nicht verbunden.")
+            self.log("XYZ-Homing nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning("XYZ Homing", "XYZ ist nicht verbunden.", parent=self)
-            self.set_current_action("Homing nicht moeglich: XYZ nicht verbunden.")
+            self.set_current_action("Homing nicht möglich: XYZ nicht verbunden.")
             return
 
         ok = self._send_xyz_command("home_all")
         if ok:
             self.log("XYZ Homing angefordert.")
-            self.set_current_action("XYZ-Homing laeuft...")
+            self.set_current_action("XYZ-Homing läuft...")
         else:
             self.set_current_action("XYZ-Homing konnte nicht gestartet werden.")
 
@@ -1861,9 +1858,9 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("XYZ manuell bewegen...")
 
         if not self.xyz_ready:
-            self.log("XYZ-Bewegungsdialog nicht moeglich: XYZ ist nicht verbunden.")
+            self.log("XYZ-Bewegungsdialog nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning("XYZ bewegen", "XYZ ist nicht verbunden.", parent=self)
-            self.set_current_action("XYZ-Bewegung nicht moeglich: XYZ nicht verbunden.")
+            self.set_current_action("XYZ-Bewegung nicht möglich: XYZ nicht verbunden.")
             return
 
         if show_xyz_manual_move_dialog is None:
@@ -1890,9 +1887,9 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("XYZ-Position wird gelesen...")
 
         if not self.xyz_ready:
-            self.log("XYZ-Position lesen nicht moeglich: XYZ ist nicht verbunden.")
+            self.log("XYZ-Position lesen nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning("XYZ", "XYZ ist nicht verbunden.", parent=self)
-            self.set_current_action("XYZ-Position lesen nicht moeglich.")
+            self.set_current_action("XYZ-Position lesen nicht möglich.")
             return
 
         ok = self._send_xyz_command("read_position")
@@ -2092,7 +2089,7 @@ class MowerOperatorApp(ctk.CTk):
         self.update_status()
 
     def load_tracker_station_for_initialization(self, configured_path: str) -> bool:
-        """Laedt den Trackerstandpunkt waehrend der Initialisierung.
+        """Lädt den Trackerstandpunkt während der Initialisierung.
 
         Die Methode wird vom Initialisierungsdialog im GUI-Thread aufgerufen.
         Fehler werden an den Initialisierungsworkflow weitergereicht und dort
@@ -2302,7 +2299,7 @@ class MowerOperatorApp(ctk.CTk):
             f"(kp={self.arn_control_kp:.2f}, Deadband={self.arn_control_deadband_deg:.2f} deg, "
             f"MaxSpeed={self.arn_control_max_speed_dps:.1f} deg/s)."
         )
-        self.set_current_action("Reflektornachfuehrung aktiv.")
+        self.set_current_action("Reflektornachführung aktiv.")
         self.update_status()
         return True
 
@@ -2316,10 +2313,10 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         if show_serial_connect_dialog is None:
-            self.log("GYEMS-Verbindungsdialog ist nicht verfuegbar.")
+            self.log("GYEMS-Verbindungsdialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Drehmotor",
-                "GYEMS-Verbindungsdialog ist nicht verfuegbar.",
+                "GYEMS-Verbindungsdialog ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Drehmotor-Verbindung fehlgeschlagen.")
@@ -2400,16 +2397,16 @@ class MowerOperatorApp(ctk.CTk):
         # Fachliches Referenzmodell:
         # Beim Initialisieren wird der Reflektor mechanisch exakt auf den
         # Lasertracker ausgerichtet. Diese aktuelle geometrische Richtung wird
-        # daher als Nullrichtung fuer die Nachfuehrung gespeichert. Ab dann
+        # daher als Nullrichtung für die Nachführung gespeichert. Ab dann
         # wird nur noch die relative Richtungsänderung verfolgt.
         self._update_reflector_aiming()
         aim = self.reflector_aim_result
         if aim is None or getattr(aim, "bearing_robot_deg", None) is None:
-            self.log("GYEMS Referenz setzen nicht moeglich: keine gueltige Reflektor-Sollrichtung vorhanden.")
+            self.log("GYEMS Referenz setzen nicht möglich: keine gültige Reflektor-Sollrichtung vorhanden.")
             messagebox.showwarning(
                 "Drehmotor Referenz",
-                "Keine gueltige Reflektor-Sollrichtung vorhanden.\n"
-                "Bitte Tracker, Murata und Transformation pruefen.",
+                "Keine gültige Reflektor-Sollrichtung vorhanden.\n"
+                "Bitte Tracker, Murata und Transformation prüfen.",
                 parent=self,
             )
             self.set_current_action("Drehmotor-Referenz nicht möglich: keine Sollrichtung.")
@@ -2486,26 +2483,26 @@ class MowerOperatorApp(ctk.CTk):
         messagebox.showinfo("Drehmotor Status", message, parent=self)
 
     def show_gyems_diagnostic_dialog(self) -> None:
-        self.set_current_action("GYEMS Diagnose wird geoeffnet...")
+        self.set_current_action("GYEMS Diagnose wird geöffnet...")
 
         if show_gyems_diagnostic_dialog is None:
-            self.log("GYEMS-Diagnosedialog ist nicht verfuegbar.")
+            self.log("GYEMS-Diagnosedialog ist nicht verfügbar.")
             messagebox.showerror(
                 "GYEMS Diagnose",
-                "GYEMS-Diagnosedialog ist nicht verfuegbar.",
+                "GYEMS-Diagnosedialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: GYEMS-Diagnosedialog nicht verfuegbar.")
+            self.set_current_action("Fehler: GYEMS-Diagnosedialog nicht verfügbar.")
             return
 
         if bool(getattr(self, "arn_active", False)):
             messagebox.showinfo(
                 "GYEMS Diagnose",
-                "Die Reflektornachfuehrung ist aktiv.\n"
-                "Fuer die manuelle GYEMS-Diagnose wird ARN deaktiviert und Speed=0 gesendet.",
+                "Die Reflektornachführung ist aktiv.\n"
+                "Für die manuelle GYEMS-Diagnose wird ARN deaktiviert und Speed=0 gesendet.",
                 parent=self,
             )
-            self.log("GYEMS Diagnose: ARN war aktiv und wird fuer die Diagnose deaktiviert.")
+            self.log("GYEMS Diagnose: ARN war aktiv und wird für die Diagnose deaktiviert.")
             self.deactivate_arn()
 
         try:
@@ -2518,11 +2515,11 @@ class MowerOperatorApp(ctk.CTk):
                 log=self.log,
                 set_current_action=self.set_current_action,
             )
-            self.set_current_action("GYEMS Diagnose geoeffnet.")
+            self.set_current_action("GYEMS Diagnose geöffnet.")
         except Exception as exc:
-            self.log(f"GYEMS-Diagnosedialog konnte nicht geoeffnet werden: {exc}")
+            self.log(f"GYEMS-Diagnosedialog konnte nicht geöffnet werden: {exc}")
             messagebox.showerror("GYEMS Diagnose", str(exc), parent=self)
-            self.set_current_action("GYEMS Diagnose konnte nicht geoeffnet werden.")
+            self.set_current_action("GYEMS Diagnose konnte nicht geöffnet werden.")
 
     def _gyems_connected_for_command(self, action_name: str) -> bool:
         if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
@@ -2603,10 +2600,10 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         if show_serial_connect_dialog is None:
-            self.log("Murata-Verbindungsdialog ist nicht verfuegbar.")
+            self.log("Murata-Verbindungsdialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Murata",
-                "Murata-Verbindungsdialog ist nicht verfuegbar.",
+                "Murata-Verbindungsdialog ist nicht verfügbar.",
                 parent=self,
             )
             self.set_current_action("Murata SCH16T Verbindung fehlgeschlagen.")
@@ -2754,7 +2751,7 @@ class MowerOperatorApp(ctk.CTk):
         messagebox.showinfo("Murata Status", message, parent=self)
 
     def show_murata_test(self) -> None:
-        """Oeffnet das eigenstaendige SCH16T-Testfenster exklusiv am COM-Port."""
+        """Öffnet das eigenständige SCH16T-Testfenster exklusiv am COM-Port."""
         state = self.gyro_state
         if state is not None and bool(getattr(state, "connected", False)):
             messagebox.showwarning(
@@ -2773,13 +2770,13 @@ class MowerOperatorApp(ctk.CTk):
         if show_murata_test_dialog is None:
             messagebox.showerror(
                 "Murata-Test",
-                "Das Murata-Testfenster ist nicht verfuegbar.",
+                "Das Murata-Testfenster ist nicht verfügbar.",
                 parent=self,
             )
             return
 
-        self.set_current_action("Murata-Testfenster geoeffnet.")
-        self.log("Murata-Testfenster geoeffnet.")
+        self.set_current_action("Murata-Testfenster geöffnet.")
+        self.log("Murata-Testfenster geöffnet.")
         try:
             show_murata_test_dialog(
                 self,
@@ -3081,61 +3078,61 @@ class MowerOperatorApp(ctk.CTk):
         self.update_status()
 
     def offset_calibration(self) -> None:
-        self.set_current_action("Marker-/Reflektoroffset-Kalibrierung wird vorbereitet...")
+        self.set_current_action("Marker-/Reflektorkalibrierung wird vorbereitet...")
 
         if show_marker_offset_calibration_dialog is None:
-            self.log("Marker-/Reflektoroffset-Dialog ist nicht verfügbar.")
+            self.log("Marker-/Reflektorkalibrierung ist nicht verfügbar.")
             messagebox.showerror(
-                "Marker-/Reflektoroffset",
-                "Marker-/Reflektoroffset-Dialog ist nicht verfügbar.",
+                "Marker-/Reflektorkalibrierung",
+                "Der Kalibrierungsdialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: Offset-Dialog nicht verfügbar.")
+            self.set_current_action("Fehler: Kalibrierungsdialog nicht verfügbar.")
             return
 
         if not self.xyz_ready or self.xyz_worker is None:
-            self.log("Offset-Kalibrierung nicht möglich: XYZ ist nicht verbunden.")
+            self.log("Marker-/Reflektorkalibrierung nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning(
-                "Marker-/Reflektoroffset",
+                "Marker-/Reflektorkalibrierung",
                 "XYZ ist nicht verbunden.",
                 parent=self,
             )
-            self.set_current_action("Offset-Kalibrierung nicht möglich: XYZ nicht verbunden.")
+            self.set_current_action("Kalibrierung nicht möglich: XYZ nicht verbunden.")
             return
 
         if not self.homing_done:
-            self.log("Offset-Kalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
+            self.log("Marker-/Reflektorkalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
             messagebox.showwarning(
-                "Marker-/Reflektoroffset",
+                "Marker-/Reflektorkalibrierung",
                 "Bitte zuerst XYZ-Homing durchführen.",
                 parent=self,
             )
-            self.set_current_action("Offset-Kalibrierung nicht möglich: Homing fehlt.")
+            self.set_current_action("Kalibrierung nicht möglich: Homing fehlt.")
             return
 
         if not self.tracker_ready or self.tracker_receiver is None:
-            self.log("Offset-Kalibrierung nicht möglich: Tracker UDP-Empfang läuft nicht.")
+            self.log("Marker-/Reflektorkalibrierung nicht möglich: Tracker UDP-Empfang läuft nicht.")
             messagebox.showwarning(
-                "Marker-/Reflektoroffset",
+                "Marker-/Reflektorkalibrierung",
                 "Tracker UDP-Empfang läuft nicht.",
                 parent=self,
             )
-            self.set_current_action("Offset-Kalibrierung nicht möglich: Tracker nicht bereit.")
+            self.set_current_action("Kalibrierung nicht möglich: Tracker nicht bereit.")
             return
 
         if not self.tracker_data_current:
-            self.log("Offset-Kalibrierung nicht möglich: keine aktuellen Trackerdaten vorhanden.")
+            self.log("Marker-/Reflektorkalibrierung nicht möglich: keine aktuellen Trackerdaten vorhanden.")
             messagebox.showwarning(
-                "Marker-/Reflektoroffset",
+                "Marker-/Reflektorkalibrierung",
                 "Es sind keine aktuellen Trackerdaten vorhanden.",
                 parent=self,
             )
-            self.set_current_action("Offset-Kalibrierung nicht möglich: keine aktuellen Trackerdaten.")
+            self.set_current_action("Kalibrierung nicht möglich: keine aktuellen Trackerdaten.")
             return
 
         try:
-            self.log("Marker-/Reflektoroffset-Dialog wird geöffnet.")
-            self.set_current_action("Marker-/Reflektoroffset-Kalibrierung läuft...")
+            self.log("Marker-/Reflektorkalibrierung wird geöffnet.")
+            self.set_current_action("Marker-/Reflektorkalibrierung läuft...")
 
             show_marker_offset_calibration_dialog(
                 parent=self,
@@ -3147,56 +3144,56 @@ class MowerOperatorApp(ctk.CTk):
             )
 
         except Exception as exc:
-            self.log(f"Offset-Dialog konnte nicht gestartet werden: {exc}")
-            messagebox.showerror("Marker-/Reflektoroffset", str(exc), parent=self)
-            self.set_current_action("Offset-Kalibrierung konnte nicht gestartet werden.")
+            self.log(f"Kalibrierungsdialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Marker-/Reflektorkalibrierung", str(exc), parent=self)
+            self.set_current_action("Marker-/Reflektorkalibrierung konnte nicht gestartet werden.")
             self.update_status()
 
     def on_marker_offset_calibration_finished(self) -> None:
-        self.set_current_action("Marker-/Reflektoroffset-Kalibrierung abgeschlossen.")
+        self.set_current_action("Marker-/Reflektorkalibrierung abgeschlossen.")
         self.update_status()
 
     def calibrate_marker_height(self) -> None:
-        self.set_current_action("Markerhoehen-Kalibrierung wird vorbereitet...")
+        self.set_current_action("Markerhöhen-Kalibrierung wird vorbereitet...")
 
         if CONFIG is None:
-            messagebox.showerror("Markerhoehe", "CONFIG ist nicht geladen.", parent=self)
+            messagebox.showerror("Markerhöhe", "CONFIG ist nicht geladen.", parent=self)
             self.set_current_action("Fehler: CONFIG nicht geladen.")
             return
 
         if show_marker_height_calibration_dialog is None:
-            self.log("Markerhoehen-Dialog ist nicht verfügbar.")
+            self.log("Markerhöhen-Dialog ist nicht verfügbar.")
             messagebox.showerror(
-                "Markerhoehe",
-                "Markerhoehen-Dialog ist nicht verfügbar.",
+                "Markerhöhe",
+                "Markerhöhen-Dialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: Markerhoehen-Dialog nicht verfügbar.")
+            self.set_current_action("Fehler: Markerhöhen-Dialog nicht verfügbar.")
             return
 
         if not self.xyz_ready or self.xyz_worker is None:
-            self.log("Markerhoehen-Kalibrierung nicht möglich: XYZ ist nicht verbunden.")
+            self.log("Markerhöhen-Kalibrierung nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning(
-                "Markerhoehe",
+                "Markerhöhe",
                 "XYZ ist nicht verbunden.",
                 parent=self,
             )
-            self.set_current_action("Markerhoehen-Kalibrierung nicht möglich: XYZ nicht verbunden.")
+            self.set_current_action("Markerhöhen-Kalibrierung nicht möglich: XYZ nicht verbunden.")
             return
 
         if not self.homing_done:
-            self.log("Markerhoehen-Kalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
+            self.log("Markerhöhen-Kalibrierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
             messagebox.showwarning(
-                "Markerhoehe",
+                "Markerhöhe",
                 "Bitte zuerst XYZ-Homing durchführen.",
                 parent=self,
             )
-            self.set_current_action("Markerhoehen-Kalibrierung nicht möglich: Homing fehlt.")
+            self.set_current_action("Markerhöhen-Kalibrierung nicht möglich: Homing fehlt.")
             return
 
         try:
-            self.log("Markerhoehen-Dialog wird geöffnet.")
-            self.set_current_action("Markerhoehen-Kalibrierung läuft...")
+            self.log("Markerhöhen-Dialog wird geöffnet.")
+            self.set_current_action("Markerhöhen-Kalibrierung läuft...")
 
             show_marker_height_calibration_dialog(
                 parent=self,
@@ -3210,13 +3207,13 @@ class MowerOperatorApp(ctk.CTk):
             )
 
         except Exception as exc:
-            self.log(f"Markerhoehen-Dialog konnte nicht gestartet werden: {exc}")
-            messagebox.showerror("Markerhoehe", str(exc), parent=self)
-            self.set_current_action("Markerhoehen-Kalibrierung konnte nicht gestartet werden.")
+            self.log(f"Markerhöhen-Dialog konnte nicht gestartet werden: {exc}")
+            messagebox.showerror("Markerhöhe", str(exc), parent=self)
+            self.set_current_action("Markerhöhen-Kalibrierung konnte nicht gestartet werden.")
             self.update_status()
 
     def on_marker_height_calibration_finished(self) -> None:
-        self.set_current_action("Markerhoehen-Kalibrierung abgeschlossen.")
+        self.set_current_action("Markerhöhen-Kalibrierung abgeschlossen.")
         self.update_status()
 
 
@@ -3224,57 +3221,67 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("Punkte markieren wird vorbereitet...")
 
         if show_point_marking_dialog is None:
-            self.log("Punkte-markieren-Dialog ist nicht verfuegbar.")
+            self.log("Punkte-markieren-Dialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Punkte markieren",
-                "Punkte-markieren-Dialog ist nicht verfuegbar.",
+                "Punkte-markieren-Dialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: Punkte-markieren-Dialog nicht verfuegbar.")
+            self.set_current_action("Fehler: Punkte-markieren-Dialog nicht verfügbar.")
             return
 
         if not self.xyz_ready or self.xyz_worker is None:
-            self.log("Punkte markieren nicht moeglich: XYZ ist nicht verbunden.")
+            self.log("Punkte markieren nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning(
                 "Punkte markieren",
                 "XYZ ist nicht verbunden.",
                 parent=self,
             )
-            self.set_current_action("Punkte markieren nicht moeglich: XYZ nicht verbunden.")
+            self.set_current_action("Punkte markieren nicht möglich: XYZ nicht verbunden.")
             return
 
         if not self.homing_done:
-            self.log("Punkte markieren nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            self.log("Punkte markieren nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
             messagebox.showwarning(
                 "Punkte markieren",
-                "Bitte zuerst XYZ-Homing durchfuehren.",
+                "Bitte zuerst XYZ-Homing durchführen.",
                 parent=self,
             )
-            self.set_current_action("Punkte markieren nicht moeglich: Homing fehlt.")
-            return
-
-        if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
-            self.log("Punkte markieren nicht moeglich: keine gueltige Transformation vorhanden.")
-            messagebox.showwarning(
-                "Punkte markieren",
-                "Es ist keine gueltige Transformation vorhanden.",
-                parent=self,
-            )
-            self.set_current_action("Punkte markieren nicht moeglich: Trafo ungueltig.")
+            self.set_current_action("Punkte markieren nicht möglich: Homing fehlt.")
             return
 
         if not self.points:
-            self.log("Punkte markieren nicht moeglich: keine Punkte geladen.")
+            self.log("Punkte markieren nicht möglich: keine Punkte geladen.")
             messagebox.showwarning(
                 "Punkte markieren",
                 "Es sind keine Punkte geladen.",
                 parent=self,
             )
-            self.set_current_action("Punkte markieren nicht moeglich: keine Punkte geladen.")
+            self.set_current_action("Punkte markieren nicht möglich: keine Punkte geladen.")
+            return
+
+        if self.trafo_manager is None:
+            self.log("Punkte markieren nicht möglich: TrafoManager ist nicht verfügbar.")
+            messagebox.showerror(
+                "Punkte markieren",
+                "Die Transformationsfunktion ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Punkte markieren nicht möglich: Transformation nicht verfügbar.")
+            return
+
+        if not bool(getattr(self.trafo_manager, "valid", False)):
+            self.log("Punkte markieren nicht möglich: keine gültige Transformation vorhanden.")
+            if self._ask_start_transformation_for_marking():
+                self.log("Transformation wurde aus dem Markierdialog angefordert.")
+                self.set_current_action("Transformation wird vor dem Markieren gestartet...")
+                self.after(50, self.start_transformation)
+            else:
+                self.set_current_action("Punkte markieren abgebrochen: keine gültige Transformation.")
             return
 
         try:
-            self.log("Punkte-markieren-Dialog wird geoeffnet.")
+            self.log("Punkte-markieren-Dialog wird geöffnet.")
             self.set_current_action("Punkte markieren...")
 
             show_point_marking_dialog(
@@ -3295,6 +3302,55 @@ class MowerOperatorApp(ctk.CTk):
             self.set_current_action("Punkte markieren konnte nicht gestartet werden.")
             self.update_status()
 
+    def _ask_start_transformation_for_marking(self) -> bool:
+        """Fragt mit eindeutig beschrifteten Schaltflächen nach einer Transformation."""
+
+        result = {"start": False}
+        dialog = tk.Toplevel(self)
+        dialog.title("Keine gültige Transformation")
+        dialog.transient(self)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        frame = ttk.Frame(dialog, padding=18)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "Für die Absteckung ist eine gültige Transformation erforderlich.\n\n"
+                "Soll die Transformation jetzt durchgeführt werden?"
+            ),
+            justify="left",
+            wraplength=460,
+        ).grid(row=0, column=0, columnspan=2, padx=4, pady=(0, 18), sticky="w")
+
+        def finish(start: bool) -> None:
+            result["start"] = start
+            dialog.destroy()
+
+        ttk.Button(
+            frame,
+            text="Transformation durchführen",
+            command=lambda: finish(True),
+            width=28,
+        ).grid(row=1, column=0, padx=(0, 6), sticky="ew")
+        ttk.Button(
+            frame,
+            text="Abbrechen",
+            command=lambda: finish(False),
+            width=16,
+        ).grid(row=1, column=1, padx=(6, 0), sticky="ew")
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: finish(False))
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + max((self.winfo_width() - dialog.winfo_width()) // 2, 0)
+        y = self.winfo_rooty() + max((self.winfo_height() - dialog.winfo_height()) // 2, 0)
+        dialog.geometry(f"+{x}+{y}")
+        self.wait_window(dialog)
+        return bool(result["start"])
+
     def on_point_marking_finished(self) -> None:
         self.set_current_action("Punkte markieren abgeschlossen.")
         self.refresh_points(keep_map_view=True)
@@ -3304,37 +3360,37 @@ class MowerOperatorApp(ctk.CTk):
         self.set_current_action("Testmarkierung wird vorbereitet...")
 
         if show_test_marking_dialog is None:
-            self.log("Testmarkierungsdialog ist nicht verfuegbar.")
+            self.log("Testmarkierungsdialog ist nicht verfügbar.")
             messagebox.showerror(
                 "Testmarkierung",
-                "Testmarkierungsdialog ist nicht verfuegbar.",
+                "Testmarkierungsdialog ist nicht verfügbar.",
                 parent=self,
             )
-            self.set_current_action("Fehler: Testmarkierungsdialog nicht verfuegbar.")
+            self.set_current_action("Fehler: Testmarkierungsdialog nicht verfügbar.")
             return
 
         if not self.xyz_ready or self.xyz_worker is None:
-            self.log("Testmarkierung nicht moeglich: XYZ ist nicht verbunden.")
+            self.log("Testmarkierung nicht möglich: XYZ ist nicht verbunden.")
             messagebox.showwarning(
                 "Testmarkierung",
                 "XYZ ist nicht verbunden.",
                 parent=self,
             )
-            self.set_current_action("Testmarkierung nicht moeglich: XYZ nicht verbunden.")
+            self.set_current_action("Testmarkierung nicht möglich: XYZ nicht verbunden.")
             return
 
         if not self.homing_done:
-            self.log("Testmarkierung nicht moeglich: XYZ-Homing wurde noch nicht durchgefuehrt.")
+            self.log("Testmarkierung nicht möglich: XYZ-Homing wurde noch nicht durchgeführt.")
             messagebox.showwarning(
                 "Testmarkierung",
-                "Bitte zuerst XYZ-Homing durchfuehren.",
+                "Bitte zuerst XYZ-Homing durchführen.",
                 parent=self,
             )
-            self.set_current_action("Testmarkierung nicht moeglich: Homing fehlt.")
+            self.set_current_action("Testmarkierung nicht möglich: Homing fehlt.")
             return
 
         try:
-            self.log("Testmarkierungsdialog wird geoeffnet.")
+            self.log("Testmarkierungsdialog wird geöffnet.")
             self.set_current_action("Testmarkierung bereit.")
             show_test_marking_dialog(
                 parent=self,
@@ -3354,20 +3410,20 @@ class MowerOperatorApp(ctk.CTk):
         self.update_status()
 
     def activate_arn(self) -> None:
-        self.set_current_action("Reflektornachfuehrung wird aktiviert...")
+        self.set_current_action("Reflektornachführung wird aktiviert...")
 
-        if not self._gyems_connected_for_command("Reflektornachfuehrung aktivieren"):
+        if not self._gyems_connected_for_command("Reflektornachführung aktivieren"):
             return
 
         if self.reflector_aim_reference_bearing_robot_deg is None:
-            self.log("Reflektornachfuehrung nicht aktiviert: Drehmotor-Referenz fehlt.")
+            self.log("Reflektornachführung nicht aktiviert: Drehmotor-Referenz fehlt.")
             messagebox.showwarning(
-                "Reflektornachfuehrung",
+                "Reflektornachführung",
                 "Bitte zuerst den Reflektor mechanisch auf den Tracker ausrichten\n"
                 "und dann Drehmotor -> Referenz setzen.",
                 parent=self,
             )
-            self.set_current_action("Reflektornachfuehrung nicht moeglich: Referenz fehlt.")
+            self.set_current_action("Reflektornachführung nicht möglich: Referenz fehlt.")
             return
 
         self.arn_active = True
@@ -3375,21 +3431,21 @@ class MowerOperatorApp(ctk.CTk):
         self._arn_last_log_state = None
         self._arn_last_sent_speed_dps = None
         self.log(
-            "Reflektornachfuehrung aktiviert "
+            "Reflektornachführung aktiviert "
             f"(kp={self.arn_control_kp:.2f}, Deadband={self.arn_control_deadband_deg:.2f} deg, "
             f"MaxSpeed={self.arn_control_max_speed_dps:.1f} deg/s)."
         )
-        self.set_current_action("Reflektornachfuehrung aktiv.")
+        self.set_current_action("Reflektornachführung aktiv.")
         self.update_status()
 
     def deactivate_arn(self) -> None:
-        self.set_current_action("Reflektornachfuehrung wird deaktiviert...")
+        self.set_current_action("Reflektornachführung wird deaktiviert...")
         self.arn_active = False
         self._send_arn_speed_command(0.0, force=True)
         self.arn_speed_cmd_dps = 0.0
         self._arn_last_log_state = None
-        self.log("Reflektornachfuehrung deaktiviert. GYEMS-Speed auf 0 gesetzt.")
-        self.set_current_action("Reflektornachfuehrung inaktiv.")
+        self.log("Reflektornachführung deaktiviert. GYEMS-Speed auf 0 gesetzt.")
+        self.set_current_action("Reflektornachführung inaktiv.")
         self.update_status()
 
     def show_active_config(self) -> None:
@@ -3398,8 +3454,73 @@ class MowerOperatorApp(ctk.CTk):
         messagebox.showinfo("Aktive Config", message, parent=self)
 
     def reload_config(self) -> None:
-        self.set_current_action("Config neu laden angefordert...")
-        self.log("Config neu laden: noch nicht implementiert. Aktuell wird CONFIG beim Programmstart geladen.")
+        self.set_current_action("Config wird neu geladen...")
+
+        if reload_active_config is None:
+            self.log("Config neu laden nicht möglich: Ladefunktion ist nicht verfügbar.")
+            messagebox.showerror(
+                "Config neu laden",
+                "Die Config-Ladefunktion ist nicht verfügbar.",
+                parent=self,
+            )
+            self.set_current_action("Config konnte nicht neu geladen werden.")
+            return
+
+        try:
+            reload_active_config()
+        except Exception as exc:
+            self.log(f"FEHLER beim Neuladen der Config: {exc}")
+            messagebox.showerror(
+                "Config neu laden",
+                "Die Config konnte nicht neu geladen werden.\n\n"
+                f"Die bisherige Config bleibt aktiv.\n\n{exc}",
+                parent=self,
+            )
+            self.set_current_action("Config konnte nicht neu geladen werden.")
+            return
+
+        arn_was_active = bool(self.arn_active)
+        if arn_was_active:
+            self.deactivate_arn()
+
+        self.trafo_gyro_invalid_threshold_deg = float(
+            getattr(CONFIG.transformation, "gyro_invalid_threshold_deg", 0.03)
+        )
+        self.arn_control_kp = float(getattr(CONFIG.arn, "kp", 2.0))
+        self.arn_control_deadband_deg = float(getattr(CONFIG.arn, "deadband_deg", 0.5))
+        self.arn_control_max_speed_dps = float(getattr(CONFIG.arn, "max_speed_deg_s", 20.0))
+        self.arn_command_interval_s = max(
+            0.01,
+            float(getattr(CONFIG.arn, "command_interval_ms", 150)) / 1000.0,
+        )
+        self.reflector_aim_direction_sign = float(
+            getattr(CONFIG.arn, "direction_sign", 1.0)
+        )
+
+        trafo_was_valid = bool(
+            self.trafo_manager is not None
+            and getattr(self.trafo_manager, "valid", False)
+        )
+        if trafo_was_valid:
+            self._invalidate_project_transformation(
+                "Config neu geladen; Transformation muss neu bestimmt werden."
+            )
+
+        self.update_map_visualization(keep_view=True)
+        self.update_status()
+        self.log(f"Config erfolgreich neu geladen: {CONFIG_PATH}")
+
+        notes = ["Die Config wurde erfolgreich neu geladen."]
+        if trafo_was_valid:
+            notes.append("Die bisherige Transformation wurde aus Sicherheitsgründen ungültig gesetzt.")
+        if arn_was_active:
+            notes.append("Die Reflektornachführung wurde deaktiviert.")
+        notes.append(
+            "Geänderte COM-Ports, Baudraten oder der UDP-Port werden erst nach "
+            "Trennen und erneutem Verbinden der jeweiligen Komponente verwendet."
+        )
+        messagebox.showinfo("Config neu laden", "\n\n".join(notes), parent=self)
+        self.set_current_action("Config erfolgreich neu geladen.")
 
     # --------------------------------------------------
     # Point handling
@@ -3472,19 +3593,19 @@ class MowerOperatorApp(ctk.CTk):
             point.selected = point.name == self.selected_point_name
         self.map_view.set_points(self.points, keep_view=True)
         self._update_selected_label()
-        self.set_current_action(f"Punkt {name} ausgewaehlt.")
+        self.set_current_action(f"Punkt {name} ausgewählt.")
 
     def on_point_tree_double_click(self, _event: tk.Event | None = None) -> None:
         point = self.selected_point()
         if point is not None:
-            self.set_current_action(f"Punkt {point.name} ausgewaehlt.")
+            self.set_current_action(f"Punkt {point.name} ausgewählt.")
 
     def select_point_by_name(self, name: str) -> None:
         if not any(point.name == name for point in self.points):
             return
         self.selected_point_name = name
         self.refresh_points(keep_map_view=True)
-        self.set_current_action(f"Punkt {name} ausgewaehlt.")
+        self.set_current_action(f"Punkt {name} ausgewählt.")
 
     def selected_point(self) -> StakeoutPoint | None:
         for point in self.points:
@@ -3582,8 +3703,8 @@ class MowerOperatorApp(ctk.CTk):
     def _apply_demo_scene(self) -> None:
         """Aktualisiert die Kartenvisualisierung ohne Demo-Arbeitsbereich.
 
-        Der Name bleibt aus Kompatibilitaetsgruenden erhalten, wird aber nicht mehr
-        fuer einen kuenstlichen Rahmen um die Punkte verwendet. Der Arbeitsbereich
+        Der Name bleibt aus Kompatibilitätsgründen erhalten, wird aber nicht mehr
+        für einen künstlichen Rahmen um die Punkte verwendet. Der Arbeitsbereich
         wird nur aus der aktiven Transformation berechnet.
         """
 
@@ -3592,7 +3713,7 @@ class MowerOperatorApp(ctk.CTk):
     def request_live_map_update(self) -> None:
         """Fordert ein gedrosseltes Kartenupdate an.
 
-        Tracker und Murata koennen deutlich schneller Daten liefern als die GUI
+        Tracker und Murata können deutlich schneller Daten liefern als die GUI
         sinnvoll zeichnen sollte. Die Karte wird daher auf die konfigurierte
         Anzeige-Rate begrenzt.
         """
@@ -3663,10 +3784,10 @@ class MowerOperatorApp(ctk.CTk):
             live_orientation_lt_deg=self._current_gyro_orientation_lt_deg(),
         )
 
-        # Die Wagenanzeige darf auch nach einer ungueltig gewordenen
+        # Die Wagenanzeige darf auch nach einer ungültig gewordenen
         # Transformation mit Tracker/Murata weiter live aktualisiert werden.
         # Die Live-Erreichbarkeit darf daraus aber NICHT abgeleitet werden,
-        # weil sie sonst wie eine gueltige Absteckfreigabe wirken wuerde.
+        # weil sie sonst wie eine gültige Absteckfreigabe wirken wuerde.
         reachability_workspace = state.workspace_polygon if self._map_visualization_valid_for_reachability() else None
         self._update_live_reachability_from_visualization(reachability_workspace)
 
@@ -3719,8 +3840,8 @@ class MowerOperatorApp(ctk.CTk):
         """Aktualisiert die Anzeige-Erreichbarkeit aus dem live dargestellten Markierbereich.
 
         Diese Erreichbarkeit ist bewusst eine Bedien-/Visualisierungshilfe. Sie
-        aendert nicht die Transformations- oder Markierlogik, sondern sorgt nur
-        dafuer, dass Punktfarben, Punktliste und Zaehler zur aktuell angezeigten
+        ändert nicht die Transformations- oder Markierlogik, sondern sorgt nur
+        dafür, dass Punktfarben, Punktliste und Zähler zur aktuell angezeigten
         Kartenpose passen.
         """
 
@@ -3902,11 +4023,11 @@ class MowerOperatorApp(ctk.CTk):
         self._set_live_value("arn_speed_cmd", self._format_signed_value(self.arn_speed_cmd_dps, precision=2, suffix=" °/s"))
 
     def _update_arn_control(self) -> None:
-        """Fuehrt die erste defensive ARN-Regelstufe aus.
+        """Führt die erste defensive ARN-Regelstufe aus.
 
         Der Regler gibt nur ein begrenztes GYEMS-Speed-Kommando aus. Sobald
-        ARN inaktiv ist oder eine benoetigte Bedingung fehlt, wird Speed=0
-        gesendet. Dadurch bleibt die Nachfuehrung fuer den ersten Praxistest
+        ARN inaktiv ist oder eine benötigte Bedingung fehlt, wird Speed=0
+        gesendet. Dadurch bleibt die Nachführung für den ersten Praxistest
         kontrollierbar.
         """
 
@@ -3920,14 +4041,14 @@ class MowerOperatorApp(ctk.CTk):
         if not ready:
             self.arn_speed_cmd_dps = 0.0
             self._send_arn_speed_command(0.0)
-            self._log_arn_state_once(f"paused:{reason}", f"Reflektornachfuehrung pausiert: {reason}.")
+            self._log_arn_state_once(f"paused:{reason}", f"Reflektornachführung pausiert: {reason}.")
             return
 
         error_deg = self.reflector_aim_relative_error_deg
         if error_deg is None:
             self.arn_speed_cmd_dps = 0.0
             self._send_arn_speed_command(0.0)
-            self._log_arn_state_once("paused:no_error", "Reflektornachfuehrung pausiert: kein Winkelfehler berechenbar.")
+            self._log_arn_state_once("paused:no_error", "Reflektornachführung pausiert: kein Winkelfehler berechenbar.")
             return
 
         error = float(error_deg)
@@ -3939,7 +4060,7 @@ class MowerOperatorApp(ctk.CTk):
 
         self.arn_speed_cmd_dps = speed
         self._send_arn_speed_command(speed)
-        self._log_arn_state_once("active", "Reflektornachfuehrung regelt.")
+        self._log_arn_state_once("active", "Reflektornachführung regelt.")
 
     def _arn_control_ready(self) -> tuple[bool, str]:
         if self.gyems_worker is None or self.gyems_state is None or not bool(getattr(self.gyems_state, "connected", False)):
@@ -3949,13 +4070,13 @@ class MowerOperatorApp(ctk.CTk):
         if not self.tracker_data_current:
             return False, "Trackerdaten nicht aktuell"
         if self._current_gyro_orientation_lt_deg() is None:
-            return False, "Murata-Orientierung nicht verfuegbar"
+            return False, "Murata-Orientierung nicht verfügbar"
         if self.reflector_aim_reference_bearing_robot_deg is None:
             return False, "Reflektor-Referenz fehlt"
         if self.reflector_aim_result is None:
             return False, "Sollrichtung nicht berechenbar"
         if self._current_gyems_angle_deg() is None:
-            return False, "GYEMS-Istwinkel nicht verfuegbar"
+            return False, "GYEMS-Istwinkel nicht verfügbar"
         return True, "ok"
 
     def _send_arn_speed_command(self, speed_dps: float, *, force: bool = False) -> None:
@@ -3991,10 +4112,10 @@ class MowerOperatorApp(ctk.CTk):
         self.log(message)
 
     def _update_reflector_aiming(self) -> None:
-        """Berechnet die Anzeige der relativen Reflektornachfuehrung.
+        """Berechnet die Anzeige der relativen Reflektornachführung.
 
         Die absolute Richtung zum Tracker ist nur eine geometrische
-        Zwischengroesse. Fuer die Nachfuehrung zaehlt die Differenz zur
+        Zwischengröße. Für die Nachführung zählt die Differenz zur
         Referenzausrichtung, die mit "Drehmotor -> Referenz setzen" gespeichert
         wird. Dadurch ist keine mechanische Winkelkalibrierung erforderlich.
         """
@@ -4102,21 +4223,21 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         reason = (
-            "Transformation ungueltig: "
-            f"Murata-Winkelaenderung {delta_deg:+.4f} deg "
+            "Transformation ungültig: "
+            f"Murata-Winkeländerung {delta_deg:+.4f} deg "
             f"> {threshold_deg:.4f} deg seit der Transformation."
         )
         self._invalidate_transformation(reason)
 
     def _invalidate_transformation(self, reason: str) -> None:
-        """Setzt nur die aktive Absteck-Transformation ungueltig.
+        """Setzt nur die aktive Absteck-Transformation ungültig.
 
-        Wichtig: Die Reflektornachfuehrung (ARN) darf dadurch nicht deaktiviert
-        werden. Gerade eine Wagenbewegung macht die Transformation ungueltig,
-        aber die ARN soll den Reflektor waehrend dieser Bewegung weiter zum
+        Wichtig: Die Reflektornachführung (ARN) darf dadurch nicht deaktiviert
+        werden. Gerade eine Wagenbewegung macht die Transformation ungültig,
+        aber die ARN soll den Reflektor während dieser Bewegung weiter zum
         Lasertracker ausrichten.
         """
-        reason_text = str(reason).strip() or "Transformation ungueltig."
+        reason_text = str(reason).strip() or "Transformation ungültig."
 
         if self.trafo_manager is not None and hasattr(self.trafo_manager, "invalidate"):
             try:
@@ -4129,16 +4250,16 @@ class MowerOperatorApp(ctk.CTk):
 
         # Murata-/ARN-Referenzen bewusst erhalten:
         # - gyro_lt_reference_orientation_deg und gyro_reference_angle_deg werden
-        #   weiter benoetigt, um die aktuelle Roboterorientierung aus Murata-Delta
+        #   weiter benötigt, um die aktuelle Roboterorientierung aus Murata-Delta
         #   zu bestimmen.
         # - reflector_aim_reference_bearing_robot_deg bleibt die mechanische
-        #   Reflektor-Referenz fuer die ARN.
-        # Nur die Absteck-Transformation wird ungueltig gesetzt.
+        #   Reflektor-Referenz für die ARN.
+        # Nur die Absteck-Transformation wird ungültig gesetzt.
 
         if was_valid:
             self.log(reason_text)
             if bool(getattr(self, "arn_active", False)):
-                self.log("Reflektornachfuehrung bleibt aktiv; nur die Absteck-Transformation wurde ungueltig.")
+                self.log("Reflektornachführung bleibt aktiv; nur die Absteck-Transformation wurde ungültig.")
         self.set_current_action(reason_text)
 
     def _orientation_lt_from_active_trafo(self) -> float | None:
@@ -4179,10 +4300,10 @@ class MowerOperatorApp(ctk.CTk):
         return self._normalize_angle_360(self.gyro_lt_reference_orientation_deg + delta)
 
     def _current_gyems_angle_deg(self) -> float | None:
-        """Liefert den aktuell verwendeten GYEMS-Istwinkel fuer die Nachfuehranzeige.
+        """Liefert den aktuell verwendeten GYEMS-Istwinkel für die Nachführanzeige.
 
         Nach "Drehmotor -> Referenz setzen" wird der relative Winkel verwendet.
-        Falls noch keine Referenz verfuegbar ist, wird der absolute Singleturn-Winkel
+        Falls noch keine Referenz verfügbar ist, wird der absolute Singleturn-Winkel
         angezeigt.
         """
         state = self.gyems_state
@@ -4352,16 +4473,16 @@ class MowerOperatorApp(ctk.CTk):
             f"    Z_MARK={getattr(CONFIG.marker, 'z_mark_mm', 166.0):.3f} mm\n"
             f"    Z_CLEAR={getattr(CONFIG.marker, 'z_clear_mm', getattr(CONFIG.marker, 'z_mark_mm', 166.0) + 5.0):.3f} mm\n"
             f"    Z_TRAVEL={getattr(CONFIG.marker, 'z_travel_mm', getattr(CONFIG.marker, 'z_mark_mm', 166.0) + 10.0):.3f} mm\n"
-            f"  Offset:\n"
+            f"  Marker-/Reflektor-Kalibrierwert:\n"
             f"    X={CONFIG.transformation.marker_to_reflector_robot[0]:.3f}\n"
             f"    Y={CONFIG.transformation.marker_to_reflector_robot[1]:.3f}\n"
             f"    Z={CONFIG.transformation.marker_to_reflector_robot[2]:.3f}\n"
             f"  Trafo-Schutz:\n"
             f"    Murata-Grenzwert={getattr(CONFIG.transformation, 'gyro_invalid_threshold_deg', 0.03):.4f} deg\n"
-            f"  Trafo-Qualitaet:\n"
+            f"  Trafo-Qualität:\n"
             f"    OK: RMS<={CONFIG.transformation.ok_rms_mm:.3f} mm, "
             f"Max<={CONFIG.transformation.ok_max_residual_mm:.3f} mm\n"
-            f"    Massstab={'frei' if CONFIG.transformation.allow_scale else 'fest 1.0'}, "
+            f"    Maßstab={'frei' if CONFIG.transformation.allow_scale else 'fest 1.0'}, "
             f"max. Abweichung={CONFIG.transformation.max_scale_deviation:.6f}"
         )
 
@@ -4396,11 +4517,11 @@ class MowerOperatorApp(ctk.CTk):
 
     def clear_log(self) -> None:
         # Kein sichtbares Log mehr vorhanden. Die Logdatei bleibt als
-        # Protokoll erhalten und wird ueber Datei -> Log oeffnen eingesehen.
-        self.set_current_action("Log wird nur als Datei gefuehrt.")
+        # Protokoll erhalten und wird über Datei -> Log öffnen eingesehen.
+        self.set_current_action("Log wird nur als Datei geführt.")
 
     def save_log_dialog(self) -> None:
-        # Log speichern ist in der reduzierten Oberflaeche nicht mehr als
+        # Log speichern ist in der reduzierten Oberfläche nicht mehr als
         # separater Bedienvorgang vorgesehen. Die aktuelle Logdatei wird
         # laufend geschrieben.
         self.open_log_file()

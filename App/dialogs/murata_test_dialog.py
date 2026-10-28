@@ -1,4 +1,4 @@
-"""Integriertes Testfenster fuer den Murata SCH16T-K01 Datenstrom."""
+"""Integriertes Testfenster für den Murata SCH16T-K01 Datenstrom."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class _SerialReader(threading.Thread):
 
     def run(self) -> None:
         try:
-            # DTR/RTS bereits vor dem Oeffnen deaktivieren. Dadurch loest das
+            # DTR/RTS bereits vor dem Öffnen deaktivieren. Dadurch loest das
             # Diagnosefenster beim Nano ESP32 keinen unnoetigen Reset aus.
             connection = serial.Serial()
             connection.port = self.port
@@ -162,8 +162,8 @@ class MurataTestDialog:
         self.corrected_var = tk.StringVar(value="–")
         self.gyro_var = tk.StringVar(value="–")
         self.drift_var = tk.StringVar(value="Noch nicht gemessen")
-        self.record_var = tk.StringVar(value="0 Datensaetze")
-        self.packet_var = tk.StringVar(value="Gueltig: 0 | Ungueltig: 0")
+        self.record_var = tk.StringVar(value="0 Datensätze")
+        self.packet_var = tk.StringVar(value="Gültig: 0 | Ungültig: 0")
 
         self._build_ui()
         self.refresh_ports()
@@ -255,13 +255,13 @@ class MurataTestDialog:
         ttk.Label(
             drift,
             text=(
-                "Waehrend der Driftmessung muss der Sensor vollstaendig ruhig stehen.\n"
+                "Während der Driftmessung muss der Sensor vollständig ruhig stehen.\n"
                 "Die Korrektur wird ab dem gesetzten Nullpunkt angewendet."
             ),
             justify="left",
             wraplength=320,
         ).grid(row=2, column=0, sticky="nw")
-        ttk.Button(drift, text="Schliessen", command=self.close).grid(
+        ttk.Button(drift, text="Schließen", command=self.close).grid(
             row=3, column=0, sticky="se", pady=(24, 0)
         )
 
@@ -288,7 +288,7 @@ class MurataTestDialog:
             return
         port = self.port_var.get().strip()
         if not port:
-            messagebox.showwarning("Kein COM-Port", "Bitte einen COM-Port auswaehlen.", parent=self.window)
+            messagebox.showwarning("Kein COM-Port", "Bitte einen COM-Port auswählen.", parent=self.window)
             return
         self.reader = _SerialReader(port, self.baudrate, self.message_queue)
         self.reader.start()
@@ -323,7 +323,7 @@ class MurataTestDialog:
         self.window.after(20, self.process_queue)
 
     def _update_packet_text(self) -> None:
-        self.packet_var.set(f"Gueltig: {self.valid_packets} | Ungueltig: {self.invalid_lines}")
+        self.packet_var.set(f"Gültig: {self.valid_packets} | Ungültig: {self.invalid_lines}")
 
     def handle_sample(
         self,
@@ -359,7 +359,7 @@ class MurataTestDialog:
                     yaw_relative, drift_deg, yaw_corrected,
                 )
             )
-            self.record_var.set(f"{len(self.measurements)} Datensaetze")
+            self.record_var.set(f"{len(self.measurements)} Datensätze")
 
     def start_drift_measurement(self) -> None:
         if self.latest_sensor_time_s is None:
@@ -370,7 +370,7 @@ class MurataTestDialog:
             if duration <= 0.0:
                 raise ValueError
         except ValueError:
-            messagebox.showwarning("Ungueltige Dauer", "Bitte eine positive Dauer eingeben.", parent=self.window)
+            messagebox.showwarning("Ungültige Dauer", "Bitte eine positive Dauer eingeben.", parent=self.window)
             return
         self.drift_duration_requested_s = duration
         self.drift_start_sensor_time_s = None
@@ -385,7 +385,7 @@ class MurataTestDialog:
         elapsed = sensor_time_s - self.drift_start_sensor_time_s
         self.drift_points.append((elapsed, yaw_raw_deg))
         self.progress.configure(value=min(100.0, elapsed / self.drift_duration_requested_s * 100.0))
-        self.drift_var.set(f"Messung laeuft: {elapsed:.1f} / {self.drift_duration_requested_s:.1f} s")
+        self.drift_var.set(f"Messung läuft: {elapsed:.1f} / {self.drift_duration_requested_s:.1f} s")
         if elapsed >= self.drift_duration_requested_s:
             self.finish_drift_measurement()
 
@@ -435,11 +435,11 @@ class MurataTestDialog:
             self.measurements.clear()
             self.recording = True
             self.record_button.configure(text="Aufzeichnung stoppen")
-            self.record_var.set("0 Datensaetze")
+            self.record_var.set("0 Datensätze")
         else:
             self.recording = False
             self.record_button.configure(text="Aufzeichnung starten")
-            self.record_var.set(f"{len(self.measurements)} Datensaetze")
+            self.record_var.set(f"{len(self.measurements)} Datensätze")
 
     def draw_direction(self, yaw_deg: float) -> None:
         self.canvas.delete("all")
@@ -473,7 +473,7 @@ class MurataTestDialog:
 
     def save_excel(self) -> None:
         if not self.measurements:
-            messagebox.showwarning("Keine Messdaten", "Zuerst eine Aufzeichnung durchfuehren.", parent=self.window)
+            messagebox.showwarning("Keine Messdaten", "Zuerst eine Aufzeichnung durchführen.", parent=self.window)
             return
         try:
             from openpyxl import Workbook
@@ -498,7 +498,7 @@ class MurataTestDialog:
 
         workbook = Workbook()
         summary = workbook.active
-        summary.title = "Uebersicht"
+        summary.title = "Übersicht"
         data_sheet = workbook.create_sheet("Messdaten")
         summary.append(["SCH16T-K01 Yaw-Test"])
         for label, value in (

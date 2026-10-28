@@ -22,7 +22,7 @@ def show_serial_connect_dialog(
         baudrate: int,
         motor_id: int | None = None,
 ) -> SerialConnectionSettings | None:
-    """Einheitlicher Verbindungsdialog fuer serielle Mower-II-Komponenten."""
+    """Einheitlicher Verbindungsdialog für serielle Mower-II-Komponenten."""
 
     result: dict[str, SerialConnectionSettings | None] = {"settings": None}
 
@@ -88,7 +88,7 @@ def show_serial_connect_dialog(
         info_row = 4
 
     info = (
-        f"Waehle den COM-Port des {device_name}. "
+        f"Wähle den COM-Port des {device_name}. "
         "Die Baudrate kommt aus der aktiven Config."
     )
     ttk.Label(frame, text=info, wraplength=380).grid(
@@ -115,7 +115,7 @@ def show_serial_connect_dialog(
             try:
                 selected_motor_id = int(motor_id_var.get().strip())
             except ValueError:
-                messagebox.showerror(title, "Bitte eine gueltige Motor-ID angeben.", parent=dialog)
+                messagebox.showerror(title, "Bitte eine gültige Motor-ID angeben.", parent=dialog)
                 return
             if not 0 <= selected_motor_id <= 255:
                 messagebox.showerror(

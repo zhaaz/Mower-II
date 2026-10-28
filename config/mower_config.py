@@ -546,6 +546,32 @@ def load_config() -> MowerConfig:
     return config
 
 
+def reload_active_config() -> MowerConfig:
+    """Lädt die JSON-Config neu und aktualisiert das aktive Objekt in-place.
+
+    Viele Module importieren ``CONFIG`` direkt. Würde hier lediglich ein neues
+    Objekt zugewiesen, behielten diese Module ihre alte Referenz. Deshalb
+    werden die einzelnen Abschnitte des bestehenden Objekts ersetzt.
+
+    Die neue Datei wird vollständig geladen und validiert, bevor die aktive
+    Config verändert wird. Bei einem Fehler bleibt der bisherige Stand aktiv.
+    """
+
+    refreshed = load_config()
+    for section_name in (
+        "xyz",
+        "tracker",
+        "murata",
+        "gyems",
+        "arn",
+        "marker",
+        "transformation",
+        "paths",
+    ):
+        setattr(CONFIG, section_name, getattr(refreshed, section_name))
+    return CONFIG
+
+
 # --------------------------------------------------
 # Speichern
 # --------------------------------------------------

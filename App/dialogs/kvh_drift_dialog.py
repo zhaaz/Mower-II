@@ -102,7 +102,7 @@ class KVHDriftDialog:
         self.entry_duration = ttk.Entry(info, textvariable=self.duration_var, width=10)
         self.entry_duration.grid(row=0, column=1, pady=3, sticky="w")
 
-        self.status_var = tk.StringVar(value="Bereit. Sensor fuer Driftmessung ruhig stehen lassen.")
+        self.status_var = tk.StringVar(value="Bereit. Sensor für Driftmessung ruhig stehen lassen.")
         ttk.Label(info, textvariable=self.status_var, style="KVH.TLabel").grid(row=1, column=0, columnspan=2, pady=(8, 3), sticky="w")
 
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -151,7 +151,7 @@ class KVHDriftDialog:
         self.btn_cancel = ttk.Button(buttons, text="Abbrechen", command=self.close, style="KVH.TButton")
         self.btn_cancel.grid(row=0, column=3, padx=5, sticky="ew")
 
-        self.btn_close = ttk.Button(buttons, text="Schliessen", command=self.close, style="KVH.TButton")
+        self.btn_close = ttk.Button(buttons, text="Schließen", command=self.close, style="KVH.TButton")
         self.btn_close.grid(row=0, column=4, padx=(5, 0), sticky="ew")
 
         self._update_button_states(None)
@@ -160,11 +160,11 @@ class KVHDriftDialog:
         try:
             seconds = float(self.duration_var.get().replace(",", "."))
         except ValueError:
-            messagebox.showerror("KVH Driftmessung", "Bitte eine gueltige Dauer in Sekunden eingeben.", parent=self.window)
+            messagebox.showerror("KVH Driftmessung", "Bitte eine gültige Dauer in Sekunden eingeben.", parent=self.window)
             return
 
         if seconds <= 0.0:
-            messagebox.showerror("KVH Driftmessung", "Die Dauer muss groesser 0 sein.", parent=self.window)
+            messagebox.showerror("KVH Driftmessung", "Die Dauer muss größer 0 sein.", parent=self.window)
             return
 
         try:
@@ -175,7 +175,7 @@ class KVHDriftDialog:
 
         self.completion_reported = False
         self.log(f"KVH DSP Driftmessung gestartet: {seconds:.1f} s.")
-        self.action("KVH DSP Driftmessung laeuft...")
+        self.action("KVH DSP Driftmessung läuft...")
 
     def stop_drift(self) -> None:
         try:
@@ -237,7 +237,7 @@ class KVHDriftDialog:
         self.progress_text_var.set(f"{elapsed:.1f} / {duration:.1f} s")
 
         if active:
-            self.status_var.set("Driftmessung laeuft. Sensor ruhig stehen lassen.")
+            self.status_var.set("Driftmessung läuft. Sensor ruhig stehen lassen.")
         elif pending is not None:
             self.status_var.set("Driftmessung abgeschlossen. Driftwert kann gesetzt werden.")
             if self.last_drift_active and not self.completion_reported:
@@ -245,7 +245,7 @@ class KVHDriftDialog:
                 self.log(f"KVH DSP Driftmessung abgeschlossen: {float(pending):+.10f} deg/s.")
                 self.action("KVH DSP Driftmessung abgeschlossen.")
         else:
-            self.status_var.set("Bereit. Sensor fuer Driftmessung ruhig stehen lassen.")
+            self.status_var.set("Bereit. Sensor für Driftmessung ruhig stehen lassen.")
 
         self.last_drift_active = active
 
@@ -271,7 +271,7 @@ class KVHDriftDialog:
         if state is not None and bool(getattr(state, "drift_active", False)):
             confirmed = messagebox.askyesno(
                 "KVH Driftmessung",
-                "Driftmessung laeuft noch. Wirklich abbrechen?",
+                "Driftmessung läuft noch. Wirklich abbrechen?",
                 parent=self.window,
             )
             if not confirmed:

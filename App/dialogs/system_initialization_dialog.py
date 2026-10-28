@@ -120,7 +120,7 @@ class SystemInitializationDialog:
 
     Ablauf:
         1. XYZ auf Config-Default-Port verbinden
-        2. XYZ Homing durchfuehren
+        2. XYZ Homing durchführen
         3. Lasertracker UDP starten und auf aktuelle Daten warten
         4. Lasertracker-Standpunkt aus dem Config-Pfad laden
         5. Murata SCH16T verbinden
@@ -501,7 +501,7 @@ class SystemInitializationDialog:
         self.wait_for_tracker_running(timeout_s=10.0)
         self.log("Tracker UDP-Empfang läuft.")
 
-        # Fuer die anschliessende Transformation werden aktuelle Trackerdaten benoetigt.
+        # Für die anschließende Transformation werden aktuelle Trackerdaten benötigt.
         # Wenn noch keine Daten anliegen, warten wir kurz und melden dann klar den Zustand.
         self.set_status("Warte auf aktuelle Trackerdaten.")
         self.wait_for_tracker_data(timeout_s=30.0)
@@ -705,11 +705,11 @@ class SystemInitializationDialog:
 
         state = self.xyz_state_getter()
         if state is None or not bool(getattr(state, "connected", False)):
-            raise RuntimeError("Z-Homing nicht moeglich: XYZ ist nicht verbunden.")
+            raise RuntimeError("Z-Homing nicht möglich: XYZ ist nicht verbunden.")
         if not bool(getattr(state, "homed", False)):
-            raise RuntimeError("Z-Homing nicht moeglich: vollstaendiges XYZ-Homing fehlt.")
+            raise RuntimeError("Z-Homing nicht möglich: vollständiges XYZ-Homing fehlt.")
         if bool(getattr(state, "busy", False)):
-            raise RuntimeError("Z-Homing nicht moeglich: XYZ ist beschaeftigt.")
+            raise RuntimeError("Z-Homing nicht möglich: XYZ ist beschäftigt.")
 
         z_travel_mm = float(getattr(self.config.marker, "z_travel_mm", 176.0))
         self.set_status("Z-Achse wird vor der Transformation referenziert.")
@@ -725,7 +725,7 @@ class SystemInitializationDialog:
             raise RuntimeError("Z-Homing-Befehl konnte nicht gesendet werden.")
 
         # Zuerst sicherstellen, dass der asynchrone Worker den Befehl begonnen
-        # hat. Anschliessend auf das tatsaechliche Ende der Gesamtsequenz warten.
+        # hat. Anschließend auf das tatsächliche Ende der Gesamtsequenz warten.
         self.wait_for_xyz_state(
             predicate=lambda current: (
                 bool(getattr(current, "busy", False))
@@ -743,7 +743,7 @@ class SystemInitializationDialog:
             error_text="Timeout beim Z-Homing vor der Transformation.",
         )
 
-        self.log("Z-Homing abgeschlossen; Z-Achse steht auf sicherer Fahrhoehe.")
+        self.log("Z-Homing abgeschlossen; Z-Achse steht auf sicherer Fahrhöhe.")
         self.set_status("Z-Achse vorbereitet. Transformation wird gestartet.")
 
     def connect_gyems_default(self) -> None:

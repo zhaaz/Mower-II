@@ -118,7 +118,7 @@ class PointViewerDialog:
         ttk.Button(header, text="Aktualisieren", command=self.refresh_table, style="PointViewer.TButton").grid(
             row=0, column=1, padx=(8, 0), sticky="e"
         )
-        ttk.Button(header, text="Schliessen", command=self.close, style="PointViewer.TButton").grid(
+        ttk.Button(header, text="Schließen", command=self.close, style="PointViewer.TButton").grid(
             row=0, column=2, padx=(8, 0), sticky="e"
         )
 

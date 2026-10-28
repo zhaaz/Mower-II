@@ -38,9 +38,9 @@ def show_gyems_diagnostic_dialog(
         log: LogFunction | None = None,
         set_current_action: ActionFunction | None = None,
 ) -> None:
-    """Oeffnet einen GYEMS-Diagnosedialog ohne eigenen Worker.
+    """Öffnet einen GYEMS-Diagnosedialog ohne eigenen Worker.
 
-    Der Dialog verwendet ausschliesslich den vom Hauptprogramm bereitgestellten
+    Der Dialog verwendet ausschließlich den vom Hauptprogramm bereitgestellten
     GYEMS-Worker. Dadurch kann es keinen zweiten Zugriff auf denselben COM-Port
     geben und die ARN bleibt kontrollierbar.
     """
@@ -93,7 +93,7 @@ class GyemsDiagnosticDialog:
         self.window.bind("<Escape>", lambda _event: self.close())
 
     def show(self) -> None:
-        self.log("GYEMS Diagnose geoeffnet.")
+        self.log("GYEMS Diagnose geöffnet.")
         self.window.after(100, self.update_loop)
 
     # --------------------------------------------------
@@ -167,7 +167,7 @@ class GyemsDiagnosticDialog:
             ("enc", "Encoder"),
             ("cmd", "Speed-Cmd"),
             ("ok", "OK-Lesungen"),
-            ("errors", "Fehlerzaehler"),
+            ("errors", "Fehlerzähler"),
             ("model", "Modell"),
         ]
         for index, (key, label) in enumerate(fields):
@@ -251,7 +251,7 @@ class GyemsDiagnosticDialog:
             motor_id = int(self.motor_id_var.get().strip(), 0)
             baudrate = int(self.baudrate_var.get().strip())
         except ValueError:
-            messagebox.showerror("GYEMS Diagnose", "Motor-ID oder Baudrate ist ungueltig.", parent=self.window)
+            messagebox.showerror("GYEMS Diagnose", "Motor-ID oder Baudrate ist ungültig.", parent=self.window)
             return
         if not self._ensure_worker():
             return
@@ -297,8 +297,8 @@ class GyemsDiagnosticDialog:
             messagebox.showerror("GYEMS Diagnose", str(exc), parent=self.window)
             return False
         if not ok:
-            self.log("GYEMS-Worker ist nicht verfuegbar.")
-            messagebox.showerror("GYEMS Diagnose", "GYEMS-Worker ist nicht verfuegbar.", parent=self.window)
+            self.log("GYEMS-Worker ist nicht verfügbar.")
+            messagebox.showerror("GYEMS Diagnose", "GYEMS-Worker ist nicht verfügbar.", parent=self.window)
             return False
         return True
 

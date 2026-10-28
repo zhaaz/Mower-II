@@ -101,8 +101,8 @@ class PointMarkingDialog:
         self.on_finished = on_finished
         self.external_log = external_log
 
-        # Queue und Laufzeit-Flags muessen vor der ersten Logausgabe existieren.
-        # Die Reachability-Auswertung kann ueber self.log bereits Debugausgaben schreiben.
+        # Queue und Laufzeit-Flags müssen vor der ersten Logausgabe existieren.
+        # Die Reachability-Auswertung kann über self.log bereits Debugausgaben schreiben.
         self.gui_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.abort_event = threading.Event()
         self.workflow_thread: threading.Thread | None = None
@@ -291,7 +291,7 @@ class PointMarkingDialog:
 
         self.btn_close = ttk.Button(
             button_frame,
-            text="Schliessen",
+            text="Schließen",
             command=self.close,
             style="PointMarking.TButton",
         )
@@ -299,7 +299,7 @@ class PointMarkingDialog:
 
         self.btn_selected = ttk.Button(
             button_frame,
-            text="Ausgewaehlte markieren",
+            text="Ausgewählte markieren",
             command=self.mark_selected_points,
             style="PointMarking.TButton",
         )
@@ -342,7 +342,7 @@ class PointMarkingDialog:
             )
 
         self.update_buttons()
-        self.log("Punktmarkierdialog geoeffnet.")
+        self.log("Punktmarkierdialog geöffnet.")
 
     def update_buttons(self) -> None:
         has_selected_markable = any(
@@ -354,7 +354,7 @@ class PointMarkingDialog:
         state_selected = "normal" if has_selected_markable and not self.workflow_running else "disabled"
         state_all = "normal" if has_markable and not self.workflow_running else "disabled"
         state_close = "normal"
-        close_text = "Abbrechen" if self.workflow_running else "Schliessen"
+        close_text = "Abbrechen" if self.workflow_running else "Schließen"
 
         self.btn_selected.configure(state=state_selected)
         self.btn_all.configure(state=state_all)
@@ -446,11 +446,11 @@ class PointMarkingDialog:
             return
 
         if not selected_results:
-            messagebox.showinfo("Punkte markieren", "Keine markierbaren Punkte ausgewaehlt.", parent=self.window)
+            messagebox.showinfo("Punkte markieren", "Keine markierbaren Punkte ausgewählt.", parent=self.window)
             return
 
         if not self._confirm_remarking_if_needed(selected_results):
-            self.log("Markierung abgebrochen: erneutes Markieren nicht bestaetigt.")
+            self.log("Markierung abgebrochen: erneutes Markieren nicht bestätigt.")
             return
 
         try:
@@ -472,11 +472,11 @@ class PointMarkingDialog:
         else:
             self.log("Markierausrichtung: Roboter-XY / fester Marker-Winkel.")
         self.log(
-            f"Markierhoehen geprueft: Z_MARK={z_mark_mm:.3f} mm, "
+            f"Markierhöhen geprüft: Z_MARK={z_mark_mm:.3f} mm, "
             f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
         )
         if self.measure_after_marking_var.get():
-            self.log("Automatische Kontrollmessung: aktiv, Messung ueber oberen Reflektor.")
+            self.log("Automatische Kontrollmessung: aktiv, Messung über oberen Reflektor.")
         else:
             self.log("Automatische Kontrollmessung: inaktiv.")
 
@@ -498,10 +498,10 @@ class PointMarkingDialog:
 
         return bool(messagebox.askyesno(
             "Punkte erneut markieren",
-            "Es sind bereits markierte Punkte ausgewaehlt.\n\n"
+            "Es sind bereits markierte Punkte ausgewählt.\n\n"
             f"Diese Punkte werden erneut markiert:\n{names}\n\n"
             "Vorhandene automatische Kontrollmesswerte werden ersetzt. "
-            "Wenn die automatische Kontrollmessung deaktiviert ist, werden alte Kontrollmesswerte am Punkt geloescht.\n\n"
+            "Wenn die automatische Kontrollmessung deaktiviert ist, werden alte Kontrollmesswerte am Punkt gelöscht.\n\n"
             "Fortfahren?",
             parent=self.window,
         ))
@@ -522,7 +522,7 @@ class PointMarkingDialog:
                 )[0]
 
                 if not refreshed.reachable:
-                    self.log(f"{result.name}: wird uebersprungen, nicht mehr erreichbar ({refreshed.reason}).")
+                    self.log(f"{result.name}: wird übersprungen, nicht mehr erreichbar ({refreshed.reason}).")
                     continue
 
                 was_marked = bool(getattr(result.point, "marked", False))
@@ -533,7 +533,7 @@ class PointMarkingDialog:
                 self.log(f"Markierwinkel: {marker_angle_deg:.3f} deg")
                 z_mark_mm, z_clear_mm, z_travel_mm = self._validated_marker_z_heights()
                 self.log(
-                    f"Markierhoehen: Z_MARK={z_mark_mm:.3f} mm, "
+                    f"Markierhöhen: Z_MARK={z_mark_mm:.3f} mm, "
                     f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
                 )
                 self.send_robot_command(
@@ -571,7 +571,7 @@ class PointMarkingDialog:
                         self.move_to_z_travel_after_measurement(result.name)
                 elif was_marked:
                     self._clear_mark_measurement(result.point)
-                    self.log(f"{result.name}: alte Kontrollmesswerte geloescht, da automatische Messung inaktiv ist.")
+                    self.log(f"{result.name}: alte Kontrollmesswerte gelöscht, da automatische Messung inaktiv ist.")
 
                 self.log(f"{result.name}: markiert.")
                 self.gui_queue.put(("points_changed", None))
@@ -615,19 +615,19 @@ class PointMarkingDialog:
 
     def _validate_tracker_measurement_ready(self) -> None:
         if self.tracker_receiver is None:
-            raise RuntimeError("Automatische Messung ist aktiv, aber kein LasertrackerReceiver ist verfuegbar.")
+            raise RuntimeError("Automatische Messung ist aktiv, aber kein LasertrackerReceiver ist verfügbar.")
         if not bool(getattr(self.tracker_receiver, "running", False)):
-            raise RuntimeError("Automatische Messung ist aktiv, aber der Lasertracker-Empfang laeuft nicht.")
+            raise RuntimeError("Automatische Messung ist aktiv, aber der Lasertracker-Empfang läuft nicht.")
         if not hasattr(self.tracker_receiver, "capture_stable_point"):
-            raise RuntimeError("Automatische Messung ist aktiv, aber capture_stable_point ist nicht verfuegbar.")
+            raise RuntimeError("Automatische Messung ist aktiv, aber capture_stable_point ist nicht verfügbar.")
         self._marker_to_reflector_lt_vector()
 
     def move_to_measurement_position(self, *, x: float, y: float, name: str) -> float:
-        """Faehrt vor der automatischen Messung auf Punktmitte, ohne den Stift erneut abzusenken.
+        """Fährt vor der automatischen Messung auf Punktmitte, ohne den Stift erneut abzusenken.
 
-        Z_CLEAR dient hier nur als sichere Stift-Abhebehoehe. Die Reflektor-Messrechnung
-        verwendet ausschliesslich den kalibrierten marker_to_reflector-Vektor;
-        Z_MARK/Z_CLEAR/Z_TRAVEL duerfen die Reflektorhoehe rechnerisch nicht beeinflussen.
+        Z_CLEAR dient hier nur als sichere Stift-Abhebehöhe. Die Reflektor-Messrechnung
+        verwendet ausschließlich den kalibrierten marker_to_reflector-Vektor;
+        Z_MARK/Z_CLEAR/Z_TRAVEL dürfen die Reflektorhöhe rechnerisch nicht beeinflussen.
         """
 
         z_mark_mm, z_clear_mm, _z_travel_mm = self._validated_marker_z_heights()
@@ -636,7 +636,7 @@ class PointMarkingDialog:
         tolerance_mm = float(getattr(CONFIG.xyz, "tolerance_mm", 0.05))
 
         self.log(
-            f"{name}: fahre fuer Kontrollmessung auf Punktmitte "
+            f"{name}: fahre für Kontrollmessung auf Punktmitte "
             f"X={x:.3f}, Y={y:.3f}, Z_CLEAR={z_measure_mm:.3f} mm "
             f"(ohne erneutes Absenken auf Z_MARK={z_mark_mm:.3f} mm)."
         )
@@ -700,9 +700,9 @@ class PointMarkingDialog:
                 time.sleep(0.25)
             else:
                 warning_text = (
-                    f"{name}: WARNUNG automatische Kontrollmessung weiterhin auffaellig: "
+                    f"{name}: WARNUNG automatische Kontrollmessung weiterhin auffällig: "
                     f"d2D={d2d:.3f} mm > {threshold_mm:.3f} mm nach {max_attempts} Versuchen. "
-                    "Messwert wurde gespeichert, sollte aber geprueft werden."
+                    "Messwert wurde gespeichert, sollte aber geprüft werden."
                 )
                 self.log(warning_text)
                 self.gui_queue.put(("warning", warning_text))
@@ -738,7 +738,7 @@ class PointMarkingDialog:
         self.log(
             f"{name}: Kontrollmessung Marker_LT "
             f"X={marker_lt[0]:.3f}, Y={marker_lt[1]:.3f}, Z={marker_lt[2]:.3f} mm | "
-            f"Messhoehe Stift-Z={measure_z_mm:.3f} mm, Z-Korrektur=0.000 mm | "
+            f"Messhöhe Stift-Z={measure_z_mm:.3f} mm, Z-Korrektur=0.000 mm | "
             f"dX={delta[0]:.3f}, dY={delta[1]:.3f}, dZ={delta[2]:.3f}, "
             f"d2D={d2d:.3f}, d3D={d3d:.3f} mm | "
             f"Versuche={int(best_result['attempt'])}, "
@@ -873,7 +873,7 @@ class PointMarkingDialog:
         rotation = getattr(trafo, "rotation", None)
         if rotation is None:
             raise RuntimeError(
-                "Automatische Messung ist aktiv, aber marker_to_reflector_lt/Rotation ist nicht verfuegbar."
+                "Automatische Messung ist aktiv, aber marker_to_reflector_lt/Rotation ist nicht verfügbar."
             )
 
         return self._apply_rotation_to_vector(rotation, offset_robot)
@@ -886,21 +886,21 @@ class PointMarkingDialog:
             row_available = False
             for col in range(3):
                 try:
-                    coeff = float(rotation[row, col])
+                    cöff = float(rotation[row, col])
                 except Exception:
                     try:
-                        coeff = float(rotation[row][col])
+                        cöff = float(rotation[row][col])
                     except Exception:
                         if row == 2 and col == 2:
-                            coeff = 1.0
+                            cöff = 1.0
                         elif row == 2 or col == 2:
-                            coeff = 0.0
+                            cöff = 0.0
                         else:
-                            raise RuntimeError("Rotationsmatrix fuer automatische Messung ist unvollstaendig.")
+                            raise RuntimeError("Rotationsmatrix für automatische Messung ist unvollständig.")
                 row_available = True
-                total += coeff * vector[col]
+                total += cöff * vector[col]
             if not row_available:
-                raise RuntimeError("Rotationsmatrix fuer automatische Messung ist unvollstaendig.")
+                raise RuntimeError("Rotationsmatrix für automatische Messung ist unvollständig.")
             values.append(total)
         return values[0], values[1], values[2]
 
@@ -993,7 +993,7 @@ class PointMarkingDialog:
 
         if not (z_min <= z_mark <= z_clear <= z_travel <= z_max):
             raise ValueError(
-                "Ungueltige Marker-Z-Hoehen. Erwartet: "
+                "Ungültige Marker-Z-Höhen. Erwartet: "
                 f"{z_min:.3f} <= Z_MARK <= Z_CLEAR <= Z_TRAVEL <= {z_max:.3f} mm. "
                 f"Aktuell: Z_MARK={z_mark:.3f}, "
                 f"Z_CLEAR={z_clear:.3f}, Z_TRAVEL={z_travel:.3f}."
@@ -1003,18 +1003,18 @@ class PointMarkingDialog:
 
     def _validate_runtime_state(self) -> None:
         if self.xyz_worker is None:
-            raise RuntimeError("XYZ-Worker ist nicht verfuegbar.")
+            raise RuntimeError("XYZ-Worker ist nicht verfügbar.")
 
         state = self.xyz_state_getter()
         if state is None:
-            raise RuntimeError("Kein XYZ-Zustand verfuegbar.")
+            raise RuntimeError("Kein XYZ-Zustand verfügbar.")
         if not bool(getattr(state, "connected", False)):
             raise RuntimeError("XYZ ist nicht verbunden.")
         if not bool(getattr(state, "homed", False)):
-            raise RuntimeError("XYZ-Homing wurde noch nicht durchgefuehrt.")
+            raise RuntimeError("XYZ-Homing wurde noch nicht durchgeführt.")
 
         if self.trafo_manager is None or not bool(getattr(self.trafo_manager, "valid", False)):
-            raise RuntimeError("Keine gueltige Transformation vorhanden.")
+            raise RuntimeError("Keine gültige Transformation vorhanden.")
 
     def send_robot_command(self, command: str, timeout_s: float, **kwargs: Any) -> None:
         self.xyz_worker.send_command(command, **kwargs)
@@ -1086,7 +1086,7 @@ class PointMarkingDialog:
         apply_reachability_to_points(all_results)
         self.reachable_results = reachable_points_only(all_results)
 
-        # Bestehende Auswahl moeglichst erhalten.
+        # Bestehende Auswahl möglichst erhalten.
         previously_selected_names = {
             self.result_by_iid[iid].name
             for iid in self.selected_iids
@@ -1165,11 +1165,11 @@ class PointMarkingDialog:
         self.window.destroy()
 
     def move_robot_to_z_travel_on_close(self) -> None:
-        """Faehrt beim Schliessen des Markierdialogs defensiv auf Z_TRAVEL.
+        """Fährt beim Schließen des Markierdialogs defensiv auf Z_TRAVEL.
 
         Der Befehl wird asynchron in die XYZ-Worker-Queue gelegt. Dadurch bleibt
-        das Schliessen des Dialogs reaktionsschnell und der Roboter faehrt nach
-        Abschluss eventuell bereits gepufferter Befehle auf sichere Fahrhoehe.
+        das Schließen des Dialogs reaktionsschnell und der Roboter fährt nach
+        Abschluss eventuell bereits gepufferter Befehle auf sichere Fahrhöhe.
         """
 
         try:
@@ -1189,7 +1189,7 @@ class PointMarkingDialog:
             )
             self.log(f"Dialog geschlossen: fahre Z_TRAVEL={z_travel:.3f} mm an.")
         except Exception as exc:
-            self.log(f"Z_TRAVEL beim Schliessen konnte nicht angefordert werden: {exc}")
+            self.log(f"Z_TRAVEL beim Schließen konnte nicht angefordert werden: {exc}")
 
 
 def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int) -> None:

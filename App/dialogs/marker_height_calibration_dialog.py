@@ -35,7 +35,7 @@ def show_marker_height_calibration_dialog(
         set_current_action: ActionFunction | None = None,
         on_finished: FinishedCallback | None = None,
 ) -> None:
-    """Dialog zur Kalibrierung der Markerhoehen Z_MARK/Z_CLEAR/Z_TRAVEL."""
+    """Dialog zur Kalibrierung der Markerhöhen Z_MARK/Z_CLEAR/Z_TRAVEL."""
 
     dialog = MarkerHeightCalibrationDialog(
         parent=parent,
@@ -78,13 +78,13 @@ class MarkerHeightCalibrationDialog:
         self.current_z_travel = float(getattr(config.marker, "z_travel_mm", self.current_z_mark + 10.0))
         self.proposed_z_mark: float | None = None
 
-        # Feste sichere Hoehe fuer Verlassen des Kalibrierdialogs.
-        # Diese Hoehe betrifft nur die Stift-/Z-Mechanik und ist bewusst
-        # unabhaengig vom Reflektor-Offset.
+        # Feste sichere Höhe für Verlassen des Kalibrierdialogs.
+        # Diese Höhe betrifft nur die Stift-/Z-Mechanik und ist bewusst
+        # unabhängig vom Reflektor-Offset.
         self.safe_z_mm = 180.0
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Markerhoehe kalibrieren")
+        self.window.title("Markerhöhe kalibrieren")
         self.window.resizable(False, False)
         self.window.transient(parent)
         self.window.grab_set()
@@ -97,7 +97,7 @@ class MarkerHeightCalibrationDialog:
         self.window.bind("<Escape>", lambda _event: self.close())
 
     def show(self) -> None:
-        self.log("Markerhoehen-Kalibrierung geoeffnet.")
+        self.log("Markerhöhen-Kalibrierung geöffnet.")
         self.refresh_position()
         self.update_display()
         self.window.after(300, self.update_position_loop)
@@ -146,7 +146,7 @@ class MarkerHeightCalibrationDialog:
             row=1, column=1, columnspan=2, pady=3, sticky="ew"
         )
 
-        ttk.Label(status_frame, text="Sichere Hoehe beim Schliessen:", style="MarkerHeight.TLabel").grid(
+        ttk.Label(status_frame, text="Sichere Höhe beim Schließen:", style="MarkerHeight.TLabel").grid(
             row=2, column=0, padx=(0, 8), pady=3, sticky="w"
         )
         self.safe_height_var = tk.StringVar(value=f"Z={self.safe_z_mm:.3f} mm")
@@ -154,7 +154,7 @@ class MarkerHeightCalibrationDialog:
             row=2, column=1, columnspan=2, pady=3, sticky="ew"
         )
 
-        value_frame = ttk.LabelFrame(root, text="Markerhoehen", padding=10, style="MarkerHeight.TLabelframe")
+        value_frame = ttk.LabelFrame(root, text="Markerhöhen", padding=10, style="MarkerHeight.TLabelframe")
         value_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         value_frame.grid_columnconfigure(1, weight=1)
 
@@ -197,10 +197,10 @@ class MarkerHeightCalibrationDialog:
         ttk.Label(
             info_frame,
             text=(
-                "Fahre die Z-Achse vorsichtig auf die gewuenschte Markierhoehe. "
-                "Mit 'Aktuelle Z als Z_MARK' wird die aktuelle Z-Position als neue Markierhoehe vorgemerkt. "
-                "Z_CLEAR und Z_TRAVEL werden als eigene Config-Werte gespeichert und koennen hier angepasst werden. "
-                "Beim Speichern, Abbrechen oder Schliessen wird die Z-Achse auf die sichere Hoehe Z=180.000 mm gefahren."
+                "Fahre die Z-Achse vorsichtig auf die gewünschte Markierhöhe. "
+                "Mit 'Aktuelle Z als Z_MARK' wird die aktuelle Z-Position als neue Markierhöhe vorgemerkt. "
+                "Z_CLEAR und Z_TRAVEL werden als eigene Config-Werte gespeichert und können hier angepasst werden. "
+                "Beim Speichern, Abbrechen oder Schließen wird die Z-Achse auf die sichere Höhe Z=180.000 mm gefahren."
             ),
             wraplength=620,
             justify="left",
@@ -213,8 +213,8 @@ class MarkerHeightCalibrationDialog:
             button_frame.grid_columnconfigure(col, weight=1)
 
         ttk.Button(button_frame, text="Abbrechen", command=self.close, style="MarkerHeight.TButton").grid(row=0, column=0, padx=(0, 6), sticky="ew")
-        ttk.Button(button_frame, text="Markerhoehen speichern", command=self.save_z_mark, style="MarkerHeight.TButton").grid(row=0, column=1, padx=6, sticky="ew")
-        ttk.Button(button_frame, text="Schliessen", command=self.close, style="MarkerHeight.TButton").grid(row=0, column=2, padx=(6, 0), sticky="ew")
+        ttk.Button(button_frame, text="Markerhöhen speichern", command=self.save_z_mark, style="MarkerHeight.TButton").grid(row=0, column=1, padx=6, sticky="ew")
+        ttk.Button(button_frame, text="Schließen", command=self.close, style="MarkerHeight.TButton").grid(row=0, column=2, padx=(6, 0), sticky="ew")
 
     # --------------------------------------------------
     # Actions
@@ -241,20 +241,20 @@ class MarkerHeightCalibrationDialog:
             return
 
         dz = sign * step
-        self.log(f"Markerhoehe: Jog Z dZ={dz:.3f} mm, Feedrate={feed:.0f}")
+        self.log(f"Markerhöhe: Jog Z dZ={dz:.3f} mm, Feedrate={feed:.0f}")
         if self.set_current_action:
-            self.set_current_action("Markerhoehen-Kalibrierung: Z-Fahrt gesendet.")
+            self.set_current_action("Markerhöhen-Kalibrierung: Z-Fahrt gesendet.")
         self.send_xyz_command("jog", dz=dz, feedrate=feed)
 
     def take_current_z_as_mark(self) -> None:
         z = self._current_z()
         if z is None:
-            messagebox.showwarning("Markerhoehe", "Keine aktuelle Z-Position vorhanden.", parent=self.window)
+            messagebox.showwarning("Markerhöhe", "Keine aktuelle Z-Position vorhanden.", parent=self.window)
             return
 
         self.proposed_z_mark = float(z)
-        # Vorschlagswerte bleiben editierbar. Beim Uebernehmen einer neuen
-        # Markierhoehe werden Z_CLEAR/Z_TRAVEL zunaechst plausibel mitgefuehrt.
+        # Vorschlagswerte bleiben editierbar. Beim Übernehmen einer neuen
+        # Markierhöhe werden Z_CLEAR/Z_TRAVEL zunächst plausibel mitgeführt.
         self.clear_var.set(f"{self.proposed_z_mark + 5.0:.3f}")
         self.travel_var.set(f"{self.proposed_z_mark + 10.0:.3f}")
         self.log(f"Neues Z_MARK vorgemerkt: {self.proposed_z_mark:.3f} mm")
@@ -264,7 +264,7 @@ class MarkerHeightCalibrationDialog:
         if self.proposed_z_mark is None:
             z = self._current_z()
             if z is None:
-                messagebox.showwarning("Markerhoehe", "Keine neue Markierhoehe vorgemerkt.", parent=self.window)
+                messagebox.showwarning("Markerhöhe", "Keine neue Markierhöhe vorgemerkt.", parent=self.window)
                 return
             self.proposed_z_mark = float(z)
 
@@ -284,24 +284,24 @@ class MarkerHeightCalibrationDialog:
 
         if not (z_mark <= z_clear <= z_travel):
             messagebox.showerror(
-                "Markerhoehe",
-                "Die Hoehen muessen Z_MARK <= Z_CLEAR <= Z_TRAVEL erfuellen.",
+                "Markerhöhe",
+                "Die Höhen müssen Z_MARK <= Z_CLEAR <= Z_TRAVEL erfüllen.",
                 parent=self.window,
             )
             return
 
         confirmed = messagebox.askyesno(
-            "Markerhoehen speichern",
-            "Folgende Markerhoehen liegen innerhalb des Z-Arbeitsbereichs und werden gespeichert:\n\n"
+            "Markerhöhen speichern",
+            "Folgende Markerhöhen liegen innerhalb des Z-Arbeitsbereichs und werden gespeichert:\n\n"
             f"Z_MARK   = {z_mark:.3f} mm\n"
             f"Z_CLEAR  = {z_clear:.3f} mm\n"
             f"Z_TRAVEL = {z_travel:.3f} mm\n\n"
-            f"Anschliessend wird auf die sichere Hoehe Z={self.safe_z_mm:.3f} mm gefahren.\n\n"
+            f"Anschließend wird auf die sichere Höhe Z={self.safe_z_mm:.3f} mm gefahren.\n\n"
             "Fortfahren?",
             parent=self.window,
         )
         if not confirmed:
-            self.log("Speichern der Markerhoehen vom Nutzer abgebrochen.")
+            self.log("Speichern der Markerhöhen vom Nutzer abgebrochen.")
             return
 
         try:
@@ -314,8 +314,8 @@ class MarkerHeightCalibrationDialog:
             CONFIG.marker.z_clear_mm = z_clear
             CONFIG.marker.z_travel_mm = z_travel
         except Exception as exc:
-            self.log(f"FEHLER beim Speichern der Markerhoehen: {exc}")
-            messagebox.showerror("Markerhoehe", str(exc), parent=self.window)
+            self.log(f"FEHLER beim Speichern der Markerhöhen: {exc}")
+            messagebox.showerror("Markerhöhe", str(exc), parent=self.window)
             return
 
         self.current_z_mark = z_mark
@@ -323,20 +323,20 @@ class MarkerHeightCalibrationDialog:
         self.current_z_travel = z_travel
         self.saved = True
         self.log(
-            f"Markerhoehen gespeichert: Z_MARK={z_mark:.3f} mm | "
+            f"Markerhöhen gespeichert: Z_MARK={z_mark:.3f} mm | "
             f"Z_CLEAR={z_clear:.3f} mm | "
             f"Z_TRAVEL={z_travel:.3f} mm"
         )
         if self.set_current_action:
-            self.set_current_action("Markerhoehen gespeichert. Fahre auf sichere Hoehe.")
+            self.set_current_action("Markerhöhen gespeichert. Fahre auf sichere Höhe.")
         if self.on_finished:
             self.on_finished()
         self.update_display()
         self._move_to_safe_height(reason="nach dem Speichern")
-        messagebox.showinfo("Markerhoehe", "Markerhoehen wurden gespeichert.", parent=self.window)
+        messagebox.showinfo("Markerhöhe", "Markerhöhen wurden gespeichert.", parent=self.window)
 
     def close(self) -> None:
-        self._move_to_safe_height(reason="beim Schliessen")
+        self._move_to_safe_height(reason="beim Schließen")
         try:
             self.window.grab_release()
         except Exception:
@@ -368,7 +368,7 @@ class MarkerHeightCalibrationDialog:
             z_max = float(CONFIG.xyz.z_max)
         except Exception as exc:
             messagebox.showerror(
-                "Markerhoehe",
+                "Markerhöhe",
                 f"Z-Arbeitsbereich konnte nicht gelesen werden: {exc}",
                 parent=self.window,
             )
@@ -390,14 +390,14 @@ class MarkerHeightCalibrationDialog:
                 "",
             ]
             if outside:
-                lines.append("Folgende Markerhoehen liegen ausserhalb:")
+                lines.append("Folgende Markerhöhen liegen außerhalb:")
                 for name, value in outside:
                     lines.append(f"  {name} = {value:.3f} mm")
                 lines.append("")
             if not safe_inside:
-                lines.append(f"Sichere Hoehe Z={safe_z:.3f} mm liegt ausserhalb des Arbeitsbereichs.")
+                lines.append(f"Sichere Höhe Z={safe_z:.3f} mm liegt außerhalb des Arbeitsbereichs.")
             messagebox.showerror(
-                "Markerhoehe",
+                "Markerhöhe",
                 "\n".join(lines),
                 parent=self.window,
             )
@@ -405,9 +405,9 @@ class MarkerHeightCalibrationDialog:
 
         if show_success:
             self.log(
-                f"Sicherheitspruefung OK: Z-Arbeitsbereich [{z_min:.3f}, {z_max:.3f}] mm, "
+                f"Sicherheitsprüfung OK: Z-Arbeitsbereich [{z_min:.3f}, {z_max:.3f}] mm, "
                 f"Z_MARK={z_mark:.3f}, Z_CLEAR={z_clear:.3f}, Z_TRAVEL={z_travel:.3f}, "
-                f"sichere Hoehe={safe_z:.3f}."
+                f"sichere Höhe={safe_z:.3f}."
             )
         return True
 
@@ -417,33 +417,33 @@ class MarkerHeightCalibrationDialog:
             z_min = float(CONFIG.xyz.z_min)
             z_max = float(CONFIG.xyz.z_max)
         except Exception as exc:
-            self.log(f"Sichere Z-Fahrt {reason} nicht moeglich: Arbeitsbereich unbekannt: {exc}")
+            self.log(f"Sichere Z-Fahrt {reason} nicht möglich: Arbeitsbereich unbekannt: {exc}")
             return False
 
         if not (z_min <= safe_z <= z_max):
             messagebox.showerror(
-                "Markerhoehe",
-                f"Sichere Hoehe Z={safe_z:.3f} mm liegt ausserhalb des Arbeitsbereichs "
+                "Markerhöhe",
+                f"Sichere Höhe Z={safe_z:.3f} mm liegt außerhalb des Arbeitsbereichs "
                 f"[{z_min:.3f}, {z_max:.3f}] mm.\n\n"
                 "Die automatische Sicherheitsfahrt wird nicht gesendet.",
                 parent=self.window,
             )
             self.log(
                 f"Sichere Z-Fahrt {reason} nicht gesendet: "
-                f"Z={safe_z:.3f} ausserhalb [{z_min:.3f}, {z_max:.3f}]."
+                f"Z={safe_z:.3f} außerhalb [{z_min:.3f}, {z_max:.3f}]."
             )
             return False
 
         feedrate = float(getattr(CONFIG.xyz, "default_feedrate", 900.0))
-        self.log(f"Fahre {reason} auf sichere Hoehe: Z={safe_z:.3f} mm, Feedrate={feedrate:.0f}.")
+        self.log(f"Fahre {reason} auf sichere Höhe: Z={safe_z:.3f} mm, Feedrate={feedrate:.0f}.")
         if self.set_current_action:
-            self.set_current_action(f"Markerhoehen-Kalibrierung: fahre auf sichere Hoehe Z={safe_z:.3f} mm.")
+            self.set_current_action(f"Markerhöhen-Kalibrierung: fahre auf sichere Höhe Z={safe_z:.3f} mm.")
 
         try:
             return bool(self.send_xyz_command("move_absolute", z=safe_z, feedrate=feedrate))
         except Exception as exc:
             self.log(f"Sichere Z-Fahrt {reason} konnte nicht gesendet werden: {exc}")
-            messagebox.showerror("Markerhoehe", str(exc), parent=self.window)
+            messagebox.showerror("Markerhöhe", str(exc), parent=self.window)
             return False
 
     def update_display(self) -> None:
@@ -482,12 +482,12 @@ class MarkerHeightCalibrationDialog:
         try:
             return float(value.replace(",", "."))
         except ValueError:
-            messagebox.showerror("Markerhoehe", f"Ungueltiger Wert fuer {name}.", parent=self.window)
+            messagebox.showerror("Markerhöhe", f"Ungültiger Wert für {name}.", parent=self.window)
             return None
 
     def log(self, text: str) -> None:
         if self.external_log:
-            self.external_log(f"[Markerhoehe] {text}")
+            self.external_log(f"[Markerhöhe] {text}")
 
 
 def _center_window(parent: tk.Misc, window: tk.Toplevel, width: int, height: int) -> None:

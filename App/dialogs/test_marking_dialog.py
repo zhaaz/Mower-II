@@ -44,7 +44,7 @@ def show_test_marking_dialog(
         on_finished: FinishedCallback | None = None,
         log: LogFunction | None = None,
 ) -> None:
-    """Oeffnet den Dialog fuer eine Testmarkierung an der aktuellen XYZ-Position."""
+    """Öffnet den Dialog für eine Testmarkierung an der aktuellen XYZ-Position."""
 
     dialog = TestMarkingDialog(
         parent=parent,
@@ -131,8 +131,8 @@ class TestMarkingDialog:
         ttk.Label(
             root,
             text=(
-                "Die Markierung wird mit der aktuell gelesenen XYZ-Position als Mittelpunkt ausgefuehrt. "
-                "Eine Transformation oder Punktdatei ist dafuer nicht erforderlich."
+                "Die Markierung wird mit der aktuell gelesenen XYZ-Position als Mittelpunkt ausgeführt. "
+                "Eine Transformation oder Punktdatei ist dafür nicht erforderlich."
             ),
             wraplength=570,
             justify="left",
@@ -167,7 +167,7 @@ class TestMarkingDialog:
         self.text_entry = ttk.Entry(settings, textvariable=self.text_var, font=FONT_NORMAL)
         self.text_entry.grid(row=1, column=1, pady=4, sticky="ew")
 
-        ttk.Label(settings, text="Textgroesse [mm]:", style="TestMark.TLabel").grid(
+        ttk.Label(settings, text="Textgröße [mm]:", style="TestMark.TLabel").grid(
             row=2, column=0, padx=(0, 10), pady=4, sticky="w"
         )
         self.text_height_entry = ttk.Entry(
@@ -181,7 +181,7 @@ class TestMarkingDialog:
         marker_size = float(getattr(CONFIG.marker, "size_mm", 10.0))
         ttk.Label(
             settings,
-            text=f"Markierungsgroesse aus Config: {marker_size:.1f} mm",
+            text=f"Markierungsgröße aus Config: {marker_size:.1f} mm",
             style="TestMark.TLabel",
         ).grid(row=3, column=0, columnspan=2, pady=(8, 2), sticky="w")
 
@@ -226,7 +226,7 @@ class TestMarkingDialog:
 
         self.btn_close = ttk.Button(
             buttons,
-            text="Schliessen",
+            text="Schließen",
             command=self.close,
             style="TestMark.TButton",
         )
@@ -234,7 +234,7 @@ class TestMarkingDialog:
 
         self.btn_execute = ttk.Button(
             buttons,
-            text="Testmarkierung durchfuehren",
+            text="Testmarkierung durchführen",
             command=self.start_test_marking,
             style="TestMark.TButton",
         )
@@ -305,7 +305,7 @@ class TestMarkingDialog:
                     12,
                     12,
                     anchor="nw",
-                    text=f"Vorschau nicht moeglich: {exc}",
+                    text=f"Vorschau nicht möglich: {exc}",
                     fill="#a00000",
                     font=FONT_NORMAL,
                 )
@@ -337,8 +337,8 @@ class TestMarkingDialog:
         marker_label = SHAPE_LABELS[shape]
         text_info = text if text else "ohne Text"
         confirmed = messagebox.askyesno(
-            "Testmarkierung durchfuehren",
-            f"Testmarkierung an der aktuellen Position durchfuehren?\n\n"
+            "Testmarkierung durchführen",
+            f"Testmarkierung an der aktuellen Position durchführen?\n\n"
             f"Mittelpunkt: X={x:.3f} mm, Y={y:.3f} mm\n"
             f"Markierung: {marker_label}\n"
             f"Beschriftung: {text_info}\n\n"
@@ -353,7 +353,7 @@ class TestMarkingDialog:
         self.status_var.set("Aktuelle Position wird gelesen...")
         self.log(
             f"Testmarkierung angefordert: {shape}, "
-            f"Text={text_info}, Textgroesse={text_height:.1f} mm."
+            f"Text={text_info}, Textgröße={text_height:.1f} mm."
         )
 
         self.workflow_thread = threading.Thread(
@@ -373,7 +373,7 @@ class TestMarkingDialog:
             y = float(getattr(state, "y"))
             z_mark, z_clear, z_travel = self.validated_marker_z_heights()
 
-            self.gui_queue.put(("status", f"Markierung bei X={x:.3f}, Y={y:.3f} wird ausgefuehrt..."))
+            self.gui_queue.put(("status", f"Markierung bei X={x:.3f}, Y={y:.3f} wird ausgeführt..."))
             self.log(f"Aktuelle XYZ-Position: X={x:.3f}, Y={y:.3f}.")
 
             self.send_robot_command(
@@ -442,10 +442,10 @@ class TestMarkingDialog:
         try:
             value = float(raw)
         except ValueError as exc:
-            raise ValueError("Die Textgroesse muss eine Zahl sein.") from exc
+            raise ValueError("Die Textgröße muss eine Zahl sein.") from exc
         if not (MIN_TEXT_HEIGHT_MM <= value <= MAX_TEXT_HEIGHT_MM):
             raise ValueError(
-                f"Die Textgroesse muss zwischen {MIN_TEXT_HEIGHT_MM:.1f} und "
+                f"Die Textgröße muss zwischen {MIN_TEXT_HEIGHT_MM:.1f} und "
                 f"{MAX_TEXT_HEIGHT_MM:.1f} mm liegen."
             )
         return value
@@ -455,26 +455,26 @@ class TestMarkingDialog:
         unsupported = sorted({char for char in text.upper() if char != " " and char not in STROKE_FONT})
         if unsupported:
             raise ValueError(
-                "Diese Zeichen werden vom Markierfont nicht unterstuetzt: "
+                "Diese Zeichen werden vom Markierfont nicht unterstützt: "
                 + " ".join(unsupported)
             )
 
     def validate_runtime_state(self, *, require_position: bool) -> None:
         if self.xyz_worker is None:
-            raise RuntimeError("XYZ-Worker ist nicht verfuegbar.")
+            raise RuntimeError("XYZ-Worker ist nicht verfügbar.")
 
         state = self.xyz_state_getter()
         if state is None:
-            raise RuntimeError("Kein XYZ-Zustand verfuegbar.")
+            raise RuntimeError("Kein XYZ-Zustand verfügbar.")
         if not bool(getattr(state, "connected", False)):
             raise RuntimeError("XYZ ist nicht verbunden.")
         if not bool(getattr(state, "homed", False)):
-            raise RuntimeError("XYZ-Homing wurde noch nicht durchgefuehrt.")
+            raise RuntimeError("XYZ-Homing wurde noch nicht durchgeführt.")
         if require_position and (
                 getattr(state, "x", None) is None
                 or getattr(state, "y", None) is None
         ):
-            raise RuntimeError("Die aktuelle XYZ-Position ist nicht verfuegbar.")
+            raise RuntimeError("Die aktuelle XYZ-Position ist nicht verfügbar.")
 
     @staticmethod
     def validated_marker_z_heights() -> tuple[float, float, float]:
@@ -486,7 +486,7 @@ class TestMarkingDialog:
 
         if not (z_min <= z_mark <= z_clear <= z_travel <= z_max):
             raise ValueError(
-                "Ungueltige Marker-Z-Hoehen. Erwartet: "
+                "Ungültige Marker-Z-Höhen. Erwartet: "
                 f"{z_min:.3f} <= Z_MARK <= Z_CLEAR <= Z_TRAVEL <= {z_max:.3f} mm."
             )
         return z_mark, z_clear, z_travel
@@ -559,7 +559,7 @@ class TestMarkingDialog:
         if self.workflow_running:
             messagebox.showwarning(
                 "Testmarkierung",
-                "Die Testmarkierung laeuft noch und kann nicht geschlossen werden.",
+                "Die Testmarkierung läuft noch und kann nicht geschlossen werden.",
                 parent=self.window,
             )
             return
@@ -638,7 +638,7 @@ def _transform_point(
 
 
 def _circle_points(radius: float, angle_deg: float) -> list[tuple[float, float]]:
-    # Die Kreisrotation ist geometrisch ohne Wirkung, wird aber fuer eine
+    # Die Kreisrotation ist geometrisch ohne Wirkung, wird aber für eine
     # einheitliche Vorschau-Transformation beibehalten.
     return [
         _transform_point(

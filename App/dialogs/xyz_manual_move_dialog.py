@@ -114,10 +114,10 @@ def show_xyz_manual_move_dialog(
         send_xyz_command("jog", dz=dz, feedrate=feed)
         set_current_action("XYZ-Jog Z gesendet.")
 
-    ttk.Button(move_frame, text="Y+", command=lambda: jog_xy(0.0, 1.0)).grid(row=0, column=1, padx=6, pady=4, sticky="ew")
-    ttk.Button(move_frame, text="X-", command=lambda: jog_xy(-1.0, 0.0)).grid(row=1, column=0, padx=6, pady=4, sticky="ew")
-    ttk.Button(move_frame, text="X+", command=lambda: jog_xy(1.0, 0.0)).grid(row=1, column=2, padx=6, pady=4, sticky="ew")
-    ttk.Button(move_frame, text="Y-", command=lambda: jog_xy(0.0, -1.0)).grid(row=2, column=1, padx=6, pady=4, sticky="ew")
+    ttk.Button(move_frame, text="X+", command=lambda: jog_xy(1.0, 0.0)).grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+    ttk.Button(move_frame, text="Y-", command=lambda: jog_xy(0.0, -1.0)).grid(row=1, column=0, padx=6, pady=4, sticky="ew")
+    ttk.Button(move_frame, text="Y+", command=lambda: jog_xy(0.0, 1.0)).grid(row=1, column=2, padx=6, pady=4, sticky="ew")
+    ttk.Button(move_frame, text="X-", command=lambda: jog_xy(-1.0, 0.0)).grid(row=2, column=1, padx=6, pady=4, sticky="ew")
 
     ttk.Separator(move_frame, orient="vertical").grid(row=0, column=3, rowspan=3, padx=16, sticky="ns")
     ttk.Label(move_frame, text="Z-Achse").grid(row=0, column=4, padx=6, pady=4, sticky="w")
