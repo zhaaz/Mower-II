@@ -48,6 +48,9 @@ _POINT_FIELDS = (
     "measurement_retry_threshold_mm",
     "measurement_valid",
     "measurement_warning",
+    "marking_state",
+    "marking_state_updated_at",
+    "marking_error",
 )
 
 

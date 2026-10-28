@@ -29,6 +29,7 @@ StateGetter = Callable[[], Any]
 LogFunction = Callable[[str], None]
 FinishedCallback = Callable[[], None]
 PointsChangedCallback = Callable[[], None]
+CheckpointCallback = Callable[[str, str | None], None]
 
 FONT_NORMAL = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")
@@ -59,6 +60,7 @@ def show_point_marking_dialog(
         tracker_receiver: Any | None = None,
         on_points_changed: PointsChangedCallback | None = None,
         on_finished: FinishedCallback | None = None,
+        on_checkpoint: CheckpointCallback | None = None,
         log: LogFunction | None = None,
 ) -> None:
     """Dialog zum Markieren aktuell erreichbarer Punkte."""
@@ -72,6 +74,7 @@ def show_point_marking_dialog(
         tracker_receiver=tracker_receiver,
         on_points_changed=on_points_changed,
         on_finished=on_finished,
+        on_checkpoint=on_checkpoint,
         external_log=log,
     )
     dialog.show()
@@ -89,6 +92,7 @@ class PointMarkingDialog:
             tracker_receiver: Any | None = None,
             on_points_changed: PointsChangedCallback | None = None,
             on_finished: FinishedCallback | None = None,
+            on_checkpoint: CheckpointCallback | None = None,
             external_log: LogFunction | None = None,
     ) -> None:
         self.parent = parent
@@ -99,6 +103,7 @@ class PointMarkingDialog:
         self.tracker_receiver = tracker_receiver
         self.on_points_changed = on_points_changed
         self.on_finished = on_finished
+        self.on_checkpoint = on_checkpoint
         self.external_log = external_log
 
         # Queue und Laufzeit-Flags müssen vor der ersten Logausgabe existieren.
@@ -536,19 +541,28 @@ class PointMarkingDialog:
                     f"Markierhöhen: Z_MARK={z_mark_mm:.3f} mm, "
                     f"Z_CLEAR={z_clear_mm:.3f} mm, Z_TRAVEL={z_travel_mm:.3f} mm"
                 )
-                self.send_robot_command(
-                    "mark_point",
-                    timeout_s=240.0,
-                    x=float(refreshed.robot_x),
-                    y=float(refreshed.robot_y),
-                    label=label_text,
-                    marker_size=CONFIG.marker.size_mm,
-                    marker_shape=self.marker_shape_for_point(result.point),
-                    angle_deg=marker_angle_deg,
-                    z_mark_mm=z_mark_mm,
-                    z_clear_mm=z_clear_mm,
-                    z_travel_mm=z_travel_mm,
-                )
+
+                self._set_marking_state(result.point, "in_progress")
+                self._checkpoint(f"Markierung {result.name} gestartet", result.name)
+
+                try:
+                    self.send_robot_command(
+                        "mark_point",
+                        timeout_s=240.0,
+                        x=float(refreshed.robot_x),
+                        y=float(refreshed.robot_y),
+                        label=label_text,
+                        marker_size=CONFIG.marker.size_mm,
+                        marker_shape=self.marker_shape_for_point(result.point),
+                        angle_deg=marker_angle_deg,
+                        z_mark_mm=z_mark_mm,
+                        z_clear_mm=z_clear_mm,
+                        z_travel_mm=z_travel_mm,
+                    )
+                except Exception as exc:
+                    self._set_marking_state(result.point, "uncertain", error=str(exc))
+                    self._checkpoint(f"Markierung {result.name}: Status unklar", result.name)
+                    raise
 
                 try:
                     result.point.marked = True
@@ -556,23 +570,39 @@ class PointMarkingDialog:
                     pass
 
                 self._increment_marking_count(result.point)
+                self._set_marking_state(result.point, "marked")
+                self._checkpoint(f"Markierung {result.name} physisch abgeschlossen", None)
                 if was_marked:
                     self.log(f"{result.name}: bereits markierter Punkt wurde erneut markiert.")
 
-                if self.measure_after_marking_var.get():
-                    measure_z_mm = self.move_to_measurement_position(
-                        x=float(refreshed.robot_x),
-                        y=float(refreshed.robot_y),
-                        name=result.name,
+                try:
+                    if self.measure_after_marking_var.get():
+                        measure_z_mm = self.move_to_measurement_position(
+                            x=float(refreshed.robot_x),
+                            y=float(refreshed.robot_y),
+                            name=result.name,
+                        )
+                        try:
+                            self.measure_marked_point(result.point, result.name, measure_z_mm=measure_z_mm)
+                        finally:
+                            self.move_to_z_travel_after_measurement(result.name)
+                    elif was_marked:
+                        self._clear_mark_measurement(result.point)
+                        self.log(f"{result.name}: alte Kontrollmesswerte gelöscht, da automatische Messung inaktiv ist.")
+                except Exception as exc:
+                    self._set_marking_state(
+                        result.point,
+                        "marked_measurement_failed",
+                        error=str(exc),
                     )
-                    try:
-                        self.measure_marked_point(result.point, result.name, measure_z_mm=measure_z_mm)
-                    finally:
-                        self.move_to_z_travel_after_measurement(result.name)
-                elif was_marked:
-                    self._clear_mark_measurement(result.point)
-                    self.log(f"{result.name}: alte Kontrollmesswerte gelöscht, da automatische Messung inaktiv ist.")
+                    self._checkpoint(
+                        f"Markierung {result.name} abgeschlossen, Kontrollmessung fehlgeschlagen",
+                        None,
+                    )
+                    raise
 
+                self._set_marking_state(result.point, "completed")
+                self._checkpoint(f"Markierung {result.name} vollständig abgeschlossen", None)
                 self.log(f"{result.name}: markiert.")
                 self.gui_queue.put(("points_changed", None))
 
@@ -783,6 +813,27 @@ class PointMarkingDialog:
             setattr(point, "marking_count", current + 1)
         except Exception:
             pass
+
+    @staticmethod
+    def _set_marking_state(point: Any, state: str, *, error: str | None = None) -> None:
+        values = {
+            "marking_state": state,
+            "marking_state_updated_at": datetime.now().isoformat(timespec="seconds"),
+            "marking_error": error,
+        }
+        for key, value in values.items():
+            try:
+                setattr(point, key, value)
+            except Exception:
+                pass
+
+    def _checkpoint(self, reason: str, in_progress_point: str | None) -> None:
+        if self.on_checkpoint is None:
+            return
+        try:
+            self.on_checkpoint(reason, in_progress_point)
+        except Exception as exc:
+            self.log(f"WARNUNG: Autosave fehlgeschlagen: {exc}")
 
     def _clear_mark_measurement(self, point: Any) -> None:
         measurement_fields = (

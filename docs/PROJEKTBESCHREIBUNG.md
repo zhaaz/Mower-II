@@ -14,7 +14,7 @@
 # Mower II – Projektdokumentation
 
 **Dokumenttyp:** Technische Projektbeschreibung und Betriebsübersicht  
-**Stand:** 27.10.2026  
+**Stand:** 28.10.2026<br>
 **Projektstatus:** Entwicklung und Erprobung  
 **Projektverantwortlich:** Andreas Wehner  
 **Organisation:** Institut für Geodäsie  
@@ -267,6 +267,12 @@ Eine reguläre Markierung ist nur möglich, wenn:
 - eine gültige Transformation vorliegt,
 - mindestens ein Punkt geladen ist.
 
+Wird eine Absteckung ohne gültige Transformation gestartet, bietet der
+Hinweisdialog direkt die Optionen **Transformation durchführen** und
+**Abbrechen** an. Über die erste Option wird der Transformationsworkflow
+geöffnet; die Markierung muss nach erfolgreicher Übernahme erneut gestartet
+werden.
+
 Der Sollpunkt wird aus dem LT-/Projektkoordinatensystem in das lokale
 Roboterkoordinatensystem transformiert. Nur Punkte innerhalb des erreichbaren
 Arbeitsraums werden freigegeben.
@@ -330,6 +336,20 @@ Das Ergebnis wird durch Totband, Maximalgeschwindigkeit, Befehlsintervall und
 Vorzeichen begrenzt. Fehlen Trackerstandpunkt, aktuelle Messung, Muratawert,
 Referenz oder GYEMS-Verbindung, darf die ARN nicht aktiv regeln. Beim
 Deaktivieren wird ein Geschwindigkeitskommando von 0 gesendet.
+
+### 6.9 Manuelle XYZ- und Drehmotorbedienung
+
+Über **XYZ → Manuelle Steuerung** können relative X-, Y- und Z-Bewegungen
+sowie absolute Zielpositionen angefahren werden. Das Richtungskreuz entspricht
+der Bedienansicht: X+ liegt oben, X− unten, Y− links und Y+ rechts. Die aktuelle
+Position wird innerhalb des Dialogs angezeigt und kann dort aktualisiert
+werden; ein separater Menüpunkt zum Positionslesen ist nicht vorgesehen.
+
+Das Menü **Drehmotor** enthält die regelmäßig benötigten Funktionen zum
+Verbinden, Trennen, Anzeigen des Status und Öffnen der GYEMS-Diagnose. Die
+Referenzierung erfolgt kontrolliert während der Systeminitialisierung.
+Stoppbefehle bleiben Bestandteil der internen Sicherheits- und
+Deaktivierungsabläufe, werden jedoch nicht als eigener Menüpunkt angeboten.
 
 ## 7. Schnittstellen und Datenformate
 
@@ -482,6 +502,33 @@ Eine beim Speichern vorhandene Transformation wird nach dem erneuten Laden
 nicht automatisch als gültig übernommen. Die Transformation muss für die
 aktuelle physische Wagenlage neu bestimmt werden.
 
+### 7.6 Automatische Sitzungswiederherstellung
+
+Zusätzlich zum manuellen Projektspeichern führt Mower Operator einen
+fortlaufenden Autosave der aktiven Abstecksitzung. Gespeichert wird nach
+relevanten Änderungen sowie unmittelbar vor und nach jeder Markierung. Die
+Dateien liegen unter:
+
+```text
+data/projekte/autosave/
+├── aktive_sitzung.mower.autosave.json
+└── aktive_sitzung.mower.autosave.bak.json
+```
+
+Die Hauptdatei wird zunächst vollständig als temporäre Datei geschrieben und
+anschließend atomar ersetzt. Die vorherige Version bleibt als Backup erhalten.
+Vor einem Roboterauftrag erhält der betreffende Punkt den Zustand
+`in_progress`. Nach der bestätigten Roboterbewegung werden physischer
+Markierabschluss, optionale Kontrollmessung und vollständiger Abschluss
+getrennt gespeichert.
+
+Nach einem Programmabsturz bietet ein Startdialog das Wiederherstellen oder
+Verwerfen der Sitzung an. Eine beim Absturz laufende Markierung wird als
+**Status unklar** gekennzeichnet und muss vor einer Wiederholung vor Ort
+kontrolliert werden. Hardwarezustände, Homing und Transformation werden nicht
+als gültig wiederhergestellt; sie müssen erneut hergestellt bzw. durchgeführt
+werden.
+
 ## 8. Konfiguration
 
 ### 8.1 Speicherort und Bearbeitung
@@ -502,8 +549,15 @@ MowerOperator/data/config/mower_config.json
 Validierung. Für den normalen Betrieb wird nur die JSON-Datei bearbeitet.
 Relative Pfade werden gegen den Projekt- bzw. EXE-Ordner aufgelöst.
 
-Nach Configänderungen ist derzeit ein Neustart erforderlich. Der Menüpunkt
-**Config neu laden** ist im aktuellen Stand noch nicht implementiert.
+Über **System → Config neu laden** kann die JSON-Datei während des Betriebs neu
+eingelesen werden. Die Datei wird vollständig geladen und validiert, bevor die
+aktive Konfiguration ersetzt wird. Bei einer ungültigen JSON-Datei bleibt die
+bisherige Config unverändert aktiv.
+
+Ein erfolgreicher Reload invalidiert aus Sicherheitsgründen eine bestehende
+Transformation und deaktiviert eine aktive Reflektornachführung. Geänderte
+COM-Port-, Baudraten- oder UDP-Einstellungen werden für bereits geöffnete
+Verbindungen erst nach dem Trennen und erneuten Verbinden wirksam.
 
 ### 8.2 Konfigurationsbereiche
 
@@ -632,6 +686,7 @@ MowerOperator/
     │   ├── kalibrierung/
     │   └── messplaene/
     ├── projekte/
+    │   └── autosave/
     └── logs/
 ```
 
@@ -691,7 +746,22 @@ anzupassen.
 
 ### 13.3 Empfohlene Systemtests
 
+Der softwareseitige Config-Reload kann zusätzlich automatisiert geprüft
+werden:
+
+```powershell
+python -m unittest tests.test_config_reload -v
+```
+
+Der Sitzungs-Autosave kann separat geprüft werden:
+
+```powershell
+python -m unittest tests.test_session_autosave -v
+```
+
 - Start mit vollständiger und mit fehlerhafter Config.
+- Config-Reload mit gültiger und ungültiger JSON-Datei sowie anschließender
+  Neuverbindung geänderter Schnittstellen.
 - Verbindung und Trennung jeder Komponente.
 - XYZ-Homing und Arbeitsraumgrenzen.
 - Transformation mit fünf Punkten, einem fehlenden Punkt und einem Ausreißer.
@@ -792,8 +862,6 @@ Nicht ins Repository gehören insbesondere:
 
 ## 16. Bekannte Einschränkungen und offene Punkte
 
-- **Config neu laden:** Der Menüpunkt ist vorhanden, ein echtes Neuladen zur
-  Laufzeit aber noch nicht implementiert. Aktuell ist ein Neustart nötig.
 - **Legacy-Code:** KVH-Dateien sind teilweise noch vorhanden und sollten nach
   einer abschließenden Archivierungsentscheidung entfernt oder klar als
   Legacy gekennzeichnet werden.
@@ -840,4 +908,6 @@ wichtig:
 | 27.10.2026 | 0.3 | Markierungscodes und tatsächliches Parser-Verhalten dokumentiert | `[TODO]` |
 | 27.10.2026 | 0.4 | Arduino-Nano-ESP32-Abhängigkeiten und Installationsvoraussetzungen ergänzt | `[TODO]` |
 | 27.10.2026 | 0.5 | Projektverantwortlichen, Organisation und Kontaktadresse ergänzt | Andreas Wehner |
+| 28.10.2026 | 0.6 | Config-Reload, Transformationshinweis und bereinigte Gerätebedienung dokumentiert | Andreas Wehner |
+| 28.10.2026 | 0.7 | Absturzsicheren Sitzungs-Autosave und Wiederherstellungsablauf dokumentiert | Andreas Wehner |
 

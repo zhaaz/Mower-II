@@ -130,6 +130,12 @@ except Exception as exc:
     _record_startup_import_error("Projektdatei-Service", exc)
 
 try:
+    from App.services.session_autosave import SessionAutosaveManager
+except Exception as exc:
+    SessionAutosaveManager = None
+    _record_startup_import_error("Sitzungs-Autosave", exc)
+
+try:
     from XYZ_Robot.xyz_robot_worker import XYZRobotWorker
 except Exception as exc:
     XYZRobotWorker = None
@@ -568,6 +574,12 @@ class MowerOperatorApp(ctk.CTk):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file_path = logs_dir / f"mower_operator_{timestamp}.log"
 
+        self.autosave_manager: Any | None = None
+        self._autosave_suspended = False
+        if SessionAutosaveManager is not None:
+            autosave_dir = get_configured_directory("projects_dir", "data/projekte") / "autosave"
+            self.autosave_manager = SessionAutosaveManager(autosave_dir)
+
         # Komponentenstatus
         self.xyz_ready = False
         self.tracker_ready = False
@@ -714,6 +726,7 @@ class MowerOperatorApp(ctk.CTk):
         self.update_status()
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.after(350, self._offer_autosave_recovery)
 
     # --------------------------------------------------
     # UI
@@ -1339,6 +1352,182 @@ class MowerOperatorApp(ctk.CTk):
     # Datei
     # --------------------------------------------------
 
+    def _autosave_checkpoint(
+            self,
+            reason: str,
+            in_progress_point: str | None = None,
+            *,
+            clean_shutdown: bool = False,
+    ) -> None:
+        if self.autosave_manager is None or self._autosave_suspended:
+            return
+
+        try:
+            self.autosave_manager.save(
+                points=self.points,
+                status=self._build_project_status(),
+                config=CONFIG,
+                project_path=self.project_path,
+                selected_point_name=self.selected_point_name,
+                reason=reason,
+                clean_shutdown=clean_shutdown,
+                in_progress_point=in_progress_point,
+            )
+        except Exception as exc:
+            self.log(f"WARNUNG: Sitzungs-Autosave fehlgeschlagen: {exc}")
+
+    def _replace_autosave_session(self, reason: str) -> None:
+        if self.autosave_manager is None:
+            return
+        if self._autosave_suspended:
+            self.autosave_manager.discard()
+        self._autosave_suspended = False
+        self._autosave_checkpoint(reason)
+
+    def _offer_autosave_recovery(self) -> None:
+        if self.autosave_manager is None:
+            return
+
+        try:
+            recovery = self.autosave_manager.load_recovery(point_class=StakeoutPoint)
+        except Exception as exc:
+            self.log(f"Autosave konnte nicht geprüft werden: {exc}")
+            return
+
+        if recovery is None:
+            return
+
+        metadata = recovery.metadata
+        marked_count = sum(bool(getattr(point, "marked", False)) for point in recovery.points)
+        uncertain_count = sum(
+            str(getattr(point, "marking_state", "")) in {"in_progress", "uncertain"}
+            for point in recovery.points
+        )
+        project_value = metadata.get("project_path")
+        project_label = Path(str(project_value)).name if project_value else "Nicht gespeichertes Projekt"
+        updated_at = str(metadata.get("updated_at", "unbekannt"))
+
+        choice = self._ask_autosave_recovery(
+            project_label=project_label,
+            updated_at=updated_at,
+            point_count=len(recovery.points),
+            marked_count=marked_count,
+            uncertain_count=uncertain_count,
+            used_backup=bool(recovery.used_backup),
+        )
+
+        if choice == "discard":
+            self.autosave_manager.discard()
+            self.log("Nicht abgeschlossene Autosave-Sitzung wurde verworfen.")
+            return
+
+        if choice != "restore":
+            self._autosave_suspended = True
+            self.log("Autosave-Wiederherstellung abgebrochen; vorhandene Datei bleibt geschützt.")
+            return
+
+        for point in recovery.points:
+            if str(getattr(point, "marking_state", "")) == "in_progress":
+                try:
+                    point.marking_state = "uncertain"
+                    point.marking_state_updated_at = datetime.now().isoformat(timespec="seconds")
+                    point.marking_error = "Programm wurde während der Markierung beendet."
+                except Exception:
+                    pass
+
+        self.points = recovery.points
+        selected_name = metadata.get("selected_point_name")
+        self.selected_point_name = (
+            str(selected_name)
+            if selected_name and any(point.name == str(selected_name) for point in self.points)
+            else (self.points[0].name if self.points else None)
+        )
+        self.project_path = Path(str(project_value)) if project_value else None
+        self._autosave_suspended = False
+        self._invalidate_project_transformation(
+            "Autosave wiederhergestellt; Transformation muss neu bestimmt werden."
+        )
+        self._apply_demo_scene()
+        self.refresh_points()
+        self._update_window_title()
+        self._autosave_checkpoint("Autosave-Sitzung wiederhergestellt")
+
+        source_text = "Backup-Autosave" if recovery.used_backup else "Autosave"
+        self.log(
+            f"{source_text} wiederhergestellt: {len(self.points)} Punkte, "
+            f"davon {marked_count} markiert und {uncertain_count} mit unklarem Status."
+        )
+        self.set_current_action("Sitzung wiederhergestellt. Homing und Transformation erneut durchführen.")
+        messagebox.showinfo(
+            "Sitzung wiederhergestellt",
+            "Die Punkt- und Ergebnisdaten wurden wiederhergestellt.\n\n"
+            "Aus Sicherheitsgründen sind Homing und Transformation erneut durchzuführen.\n"
+            "Punkte mit unklarem Status müssen vor dem erneuten Markieren geprüft werden.",
+            parent=self,
+        )
+
+    def _ask_autosave_recovery(
+            self,
+            *,
+            project_label: str,
+            updated_at: str,
+            point_count: int,
+            marked_count: int,
+            uncertain_count: int,
+            used_backup: bool,
+    ) -> str:
+        result = {"choice": "cancel"}
+        dialog = tk.Toplevel(self)
+        dialog.title("Nicht abgeschlossene Sitzung gefunden")
+        dialog.transient(self)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        source_hint = "\nDie Hauptdatei war nicht lesbar; es wird das Backup angeboten." if used_backup else ""
+        text = (
+            "Mower Operator wurde zuvor nicht ordnungsgemäß beendet.\n\n"
+            f"Projekt: {project_label}\n"
+            f"Autosave: {updated_at}\n"
+            f"Punkte: {point_count}, davon markiert: {marked_count}\n"
+            f"Status unklar: {uncertain_count}"
+            f"{source_hint}\n\n"
+            "Soll die Sitzung wiederhergestellt werden?"
+        )
+
+        frame = ttk.Frame(dialog, padding=18)
+        frame.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(frame, text=text, justify="left", wraplength=540).grid(
+            row=0, column=0, columnspan=3, pady=(0, 18), sticky="w"
+        )
+
+        def finish(choice: str) -> None:
+            result["choice"] = choice
+            dialog.destroy()
+
+        ttk.Button(
+            frame,
+            text="Sitzung wiederherstellen",
+            command=lambda: finish("restore"),
+        ).grid(row=1, column=0, padx=(0, 6), sticky="ew")
+        ttk.Button(
+            frame,
+            text="Autosave verwerfen",
+            command=lambda: finish("discard"),
+        ).grid(row=1, column=1, padx=6, sticky="ew")
+        ttk.Button(
+            frame,
+            text="Abbrechen",
+            command=lambda: finish("cancel"),
+        ).grid(row=1, column=2, padx=(6, 0), sticky="ew")
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: finish("cancel"))
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + max((self.winfo_width() - dialog.winfo_width()) // 2, 0)
+        y = self.winfo_rooty() + max((self.winfo_height() - dialog.winfo_height()) // 2, 0)
+        dialog.geometry(f"+{x}+{y}")
+        self.wait_window(dialog)
+        return str(result["choice"])
+
     def new_project_dialog(self) -> None:
         if not self._confirm_replace_current_project("Neues Projekt"):
             self.set_current_action("Neues Projekt abgebrochen.")
@@ -1352,6 +1541,7 @@ class MowerOperatorApp(ctk.CTk):
         self._apply_demo_scene()
         self.refresh_points()
         self._update_window_title()
+        self._replace_autosave_session("Neues Projekt angelegt")
         self.log(f"Neues Projekt angelegt: {count} Punkt(e) entfernt.")
         self.set_current_action("Neues Projekt angelegt.")
 
@@ -1400,6 +1590,7 @@ class MowerOperatorApp(ctk.CTk):
         self._apply_demo_scene()
         self.refresh_points()
         self._update_window_title()
+        self._replace_autosave_session("Projekt geladen")
 
         saved_at = str(project_data.get("saved_at", ""))
         suffix = f" ({saved_at})" if saved_at else ""
@@ -1421,7 +1612,7 @@ class MowerOperatorApp(ctk.CTk):
             show_point_viewer_dialog(
                 parent=self,
                 points=self.points,
-                on_refresh=lambda: self.refresh_points(keep_map_view=True),
+                on_refresh=self._on_project_points_edited,
             )
             self.log("Punktviewer geöffnet.")
             self.set_current_action("Punktviewer geöffnet.")
@@ -1463,6 +1654,7 @@ class MowerOperatorApp(ctk.CTk):
         self._apply_demo_scene()
         self.refresh_points()
         self._update_window_title()
+        self._replace_autosave_session("Punktdatei importiert")
         self.log(f"Punktdatei importiert: {file_path}. Transformation unverändert.")
         self.set_current_action("Punktdatei importiert. Transformation unverändert.")
 
@@ -1489,6 +1681,7 @@ class MowerOperatorApp(ctk.CTk):
         # Transformation, Wagenanzeige und ARN-Zustand bleiben daher erhalten.
         self._apply_demo_scene()
         self.refresh_points()
+        self._replace_autosave_session("Punktliste gelöscht")
         self.log(f"Punktliste gelöscht: {count} Punkt(e) entfernt. Transformation unverändert.")
         self.set_current_action("Punktliste gelöscht. Transformation unverändert.")
 
@@ -1545,7 +1738,12 @@ class MowerOperatorApp(ctk.CTk):
             return
 
         self.log(f"Projekt gespeichert: {path}")
+        self._autosave_checkpoint("Projekt manuell gespeichert")
         self.set_current_action("Projekt gespeichert.")
+
+    def _on_project_points_edited(self) -> None:
+        self.refresh_points(keep_map_view=True)
+        self._autosave_checkpoint("Punktdaten bearbeitet")
 
     def export_project_txt_dialog(self) -> None:
         if export_project_txt is None:
@@ -1643,6 +1841,11 @@ class MowerOperatorApp(ctk.CTk):
             messagebox.showerror("Log öffnen", str(exc), parent=self)
 
     def on_close(self) -> None:
+        self._autosave_checkpoint(
+            "Programm ordnungsgemäß beendet",
+            clean_shutdown=True,
+        )
+
         try:
             if self.tracker_receiver is not None and hasattr(self.tracker_receiver, "stop"):
                 self.tracker_receiver.stop()
@@ -3291,8 +3494,9 @@ class MowerOperatorApp(ctk.CTk):
                 xyz_state_getter=lambda: self.xyz_state,
                 trafo_manager=self.trafo_manager,
                 tracker_receiver=self.tracker_receiver,
-                on_points_changed=lambda: self.refresh_points(keep_map_view=True),
+                on_points_changed=self._on_marking_points_changed,
                 on_finished=self.on_point_marking_finished,
+                on_checkpoint=self._autosave_checkpoint,
                 log=self.log,
             )
 
@@ -3354,7 +3558,12 @@ class MowerOperatorApp(ctk.CTk):
     def on_point_marking_finished(self) -> None:
         self.set_current_action("Punkte markieren abgeschlossen.")
         self.refresh_points(keep_map_view=True)
+        self._autosave_checkpoint("Markierauftrag beendet")
         self.update_status()
+
+    def _on_marking_points_changed(self) -> None:
+        self.refresh_points(keep_map_view=True)
+        self._autosave_checkpoint("Markierergebnis aktualisiert")
 
     def test_marking_dialog(self) -> None:
         self.set_current_action("Testmarkierung wird vorbereitet...")
@@ -3690,6 +3899,10 @@ class MowerOperatorApp(ctk.CTk):
 
     @staticmethod
     def _point_status_display(point: StakeoutPoint) -> str:
+        if str(getattr(point, "marking_state", "")) in {"in_progress", "uncertain"}:
+            return "Status unklar"
+        if str(getattr(point, "marking_state", "")) == "marked_measurement_failed":
+            return "markiert / Messung fehlgeschlagen"
         if bool(getattr(point, "marked", False)):
             return "abgesteckt"
         if bool(getattr(point, "reachable", False)):
