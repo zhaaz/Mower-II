@@ -196,6 +196,12 @@ except Exception as exc:
     _record_startup_import_error("Punktviewer", exc)
 
 try:
+    from App.dialogs.free_point_import_dialog import show_free_point_import_dialog
+except Exception as exc:
+    show_free_point_import_dialog = None
+    _record_startup_import_error("Freier Punktimport", exc)
+
+try:
     from App.dialogs.system_initialization_dialog import show_system_initialization_dialog
 except Exception as exc:
     show_system_initialization_dialog = None
@@ -778,6 +784,7 @@ class MowerOperatorApp(ctk.CTk):
         file_menu.add_command(label="Punktviewer öffnen...", command=self.show_point_viewer)
         file_menu.add_separator()
         file_menu.add_command(label="Punktdatei importieren...", command=self.load_points_dialog)
+        file_menu.add_command(label="Freier Import...", command=self.load_points_flexible_dialog)
         file_menu.add_command(label="Punkte löschen...", command=self.clear_points_dialog)
         file_menu.add_separator()
         file_menu.add_command(label="Log öffnen", command=self.open_log_file)
@@ -1657,6 +1664,60 @@ class MowerOperatorApp(ctk.CTk):
         self._replace_autosave_session("Punktdatei importiert")
         self.log(f"Punktdatei importiert: {file_path}. Transformation unverändert.")
         self.set_current_action("Punktdatei importiert. Transformation unverändert.")
+
+    def load_points_flexible_dialog(self) -> None:
+        if show_free_point_import_dialog is None:
+            self.log("Freier Import ist nicht verfügbar.")
+            messagebox.showerror(
+                "Freier Import",
+                "Der freie Punktimport ist nicht verfügbar. Details stehen im Startprotokoll.",
+                parent=self,
+            )
+            return
+
+        self.set_current_action("Datei für freien Import auswählen...")
+        file_path = filedialog.askopenfilename(
+            title="Freier Import",
+            initialdir=str(get_configured_directory("measurement_plans_dir", "data/messungen/messplaene")),
+            filetypes=[
+                ("Text- und CSV-Dateien", "*.txt *.csv *.dat *.xyz"),
+                ("Textdateien", "*.txt"),
+                ("CSV-Dateien", "*.csv"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+        if not file_path:
+            self.set_current_action("Bereit.")
+            return
+
+        try:
+            imported_points = show_free_point_import_dialog(self, file_path)
+        except Exception as exc:
+            self.log(f"FEHLER beim freien Punktimport: {exc}")
+            messagebox.showerror("Freier Import", str(exc), parent=self)
+            self.set_current_action("Fehler beim freien Punktimport.")
+            return
+
+        if imported_points is None:
+            self.set_current_action("Freier Import abgebrochen.")
+            return
+
+        self.points = imported_points
+        self.selected_point_name = self.points[0].name if self.points else None
+        self.project_path = None
+        # Wie beim Standardimport wird nur die Punktliste ersetzt. Eine bereits
+        # bestimmte Wagenpose/Transformation bleibt deshalb gültig.
+        self._apply_demo_scene()
+        self.refresh_points()
+        self._update_window_title()
+        self._replace_autosave_session("Freier Punktimport")
+        self.log(
+            f"Freier Punktimport abgeschlossen: {file_path} "
+            f"({len(self.points)} Punkt(e)). Transformation unverändert."
+        )
+        self.set_current_action(
+            f"{len(self.points)} Punkt(e) frei importiert. Transformation unverändert."
+        )
 
     def clear_points_dialog(self) -> None:
         if not self.points:
@@ -4746,4 +4807,5 @@ if __name__ == "__main__":
 
     app = MowerOperatorApp()
     app.mainloop()
+
 
