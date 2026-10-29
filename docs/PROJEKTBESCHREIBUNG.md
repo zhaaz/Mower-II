@@ -14,7 +14,7 @@
 # Mower II – Projektdokumentation
 
 **Dokumenttyp:** Technische Projektbeschreibung und Betriebsübersicht  
-**Stand:** 28.10.2026<br>
+**Stand:** 29.10.2026<br>
 **Projektstatus:** Entwicklung und Erprobung  
 **Projektverantwortlich:** Andreas Wehner  
 **Organisation:** Institut für Geodäsie  
@@ -169,8 +169,8 @@ Zustände kontrolliert zwischen Hardware- und GUI-Ebene.
 | Bereich | Aufgabe |
 | --- | --- |
 | `App/` | Hauptfenster, Menüstruktur, Kartenanzeige, Dialoge und anwendungsnahe Services |
-| `App/dialogs/` | Initialisierung, Transformation, Kalibrierungen, Testmarkierung und Diagnosen |
-| `App/services/` | Projektdateien, Kartenvisualisierung und Reflektornachführung |
+| `App/dialogs/` | Initialisierung, Transformation, Kalibrierungen, Punktimport, Testmarkierung und Diagnosen |
+| `App/services/` | Projektdateien, flexibler Punktimport, Kartenvisualisierung und Reflektornachführung |
 | `XYZ_Robot/` | Worker, Statusverwaltung und Befehle des XYZ-Roboters |
 | `Lasertracker/` | UDP-Empfang, Datenzustand und Punktmessung |
 | `Murata/` | Serieller Treiber, Worker, Status, Drift- und Winkelverarbeitung sowie Tests |
@@ -429,6 +429,13 @@ Bootloader-/DFU-Problemen benötigt.
 
 ### 7.4 Punktdateien
 
+Mower Operator bietet unter **Datei** zwei Importwege. Der Standardimport ist
+für das festgelegte Mower-II-Punktformat vorgesehen. Der zusätzliche
+**Freie Import** verarbeitet fremde tabellarische Textformate, ohne dass diese
+vorher in das Standardformat umgewandelt werden müssen.
+
+#### Standardimport
+
 Über **Punktdatei importieren** können Text- und CSV-Dateien geladen werden.
 Das verwendete Mower-II-Punktformat ist zeilenorientiert. Eine Punktzeile hat
 folgenden Aufbau:
@@ -486,6 +493,46 @@ Die Kennziffer wird in `App/stakeout_point.py` auf die in
 | `2` | `cross` | Diagonales Kreuz bzw. X |
 | `3` | `circle_point` | Kreis mit Mittelpunkt |
 | `4` | `plus_circle` | Pluszeichen mit umschließendem Kreis |
+
+#### Freier Import
+
+Über **Datei → Freier Import...** wird zunächst eine beliebige tabellarische
+Textdatei ausgewählt. Unterstützt werden insbesondere `*.txt`, `*.csv`,
+`*.dat` und `*.xyz`; über **Alle Dateien** können auch andere Dateiendungen
+geöffnet werden. Der Dialog führt keine Koordinatentransformation durch,
+sondern übernimmt die eingelesenen X-, Y- und Z-Werte unverändert als
+Projektkoordinaten.
+
+Im Dialog können folgende Eigenschaften eingestellt werden:
+
+- Trennzeichen: Leerraum, Semikolon, Komma, Tabulator oder ein frei gewähltes
+  einzelnes Zeichen,
+- Dezimalzeichen: Punkt oder Komma,
+- Anzahl der am Dateianfang zu überspringenden Kopfzeilen,
+- freie Zuordnung der Dateispalten zu X, Y und Z,
+- Punkt-ID aus einer vorhandenen Spalte oder automatische Bildung aus Präfix,
+  Startwert und laufender Nummer, beispielsweise `P1`, `P2`, `P3`,
+- feste Markierungsart für alle Punkte oder Markierungscode aus einer Spalte,
+- fester Kommentartext für alle Punkte oder Kommentar aus einer Spalte.
+
+Mindestens X, Y und Z müssen unterschiedlichen Spalten zugeordnet sein. Eine
+ID-Spalte ist nicht erforderlich. Wird keine ID-Spalte gewählt, erzeugt das
+Programm eindeutige laufende IDs. Doppelte IDs, unzulässige Markierungscodes,
+ungültige Zahlen, fehlende Spalten sowie die gleiche Zuordnung einer Spalte zu
+mehreren Feldern werden vor dem Import gemeldet.
+
+Der obere Vorschaubereich zeigt die geladene Quelldatei unverändert mit
+Zeilennummern. Der untere Vorschaubereich zeigt live die daraus entstehenden
+Mower-II-Punkte mit ID, X, Y, Z, Markierung und Kommentar. Erst mit
+**Punkte importieren** wird die aktive Punktliste ersetzt. Wie beim
+Standardimport bleibt eine bereits gültige Transformation unverändert, weil
+nur die Punktliste und nicht die physische Wagengeometrie geändert wird.
+
+Die Implementierung ist aufgeteilt in:
+
+- `App/dialogs/free_point_import_dialog.py` für Bedienung und beide Vorschauen,
+- `App/services/flexible_point_import.py` für Parsing, Validierung und Erzeugung
+  der `StakeoutPoint`-Objekte.
 
 ### 7.5 Projektdateien
 
@@ -759,6 +806,13 @@ Der Sitzungs-Autosave kann separat geprüft werden:
 python -m unittest tests.test_session_autosave -v
 ```
 
+Der freie Punktimport einschließlich automatischer IDs, frei zugeordneter
+Spalten, Dezimalkomma, CP1252-Dateien und Validierung wird geprüft mit:
+
+```powershell
+python -m unittest tests.test_flexible_point_import -v
+```
+
 - Start mit vollständiger und mit fehlerhafter Config.
 - Config-Reload mit gültiger und ungültiger JSON-Datei sowie anschließender
   Neuverbindung geänderter Schnittstellen.
@@ -771,6 +825,8 @@ python -m unittest tests.test_session_autosave -v
 - Test aller Markierungsformen und optionaler Texte.
 - ARN-Regelrichtung, Totband, Begrenzung und Stoppverhalten.
 - Projekt speichern, laden und exportieren.
+- Standardimport und freien Import mit verschiedenen Spaltenreihenfolgen,
+  Trenn- und Dezimalzeichen prüfen.
 - Betrieb bei kurzzeitigem Tracker-Datenausfall.
 - Darstellung bei kleiner Laptop-Auflösung.
 
@@ -910,4 +966,6 @@ wichtig:
 | 27.10.2026 | 0.5 | Projektverantwortlichen, Organisation und Kontaktadresse ergänzt | Andreas Wehner |
 | 28.10.2026 | 0.6 | Config-Reload, Transformationshinweis und bereinigte Gerätebedienung dokumentiert | Andreas Wehner |
 | 28.10.2026 | 0.7 | Absturzsicheren Sitzungs-Autosave und Wiederherstellungsablauf dokumentiert | Andreas Wehner |
+| 29.10.2026 | 0.8 | Freien Punktimport, Vorschauen, automatische IDs sowie Markierungs- und Kommentarzuordnung dokumentiert | Andreas Wehner |
+
 
